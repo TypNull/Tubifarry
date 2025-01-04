@@ -3,6 +3,8 @@
 
 Tubifarry is a plugin for **Lidarr** that fetches metadata from **Spotify** and **YouTube**, enabling direct music downloads from YouTube. Built on the foundation of trevTV's projects, it leverages the YouTube API for seamless integration. 🛠️  
 
+Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This allows you to easily manage and download soundtracks for your favorite movies and TV shows. 🎬🎵  
+
 ---
 
 ## Installation 🚀  
@@ -39,6 +41,21 @@ To switch to the Plugins Branch:
    - In the modal, choose `Youtube` (under **Other** at the bottom).  
    - Set the download path and adjust other settings as needed.  
    - **Optional**: If using FFmpeg, ensure the FFmpeg path is correctly configured.  
+
+---
+
+### Fetching Soundtracks from Sonarr and Radarr 🎬🎵  
+Tubifarry also supports fetching soundtracks from **Sonarr** (for TV series) and **Radarr** (for movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This allows you to easily manage and download soundtracks for your favorite movies and TV shows.  
+
+To enable this feature:  
+1. **Set Up the Import List**:  
+   - Navigate to `Settings -> Import Lists` in Lidarr.  
+   - Add a new import list and select the option for **Arr-Soundtracks**.  
+   - Configure the settings to match your Sonarr and Radarr instances.  
+   - Provide a cache path to store responses from MusicBrainz for faster lookups.  
+
+2. **Enjoy Soundtracks**:  
+   - Once configured, Tubifarry will automatically fetch soundtracks from your Sonarr and Radarr libraries and add them to Lidarr for download and management.  
 
 ---
 
@@ -84,4 +101,4 @@ Tubifarry is licensed under the MIT License. See the [LICENSE](https://github.co
 
 ---
 
-Enjoy seamless music downloads with Tubifarry! 🎧
+Enjoy seamless music downloads with Tubifarry! 🎧  
