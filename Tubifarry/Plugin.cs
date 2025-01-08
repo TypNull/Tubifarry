@@ -10,28 +10,26 @@ namespace NzbDrone.Core.Plugins
         public override string Owner => "TypNull";
         public override string GithubUrl => "https://github.com/TypNull/Tubifarry";
 
-        private static Type ProtocolType => typeof(YoutubeDownloadProtocol);
+        private static Type[] ProtocolTypes => new Type[] { typeof(YoutubeDownloadProtocol), typeof(SoulseekDownloadProtocol) };
 
         public Tubifarry(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Logger logger) => CheckDelayProfiles(repo, downloadProtocols, logger);
 
         private void CheckDelayProfiles(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Logger logger)
         {
-            IDownloadProtocol? protocol = downloadProtocols.FirstOrDefault(x => x.GetType() == ProtocolType);
-            if (protocol == null)
-            {
-                logger.Error($"{ProtocolType} not found in download protocols.");
-                return;
-            }
+            IEnumerable<IDownloadProtocol> protocols = downloadProtocols.Where(x => ProtocolTypes.Any(y => y == x.GetType()));
 
-            logger.Debug($"Checking Protokol: {protocol.GetType().Name}");
-
-            foreach (DelayProfile? profile in repo.All())
+            foreach (IDownloadProtocol protocol in protocols)
             {
-                if (!profile.Items.Any(x => x.Protocol == protocol.GetType().Name))
+                logger.Trace($"Checking Protokol: {protocol.GetType().Name}");
+
+                foreach (DelayProfile? profile in repo.All())
                 {
-                    logger.Debug($"Added protocol to DelayProfile (ID: {profile.Id})");
-                    profile.Items.Add(GetProtocolItem(protocol, true));
-                    repo.Update(profile);
+                    if (!profile.Items.Any(x => x.Protocol == protocol.GetType().Name))
+                    {
+                        logger.Debug($"Added protocol to DelayProfile (ID: {profile.Id})");
+                        profile.Items.Add(GetProtocolItem(protocol, true));
+                        repo.Update(profile);
+                    }
                 }
             }
         }

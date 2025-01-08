@@ -21,6 +21,17 @@ namespace Tubifarry.Core
 
     internal static class AudioFormatHelper
     {
+
+        private static List<AudioFormat> _lossyFormats = new()
+            {
+        AudioFormat.AAC,
+        AudioFormat.MP3,
+        AudioFormat.Opus,
+        AudioFormat.Vorbis,
+        AudioFormat.MP4,
+        AudioFormat.AMR,
+        AudioFormat.WMA
+    };
         /// <summary>
         /// Returns the correct file extension for a given audio codec.
         /// </summary>
@@ -37,20 +48,27 @@ namespace Tubifarry.Core
             _ => ".aac" // Default to AAC if the codec is unknown
         };
 
+        public static bool IsLossyFormat(AudioFormat format) => _lossyFormats.Contains(format);
+
+
         /// <summary>
         /// Determines the audio format from a given codec string.
         /// </summary>
-        public static AudioFormat GetAudioFormatFromCodec(string codec) => codec switch
+        public static AudioFormat GetAudioFormatFromCodec(string codec) => codec?.ToLowerInvariant() switch
         {
-            "aac" => AudioFormat.AAC,
+            // Common codecs and extensions
+            "aac" or "m4a" or "mp4" => AudioFormat.AAC,
             "mp3" => AudioFormat.MP3,
             "opus" => AudioFormat.Opus,
-            "vorbis" => AudioFormat.Vorbis,
+            "vorbis" or "ogg" => AudioFormat.Vorbis,
             "flac" => AudioFormat.FLAC,
-            "pcm_s16le" or "pcm_s24le" or "pcm_s32le" => AudioFormat.WAV,
-            _ => AudioFormat.Unknown
+            "wav" or "pcm_s16le" or "pcm_s24le" or "pcm_s32le" => AudioFormat.WAV,
+            "aiff" or "aif" or "aifc" => AudioFormat.AIFF,
+            "mid" or "midi" => AudioFormat.MIDI,
+            "amr" => AudioFormat.AMR,
+            "wma" => AudioFormat.WMA,
+            _ => AudioFormat.Unknown // Default for unknown formats
         };
-
         /// <summary>
         /// Returns the file extension for a given audio format.
         /// </summary>

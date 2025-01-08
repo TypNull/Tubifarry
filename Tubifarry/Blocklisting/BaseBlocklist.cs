@@ -5,15 +5,15 @@ using NzbDrone.Core.Parser.Model;
 
 namespace NzbDrone.Core.Blocklisting
 {
-    public class TubifarryBlocklist : IBlocklistForProtocol
+    public abstract class BaseBlocklist<TProtocol> : IBlocklistForProtocol where TProtocol : IDownloadProtocol
     {
         private readonly IBlocklistRepository _blocklistRepository;
 
-        public TubifarryBlocklist(IBlocklistRepository blocklistRepository) => _blocklistRepository = blocklistRepository;
+        public BaseBlocklist(IBlocklistRepository blocklistRepository) => _blocklistRepository = blocklistRepository;
 
-        public string Protocol => nameof(YoutubeDownloadProtocol);
+        public string Protocol => nameof(TProtocol);
 
-        public bool IsBlocklisted(int artistId, ReleaseInfo release) => _blocklistRepository.BlocklistedByTorrentInfoHash(artistId, release.Guid).Any(b => SameRelease(b, release));
+        public bool IsBlocklisted(int artistId, ReleaseInfo release) => _blocklistRepository.BlocklistedByTorrentInfoHash(artistId, release.Guid).Any(b => BaseBlocklist<TProtocol>.SameRelease(b, release));
 
         public Blocklist GetBlocklist(DownloadFailedEvent message) => new()
         {
@@ -30,7 +30,6 @@ namespace NzbDrone.Core.Blocklisting
             TorrentInfoHash = message.Data.GetValueOrDefault("guid")
         };
 
-        private bool SameRelease(Blocklist item, ReleaseInfo release) => release.Guid.IsNotNullOrWhiteSpace() ? release.Guid.Equals(item.TorrentInfoHash) : item.Indexer.Equals(release.Indexer, StringComparison.InvariantCultureIgnoreCase);
-
+        private static bool SameRelease(Blocklist item, ReleaseInfo release) => release.Guid.IsNotNullOrWhiteSpace() ? release.Guid.Equals(item.TorrentInfoHash) : item.Indexer.Equals(release.Indexer, StringComparison.InvariantCultureIgnoreCase);
     }
 }

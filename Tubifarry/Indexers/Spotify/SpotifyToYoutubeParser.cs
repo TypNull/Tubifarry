@@ -115,13 +115,13 @@ namespace NzbDrone.Core.Indexers.Spotify
             requestContainer.Task.Wait();
         }
 
-        private static AlbumData ExtractAlbumInfo(JsonElement album) => new()
+        private static AlbumData ExtractAlbumInfo(JsonElement album) => new("Tubifarry")
         {
             AlbumId = album.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "UnknownAlbumId" : "UnknownAlbumId",
             AlbumName = album.TryGetProperty("name", out JsonElement nameProp) ? nameProp.GetString() ?? "UnknownAlbum" : "UnknownAlbum",
             ArtistName = album.TryGetProperty("artists", out JsonElement artistsProp) && artistsProp.GetArrayLength() > 0
                     ? artistsProp[0].GetProperty("name").GetString() ?? "UnknownArtist" : "UnknownArtist",
-            SpotifyUrl = album.TryGetProperty("external_urls", out JsonElement externalUrlsProp)
+            InfoUrl = album.TryGetProperty("external_urls", out JsonElement externalUrlsProp)
                     ? externalUrlsProp.GetProperty("spotify").GetString() ?? string.Empty : string.Empty,
             ReleaseDate = album.TryGetProperty("release_date", out JsonElement releaseDateProp) ? releaseDateProp.GetString() ?? "0000-01-01" : "0000-01-01",
             ReleaseDatePrecision = album.TryGetProperty("release_date_precision", out JsonElement releaseDatePrecisionProp)
