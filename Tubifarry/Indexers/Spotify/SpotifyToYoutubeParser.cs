@@ -128,7 +128,7 @@ namespace NzbDrone.Core.Indexers.Spotify
                     ? releaseDatePrecisionProp.GetString() ?? "day" : "day",
             TotalTracks = album.TryGetProperty("total_tracks", out JsonElement totalTracksProp) ? totalTracksProp.GetInt32() : 0,
             ExplicitContent = album.TryGetProperty("explicit", out JsonElement explicitProp) && explicitProp.GetBoolean(),
-            CoverUrl = album.TryGetProperty("images", out JsonElement imagesProp) && imagesProp.GetArrayLength() > 0
+            CustomString = album.TryGetProperty("images", out JsonElement imagesProp) && imagesProp.GetArrayLength() > 0
                     ? imagesProp[0].GetProperty("url").GetString() ?? string.Empty : string.Empty,
             CoverResolution = album.TryGetProperty("images", out JsonElement imagesProp2) && imagesProp2.GetArrayLength() > 0
                     ? $"{imagesProp2[0].GetProperty("width").GetInt32()}x{imagesProp2[0].GetProperty("height").GetInt32()}" : "UnknownResolution"

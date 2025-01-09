@@ -21,17 +21,15 @@ namespace Tubifarry.Core
 
     internal static class AudioFormatHelper
     {
-
-        private static List<AudioFormat> _lossyFormats = new()
-            {
+        private static readonly AudioFormat[] _lossyFormats = new[] {
         AudioFormat.AAC,
         AudioFormat.MP3,
         AudioFormat.Opus,
         AudioFormat.Vorbis,
         AudioFormat.MP4,
         AudioFormat.AMR,
-        AudioFormat.WMA
-    };
+        AudioFormat.WMA  };
+
         /// <summary>
         /// Returns the correct file extension for a given audio codec.
         /// </summary>
@@ -69,6 +67,7 @@ namespace Tubifarry.Core
             "wma" => AudioFormat.WMA,
             _ => AudioFormat.Unknown // Default for unknown formats
         };
+
         /// <summary>
         /// Returns the file extension for a given audio format.
         /// </summary>

@@ -1,4 +1,5 @@
 ﻿using FluentValidation.Results;
+using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
@@ -23,11 +24,10 @@ namespace NzbDrone.Core.Indexers.Soulseek
 
         internal new SlskdSettings Settings => base.Settings;
 
-
         public SlskdIndexer(IHttpClient httpClient, IIndexerStatusService indexerStatusService, IConfigService configService, IParsingService parsingService, Logger logger)
           : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
-            _parseIndexerResponse = new SlskdParser();
+            _parseIndexerResponse = new SlskdParser(this, httpClient);
             _indexerRequestGenerator = new SlskdRequestGenerator(this, httpClient);
         }
 
@@ -44,29 +44,33 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application")
                     .SetHeader("X-API-KEY", Settings.ApiKey)
                     .Build();
-
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
-                HttpResponse response = await _httpClient.GetAsync(request);
-                _logger.Info(response.Content.ToString());
-                if (response.StatusCode == HttpStatusCode.OK)
-                    return null!;
 
-                else if (response.StatusCode == HttpStatusCode.Unauthorized)
-                    return new ValidationFailure("ApiKey", "Invalid API key");
-                else
+                HttpResponse response = await _httpClient.ExecuteAsync(request);
+                _logger.Info($"TestConnection Response: {response.Content}");
 
+                if (response.StatusCode != HttpStatusCode.OK)
                     return new ValidationFailure("BaseUrl", $"Unable to connect to Slskd. Status: {response.StatusCode}");
 
+                dynamic? jsonResponse = JsonConvert.DeserializeObject<dynamic>(response.Content);
+                if (jsonResponse == null)
+                    return new ValidationFailure("BaseUrl", "Failed to parse Slskd response.");
+
+                string? serverState = jsonResponse?.server?.state?.ToString();
+                if (string.IsNullOrEmpty(serverState) || !serverState.Contains("Connected"))
+                    return new ValidationFailure("BaseUrl", $"Slskd server is not connected. State: {serverState}");
+
+                return null!;
             }
             catch (HttpException ex)
             {
-                _logger.Warn(ex, "Unable to connect to Slskd");
+                _logger.Warn(ex, "Unable to connect to Slskd.");
                 return new ValidationFailure("BaseUrl", $"Unable to connect to Slskd: {ex.Message}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Unexpected error while testing Slskd connection");
+                _logger.Error(ex, "Unexpected error while testing Slskd connection.");
                 return new ValidationFailure(string.Empty, $"Unexpected error: {ex.Message}");
             }
         }

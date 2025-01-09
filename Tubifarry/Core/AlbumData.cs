@@ -22,7 +22,7 @@ namespace Tubifarry.Core
         public string ReleaseDatePrecision { get; set; } = string.Empty;
         public int TotalTracks { get; set; }
         public bool ExplicitContent { get; set; }
-        public string CoverUrl { get; set; } = string.Empty;
+        public string CustomString { get; set; } = string.Empty;
         public string CoverResolution { get; set; } = string.Empty;
 
         // Properties from YoutubeSearchResults
@@ -52,7 +52,7 @@ namespace Tubifarry.Core
             Title = ConstructTitle(),
             Codec = Codec.ToString(),
             Resolution = CoverResolution,
-            Source = CoverUrl,
+            Source = CustomString,
             Container = Bitrate.ToString(),
             Size = Size ?? (Duration > 0 ? Duration : TotalTracks * 300) * Bitrate * 1000 / 8
         };

@@ -57,12 +57,8 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 Settings.MinimumResponseFileCount,
                 Settings.ResponseLimit,
                 SearchText = searchQuery,
-                SearchTimeout = (int)((Settings.TimeoutInSeconds - 10) * 1000),
+                SearchTimeout = (int)(Settings.TimeoutInSeconds * 1000),
             };
-
-            string jsonData = JsonConvert.SerializeObject(searchData);
-
-            _logger.Info($"Sending search request with payload: {jsonData}");
 
             HttpRequest searchRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches")
                 .SetHeader("X-API-KEY", Settings.ApiKey)
@@ -70,54 +66,62 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 .Post()
                 .Build();
 
-            searchRequest.SetContent(jsonData);
+            searchRequest.SetContent(JsonConvert.SerializeObject(searchData));
             _client.Execute(searchRequest);
-            _ = WaitOnSearchCompletionAsync(searchData.Id, TimeSpan.FromSeconds(Settings.TimeoutInSeconds)).Result;
+            WaitOnSearchCompletionAsync(searchData.Id, TimeSpan.FromSeconds(Settings.TimeoutInSeconds)).Wait();
 
-            _logger.Info($"Generated search initiation request: {searchRequest.Url}");
+            _logger.Trace($"Generated search initiation request: {searchRequest.Url}");
 
             HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchData.Id}")
                 .AddQueryParam("includeResponses", true).SetHeader("X-API-KEY", Settings.ApiKey).Build();
-
             yield return new IndexerRequest(request);
         }
 
-        private async Task<dynamic?> WaitOnSearchCompletionAsync(string searchId, TimeSpan timeout)
+        private async Task WaitOnSearchCompletionAsync(string searchId, TimeSpan timeout)
         {
-            DateTime startTime = DateTime.UtcNow;
+            DateTime startTime = DateTime.UtcNow.AddSeconds(2);
             string state = "InProgress";
             int totalFilesFound = 0;
+            bool hasTimedOut = false;
+            DateTime timeoutEndTime = DateTime.UtcNow;
 
             while (state == "InProgress")
             {
                 TimeSpan elapsed = DateTime.UtcNow - startTime;
-                if (elapsed > timeout)
+
+                if (elapsed > timeout && !hasTimedOut)
                 {
-                    _logger.Warn($"Search timed out after {timeout.TotalSeconds} seconds.");
-                    throw new TimeoutException("Search did not complete within the specified timeout.");
+                    hasTimedOut = true;
+                    timeoutEndTime = DateTime.UtcNow.AddSeconds(8);
                 }
+                else if (hasTimedOut && timeoutEndTime < DateTime.UtcNow)
+                    break;
 
                 dynamic? searchStatus = await GetSearchResultsAsync(searchId);
                 state = searchStatus?.state ?? "InProgress";
 
                 int fileCount = (int)(searchStatus?.fileCount ?? 0);
-
                 if (fileCount > totalFilesFound)
                     totalFilesFound = fileCount;
 
                 double progress = Math.Clamp(fileCount / (double)Settings.FileLimit, 0.0, 1.0);
-                double delay = CalculateQuadraticDelay(progress);
+                double delay;
 
-                _logger.Info($"Current progress: {progress:P0}, Files found: {fileCount}, Next delay: {delay} seconds");
+                if (hasTimedOut && DateTime.UtcNow < timeoutEndTime)
+                {
+                    await Task.Delay(1000);
+                    delay = 0.5;
+                }
+                else
+                    delay = CalculateQuadraticDelay(progress);
+
                 await Task.Delay(TimeSpan.FromSeconds(delay));
-
                 if (state != "InProgress")
                     break;
             }
 
-            _logger.Info($"Search completed with state: {state}, Total files found: {totalFilesFound}");
-
-            return await GetSearchResultsAsync(searchId);
+            _logger.Trace($"Search completed with state: {state}, Total files found: {totalFilesFound}");
+            return;
         }
 
 
@@ -144,8 +148,6 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 _logger.Warn($"Failed to fetch search results. Status: {response.StatusCode}, Content: {response.Content}");
                 return null;
             }
-
-            _logger.Info(response.Content);
             return JsonConvert.DeserializeObject<dynamic>(response.Content);
         }
     }

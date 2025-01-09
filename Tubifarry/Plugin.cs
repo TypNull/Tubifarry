@@ -14,7 +14,7 @@ namespace NzbDrone.Core.Plugins
 
         public Tubifarry(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Logger logger) => CheckDelayProfiles(repo, downloadProtocols, logger);
 
-        private void CheckDelayProfiles(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Logger logger)
+        private static void CheckDelayProfiles(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Logger logger)
         {
             IEnumerable<IDownloadProtocol> protocols = downloadProtocols.Where(x => ProtocolTypes.Any(y => y == x.GetType()));
 
