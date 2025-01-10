@@ -4,6 +4,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using System.Net;
+using System.Text;
 
 namespace NzbDrone.Core.Indexers.Soulseek
 {
@@ -29,9 +30,7 @@ namespace NzbDrone.Core.Indexers.Soulseek
         {
             _logger.Trace($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
             IndexerPageableRequestChain chain = new();
-
-            string searchQuery = $"{searchCriteria.AlbumQuery}  {searchCriteria.ArtistQuery}";
-            chain.AddTier(GetRequests(searchQuery, "album"));
+            chain.AddTier(GetRequests(searchCriteria.ArtistQuery, searchCriteria.AlbumQuery, searchCriteria.InteractiveSearch));
             return chain;
         }
 
@@ -39,13 +38,11 @@ namespace NzbDrone.Core.Indexers.Soulseek
         {
             _logger.Trace($"Generating search requests for artist: {searchCriteria.ArtistQuery}");
             IndexerPageableRequestChain chain = new();
-
-            string searchQuery = $"  {searchCriteria.ArtistQuery}";
-            chain.AddTier(GetRequests(searchQuery, "album"));
+            chain.AddTier(GetRequests(searchCriteria.ArtistQuery, null, searchCriteria.InteractiveSearch));
             return chain;
         }
 
-        private IEnumerable<IndexerRequest> GetRequests(string searchQuery, string searchType)
+        private IEnumerable<IndexerRequest> GetRequests(string artist, string? album = null, bool interactive = false)
         {
             var searchData = new
             {
@@ -56,7 +53,7 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 Settings.MinimumPeerUploadSpeed,
                 Settings.MinimumResponseFileCount,
                 Settings.ResponseLimit,
-                SearchText = searchQuery,
+                SearchText = $"{album} {artist}",
                 SearchTimeout = (int)(Settings.TimeoutInSeconds * 1000),
             };
 
@@ -73,7 +70,12 @@ namespace NzbDrone.Core.Indexers.Soulseek
             _logger.Trace($"Generated search initiation request: {searchRequest.Url}");
 
             HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchData.Id}")
-                .AddQueryParam("includeResponses", true).SetHeader("X-API-KEY", Settings.ApiKey).Build();
+                .AddQueryParam("includeResponses", true)
+                .SetHeader("X-API-KEY", Settings.ApiKey)
+                .SetHeader("X-ALBUM", Convert.ToBase64String(Encoding.UTF8.GetBytes(album ?? "")))
+                .SetHeader("X-ARTIST", Convert.ToBase64String(Encoding.UTF8.GetBytes(artist)))
+                .SetHeader("X-INTERACTIVE", interactive.ToString())
+                .Build();
             yield return new IndexerRequest(request);
         }
 
@@ -92,7 +94,7 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 if (elapsed > timeout && !hasTimedOut)
                 {
                     hasTimedOut = true;
-                    timeoutEndTime = DateTime.UtcNow.AddSeconds(8);
+                    timeoutEndTime = DateTime.UtcNow.AddSeconds(20);
                 }
                 else if (hasTimedOut && timeoutEndTime < DateTime.UtcNow)
                     break;
@@ -108,10 +110,7 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 double delay;
 
                 if (hasTimedOut && DateTime.UtcNow < timeoutEndTime)
-                {
-                    await Task.Delay(1000);
-                    delay = 0.5;
-                }
+                    delay = 1;
                 else
                     delay = CalculateQuadraticDelay(progress);
 

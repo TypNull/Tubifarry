@@ -1,6 +1,6 @@
 ﻿using System.Xml.Linq;
 
-namespace Tubifarry.ImportLists
+namespace NzbDrone.Core.ImportLists
 {
     public record MusicBrainzSearchItem(string? Title, string? AlbumId, string? Artist, string? ArtistId, DateTime ReleaseDate)
     {

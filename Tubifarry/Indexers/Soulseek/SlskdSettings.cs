@@ -51,8 +51,13 @@ namespace NzbDrone.Core.Indexers.Soulseek
 
             // Timeout validation
             RuleFor(c => c.TimeoutInSeconds)
-                .GreaterThanOrEqualTo(5.0)
-                .WithMessage("Timeout must be at least 5 seconds.");
+                .GreaterThanOrEqualTo(2.0)
+                .WithMessage("Timeout must be at least 2 seconds.");
+
+            // Include File Extensions validation
+            RuleFor(c => c.IncludeFileExtensions)
+                .Must(extensions => extensions == null || extensions.All(ext => !ext.Contains(".")))
+                .WithMessage("File extensions must not contain a dot ('.').");
         }
     }
 
@@ -69,26 +74,32 @@ namespace NzbDrone.Core.Indexers.Soulseek
         [FieldDefinition(2, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "The API key for your Slskd instance. You can find or set this in the Slskd's settings under 'Options'.", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
-        [FieldDefinition(3, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
+        [FieldDefinition(3, Type = FieldType.Checkbox, Label = "Include Only Audio Files", HelpText = "When enabled, only files with audio extensions will be included in search results. Disabling this option allows all file types.", Advanced = false)]
+        public bool OnlyAudioFiles { get; set; } = true;
+
+        [FieldDefinition(4, Type = FieldType.ArtistTag, Label = "Include File Extensions", HelpText = "Specify file extensions to include when 'Include Only Audio Files' is enabled. This setting has no effect if 'Include Only Audio Files' is disabled.", Advanced = true)]
+        public IEnumerable<string> IncludeFileExtensions { get; set; } = Array.Empty<string>();
+
+        [FieldDefinition(5, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;
 
-        [FieldDefinition(4, Type = FieldType.Number, Label = "File Limit", HelpText = "Maximum number of files to return in a search response.", Advanced = true)]
+        [FieldDefinition(6, Type = FieldType.Number, Label = "File Limit", HelpText = "Maximum number of files to return in a search response.", Advanced = true)]
         public int FileLimit { get; set; } = 10000;
 
-        [FieldDefinition(5, Type = FieldType.Number, Label = "Maximum Peer Queue Length", HelpText = "Maximum number of queued requests allowed per peer.", Advanced = true)]
+        [FieldDefinition(7, Type = FieldType.Number, Label = "Maximum Peer Queue Length", HelpText = "Maximum number of queued requests allowed per peer.", Advanced = true)]
         public int MaximumPeerQueueLength { get; set; } = 1000000;
 
-        [FieldDefinition(6, Type = FieldType.Number, Label = "Minimum Peer Upload Speed", Unit = "KB/s", HelpText = "Minimum upload speed required for peers (in KB/s).", Advanced = true)]
+        [FieldDefinition(8, Type = FieldType.Number, Label = "Minimum Peer Upload Speed", Unit = "KB/s", HelpText = "Minimum upload speed required for peers (in KB/s).", Advanced = true)]
         public int MinimumPeerUploadSpeed { get; set; } = 0;
 
-        [FieldDefinition(7, Type = FieldType.Number, Label = "Minimum Response File Count", HelpText = "Minimum number of files required in a search response.", Advanced = true)]
+        [FieldDefinition(9, Type = FieldType.Number, Label = "Minimum Response File Count", HelpText = "Minimum number of files required in a search response.", Advanced = true)]
         public int MinimumResponseFileCount { get; set; } = 1;
 
-        [FieldDefinition(8, Type = FieldType.Number, Label = "Response Limit", HelpText = "Maximum number of search responses to return.", Advanced = true)]
+        [FieldDefinition(10, Type = FieldType.Number, Label = "Response Limit", HelpText = "Maximum number of search responses to return.", Advanced = true)]
         public int ResponseLimit { get; set; } = 100;
 
-        [FieldDefinition(9, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Timeout for search requests in seconds.", Advanced = true)]
-        public double TimeoutInSeconds { get; set; } = 15;
+        [FieldDefinition(11, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Timeout for search requests in seconds.", Advanced = true)]
+        public double TimeoutInSeconds { get; set; } = 5;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

@@ -41,6 +41,5 @@ namespace NzbDrone.Core.Indexers.Spotify
         public override IIndexerRequestGenerator GetRequestGenerator() => _indexerRequestGenerator;
 
         public override IParseIndexerResponse GetParser() => _parseIndexerResponse;
-
     }
 }

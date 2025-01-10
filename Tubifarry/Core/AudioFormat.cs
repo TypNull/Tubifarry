@@ -22,13 +22,14 @@ namespace Tubifarry.Core
     internal static class AudioFormatHelper
     {
         private static readonly AudioFormat[] _lossyFormats = new[] {
-        AudioFormat.AAC,
-        AudioFormat.MP3,
-        AudioFormat.Opus,
-        AudioFormat.Vorbis,
-        AudioFormat.MP4,
-        AudioFormat.AMR,
-        AudioFormat.WMA  };
+            AudioFormat.AAC,
+            AudioFormat.MP3,
+            AudioFormat.Opus,
+            AudioFormat.Vorbis,
+            AudioFormat.MP4,
+            AudioFormat.AMR,
+            AudioFormat.WMA
+        };
 
         /// <summary>
         /// Returns the correct file extension for a given audio codec.
@@ -45,9 +46,6 @@ namespace Tubifarry.Core
             "pcm_s16le" or "pcm_s24le" or "pcm_s32le" => ".wav",
             _ => ".aac" // Default to AAC if the codec is unknown
         };
-
-        public static bool IsLossyFormat(AudioFormat format) => _lossyFormats.Contains(format);
-
 
         /// <summary>
         /// Determines the audio format from a given codec string.
@@ -79,7 +77,13 @@ namespace Tubifarry.Core
             AudioFormat.Vorbis => ".ogg",
             AudioFormat.FLAC => ".flac",
             AudioFormat.WAV => ".wav",
-            _ => ".aac"
+            AudioFormat.AIFF => ".aiff",
+            AudioFormat.MIDI => ".midi",
+            AudioFormat.AMR => ".amr",
+            AudioFormat.WMA => ".wma",
+            AudioFormat.MP4 => ".mp4",
+            AudioFormat.OGG => ".ogg",
+            _ => ".aac" // Default to AAC if the format is unknown
         };
 
         /// <summary>
@@ -92,6 +96,30 @@ namespace Tubifarry.Core
             ReEncodeOptions.Opus => AudioFormat.Opus,
             ReEncodeOptions.Vorbis => AudioFormat.Vorbis,
             _ => AudioFormat.Unknown
+        };
+
+        /// <summary>
+        /// Determines if a given format is lossy.
+        /// </summary>
+        public static bool IsLossyFormat(AudioFormat format) => _lossyFormats.Contains(format);
+
+        /// <summary>
+        /// Determines the audio format from a given file extension.
+        /// </summary>
+        public static AudioFormat GetAudioCodecFromExtension(string extension) => extension?.ToLowerInvariant().TrimStart('.') switch
+        {
+            // Common file extensions
+            "m4a" or "mp4" or "aac" => AudioFormat.AAC,
+            "mp3" => AudioFormat.MP3,
+            "opus" => AudioFormat.Opus,
+            "ogg" or "vorbis" => AudioFormat.Vorbis,
+            "flac" or "alac" => AudioFormat.FLAC,
+            "wav" => AudioFormat.WAV,
+            "aiff" or "aif" or "aifc" => AudioFormat.AIFF,
+            "mid" or "midi" => AudioFormat.MIDI,
+            "amr" => AudioFormat.AMR,
+            "wma" => AudioFormat.WMA,
+            _ => AudioFormat.Unknown // Default for unknown extensions
         };
     }
 }

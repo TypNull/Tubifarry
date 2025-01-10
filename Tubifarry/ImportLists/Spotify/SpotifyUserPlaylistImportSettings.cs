@@ -5,8 +5,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
 {
     public class SpotifyUserPlaylistImportSettingsValidator : SpotifySettingsBaseValidator<SpotifyUserPlaylistImportSettings>
     {
-        public SpotifyUserPlaylistImportSettingsValidator()
-        : base()
+        public SpotifyUserPlaylistImportSettingsValidator() : base()
         {
             RuleFor(c => c.RefreshInterval)
                 .GreaterThanOrEqualTo(2)

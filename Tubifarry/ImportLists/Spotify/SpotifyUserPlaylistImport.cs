@@ -8,8 +8,6 @@ using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
 using SpotifyAPI.Web;
 using SpotifyAPI.Web.Models;
-using System.Security.Cryptography;
-using System.Text;
 using Tubifarry.Core;
 
 namespace NzbDrone.Core.ImportLists.Spotify
@@ -148,7 +146,6 @@ namespace NzbDrone.Core.ImportLists.Spotify
             };
 
             _fileCache!.SetAsync(cacheKey, cachedDataToSave, TimeSpan.FromDays(Settings.CacheRetentionDays)).Wait();
-
             result.AddRange(playlistItems);
         }
 
@@ -174,13 +171,12 @@ namespace NzbDrone.Core.ImportLists.Spotify
             public SimplePlaylist? Playlist { get; set; }
         }
 
-        private string GenerateCacheKey(string playlistId, string username)
+        private static string GenerateCacheKey(string playlistId, string username)
         {
-            string hashInput = $"{playlistId}_{username}";
-            using SHA256 sha256 = SHA256.Create();
-            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(hashInput));
-            string hash = BitConverter.ToString(hashBytes).Replace("-", "")[..10].ToLower();
-            return hash;
+            HashCode hash = new();
+            hash.Add(playlistId);
+            hash.Add(username);
+            return hash.ToHashCode().ToString("x8");
         }
 
         private Paging<SimplePlaylist> GetUserPlaylistsWithRetry(SpotifyWebAPI api, string userId, int retryCount = 0)

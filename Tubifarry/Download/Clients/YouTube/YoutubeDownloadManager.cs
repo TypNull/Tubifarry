@@ -27,10 +27,10 @@ namespace NzbDrone.Download.Clients.YouTube
     public class YoutubeDownloadManager : IYoutubeDownloadManager
     {
         private readonly RequestContainer<YouTubeAlbumRequest> _queue;
+        private readonly Logger _logger;
         private YouTubeMusicClient _ytClient;
         private Task? _testTask;
         private string? _cookiePath;
-        private Logger _logger;
 
 
         /// <summary>
@@ -42,7 +42,6 @@ namespace NzbDrone.Download.Clients.YouTube
             _logger = logger;
             _queue = new();
             _ytClient = new YouTubeMusicClient();
-            _logger.Trace("Initialized");
         }
 
         public void SetCookies(string path)

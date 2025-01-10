@@ -36,7 +36,6 @@ namespace Tubifarry.Download.Clients
         private byte[]? _albumCover;
 
         private ReleaseInfo ReleaseInfo => _remoteAlbum.Release;
-
         public override Task Task => _requestContainer.Task;
         public override RequestState State => _requestContainer.State;
         public string ID { get; } = Guid.NewGuid().ToString();
@@ -88,7 +87,6 @@ namespace Tubifarry.Download.Clients
         {
             string albumBrowseID = await Options.YouTubeMusicClient!.GetAlbumBrowseIdAsync(ReleaseInfo.DownloadUrl, token).ConfigureAwait(false);
             AlbumInfo albumInfo = await Options.YouTubeMusicClient.GetAlbumInfoAsync(albumBrowseID, token).ConfigureAwait(false);
-            _logger.Info(Options.NameingConfig.StandardTrackFormat);
             if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
             {
                 LogAndAppendMessage($"No tracks to download found in the album: {ReleaseInfo.Album}", LogLevel.Debug);
@@ -268,7 +266,6 @@ namespace Tubifarry.Download.Clients
                 ReadOnlyMemory<char> chunk = chunkEnumerator.Current;
                 distinctMessages.Add(chunk.ToString());
             }
-
             return string.Join("", distinctMessages);
         }
 

@@ -6,10 +6,8 @@ namespace NzbDrone.Core.ImportLists.ArrStack
     {
         public ArrSoundtrackImportSettings Settings { get; set; }
 
-        public ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings)
-        {
-            Settings = settings;
-        }
+        public ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings) => Settings = settings;
+
 
         public ImportListPageableRequestChain GetListItems()
         {

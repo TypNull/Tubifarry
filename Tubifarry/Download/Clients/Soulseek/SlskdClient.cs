@@ -4,6 +4,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
+using NzbDrone.Core.History;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
@@ -15,41 +16,36 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
     public class SlskdClient : DownloadClientBase<SlskdProviderSettings>
     {
         private readonly IHttpClient _httpClient;
-        private Dictionary<string, SlskdDownloadItem> _downloadMapping;
-        private string _downloadPath = string.Empty;
-        private bool _isLocalhost = false;
+        private readonly IHistoryService _historyService;
 
-        public SlskdClient(IHttpClient httpClient, IConfigService configService, IDiskProvider diskProvider, IRemotePathMappingService remotePathMappingService, Logger logger)
-            : base(configService, diskProvider, remotePathMappingService, logger)
-        {
-            _httpClient = httpClient;
-            _downloadMapping = new Dictionary<string, SlskdDownloadItem>();
-        }
+        private static readonly Dictionary<DownloadKey, SlskdDownloadItem> _downloadMappings = new();
 
         public override string Name => "Slskd";
-
         public override string Protocol => nameof(SoulseekDownloadProtocol);
+
+        public SlskdClient(IHttpClient httpClient, IConfigService configService, IDiskProvider diskProvider,IHistoryService history, IRemotePathMappingService remotePathMappingService, Logger logger)
+            : base(configService, diskProvider, remotePathMappingService, logger) { _httpClient = httpClient; _historyService = history; }
+
 
         public override async Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer)
         {
-            SlskdDownloadItem item = new(Guid.NewGuid().ToString(), remoteAlbum);
+            SlskdDownloadItem item = new(remoteAlbum);
             HttpRequest request = BuildHttpRequest(remoteAlbum.Release.DownloadUrl, HttpMethod.Post, remoteAlbum.Release.Source);
             HttpResponse response = await _httpClient.ExecuteAsync(request);
 
             if (response.StatusCode != HttpStatusCode.Created)
                 throw new DownloadClientException("Failed to create download.");
-
-            _downloadMapping[item.ID] = item;
-            return item.ID;
+            AddDownloadItem(item);
+            return item.ID.ToString();
         }
+
 
         public override IEnumerable<DownloadClientItem> GetItems()
         {
             UpdateDownloadItemsAsync().Wait();
             DownloadClientItemClientInfo clientInfo = DownloadClientItemClientInfo.FromDownloadClient(this, false);
-            foreach (KeyValuePair<string, SlskdDownloadItem> kpv in _downloadMapping)
+            foreach (DownloadClientItem? clientItem in GetDownloadItems().Select(x => x.GetDownloadClientItem(Settings.DownloadPath)))
             {
-                DownloadClientItem clientItem = kpv.Value.GetDownloadClientItem(_downloadPath);
                 clientItem.DownloadClientInfo = clientInfo;
                 yield return clientItem;
             }
@@ -58,10 +54,10 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
         public override void RemoveItem(DownloadClientItem clientItem, bool deleteData)
         {
             if (!deleteData) return;
-            _downloadMapping.TryGetValue(clientItem.DownloadId, out SlskdDownloadItem? slskdItem);
+            SlskdDownloadItem? slskdItem = GetDownloadItem(clientItem.DownloadId);
             if (slskdItem == null) return;
             RemoveItemAsync(slskdItem).Wait();
-            _downloadMapping.Remove(clientItem.DownloadId);
+            RemoveDownloadItem(clientItem.DownloadId);
         }
 
         private async Task UpdateDownloadItemsAsync()
@@ -78,7 +74,10 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
                 IEnumerable<SlskdDownloadDirectory> data = SlskdDownloadDirectory.GetDirectories(directoriesElement);
                 foreach (SlskdDownloadDirectory dir in data)
                 {
-                    SlskdDownloadItem? item = _downloadMapping.Values.FirstOrDefault(x => x.FileData.Any(y => y.Filename?.Contains(dir.Directory!) ?? false));
+                    HashCode hash = new();
+                    foreach (SlskdDownloadFile file in dir.Files ?? new List<SlskdDownloadFile>())
+                        hash.Add(file.Filename);
+                    SlskdDownloadItem? item = GetDownloadItem(hash.ToHashCode());
                     if (item == null)
                         continue;
                     item.Username ??= user.GetProperty("username").GetString()!;
@@ -114,16 +113,18 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
             return null;
         }
 
-        public override DownloadClientInfo GetStatus()
+        public override DownloadClientInfo GetStatus() => new()
         {
-            if (string.IsNullOrEmpty(_downloadPath))
-                _downloadPath = string.IsNullOrEmpty(Settings.DownloadPath) ? FetchDownloadPathAsync().Result ?? Settings.DownloadPath : Settings.DownloadPath;
-            return new DownloadClientInfo
-            {
-                IsLocalhost = _isLocalhost,
-                OutputRootFolders = new List<OsPath> { _remotePathMappingService.RemapRemoteToLocal(Settings.BaseUrl, new OsPath(_downloadPath)) }
-            };
-        }
+            IsLocalhost = Settings.IsLocalhost,
+            OutputRootFolders = new List<OsPath> { Settings.IsRemotePath ? _remotePathMappingService.RemapRemoteToLocal(Settings.BaseUrl, new OsPath(Settings.DownloadPath)) : new OsPath(Settings.DownloadPath) }
+        };
+
+        private SlskdDownloadItem? GetDownloadItem(string downloadId) => GetDownloadItem(int.Parse(downloadId));
+        private SlskdDownloadItem? GetDownloadItem(int downloadId) => _downloadMappings.TryGetValue(new DownloadKey(Definition.Id, downloadId), out SlskdDownloadItem? item) ? item : null;
+        private IEnumerable<SlskdDownloadItem> GetDownloadItems() => _downloadMappings.Where(kvp => kvp.Key.OuterKey == Definition.Id).Select(kvp => kvp.Value);
+        private void AddDownloadItem(SlskdDownloadItem item) => _downloadMappings[new DownloadKey(Definition.Id, item.ID)] = item;
+        private bool RemoveDownloadItem(string downloadId) => _downloadMappings.Remove(new DownloadKey(Definition.Id, int.Parse(downloadId)));
+
 
         protected override void Test(List<ValidationFailure> failures) => failures.AddIfNotNull(TestConnection().Result);
 
@@ -134,7 +135,7 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
                 Uri uri = new(Settings.BaseUrl);
                 if (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
                     IPAddress.TryParse(uri.Host, out IPAddress? ipAddress) && IPAddress.IsLoopback(ipAddress))
-                    _isLocalhost = true;
+                    Settings.IsLocalhost = true;
             }
             catch (UriFormatException ex)
             {
@@ -164,10 +165,12 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
                 if (string.IsNullOrEmpty(serverState) || !serverState.Contains("Connected"))
                     return new ValidationFailure("BaseUrl", $"Slskd server is not connected. State: {serverState}");
 
-
-                _downloadPath = string.IsNullOrEmpty(Settings.DownloadPath) ? await FetchDownloadPathAsync() ?? Settings.DownloadPath : Settings.DownloadPath;
-                if (string.IsNullOrEmpty(_downloadPath))
-                    return new ValidationFailure("DownloadPath", "DownloadPath could not be found or is invalid.");
+                if (string.IsNullOrEmpty(Settings.DownloadPath))
+                {
+                    Settings.DownloadPath = await FetchDownloadPathAsync() ?? string.Empty;
+                    if (string.IsNullOrEmpty(Settings.DownloadPath))
+                        return new ValidationFailure("DownloadPath", "DownloadPath could not be found or is invalid.");
+                }
                 return null!;
             }
             catch (HttpException ex)
@@ -207,7 +210,7 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
             if (response.StatusCode != HttpStatusCode.NoContent)
                 _logger.Warn($"Failed to remove download with ID {item.ID}. Status Code: {response.StatusCode}");
             else
-                _logger.Info($"Successfully removed download with ID {item.ID}.");
+                _logger.Trace($"Successfully removed download with ID {item.ID}.");
         }
 
         private async Task<HttpResponse> ExecuteAsync(HttpRequest request) => await _httpClient.ExecuteAsync(request);

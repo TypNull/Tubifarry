@@ -1,4 +1,5 @@
 ﻿using NLog;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
@@ -24,12 +25,12 @@ namespace NzbDrone.Core.Indexers.Spotify
         private YouTubeMusicClient _ytClient;
         private static readonly int[] StandardBitrates = { 96, 128, 160, 192, 256, 320 };
 
-        public Logger _logger { get; set; }
+        private readonly Logger _logger;
         private string? _cookiePath;
 
-        public SpotifyToYoutubeParser(Logger logger)
+        public SpotifyToYoutubeParser()
         {
-            _logger = logger;
+            _logger = NzbDroneLogger.GetLogger(this);
             _ytClient = new YouTubeMusicClient();
         }
 
@@ -49,7 +50,7 @@ namespace NzbDrone.Core.Indexers.Spotify
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
             List<ReleaseInfo> releases = new();
-            _logger.Debug("Starting to parse Spotify response.");
+            _logger.Trace("Starting to parse Spotify response.");
 
             try
             {
@@ -98,7 +99,7 @@ namespace NzbDrone.Core.Indexers.Spotify
                         await AddYoutubeData(albumInfo);
 
                         if (albumInfo.Bitrate == 0)
-                            _logger.Debug($"No YouTube Music URL found for album: {albumInfo.AlbumName} by {albumInfo.ArtistName}.");
+                            _logger.Trace($"No YouTube Music URL found for album: {albumInfo.AlbumName} by {albumInfo.ArtistName}.");
                         else
                             releases.Add(albumInfo.ToReleaseInfo());
 
@@ -111,7 +112,6 @@ namespace NzbDrone.Core.Indexers.Spotify
                     }
                 }, new RequestOptions<VoidStruct, VoidStruct>() { NumberOfAttempts = 1 }));
             }
-
             requestContainer.Task.Wait();
         }
 
@@ -203,19 +203,15 @@ namespace NzbDrone.Core.Indexers.Spotify
         private static string NormalizeTitle(string title)
         {
             title = Regex.Replace(title, @"[\(\[].*?[\)\]]", "").Trim();
-
             title = Regex.Replace(title, @"\[\w+(_\w+)?\]", "").Trim();
-
             Match match = Regex.Match(title, @"^(?<artist>.+?)(?: - )(?<album>.+?)(?: - )(?<year>\d{4})");
             if (match.Success)
             {
                 string artist = match.Groups["artist"].Value.Trim();
                 string album = match.Groups["album"].Value.Trim();
                 string year = match.Groups["year"].Value.Trim();
-
-                return $"{artist} - {album} - {year}";
+                title = $"{artist} - {album} - {year}";
             }
-
             return title;
         }
 

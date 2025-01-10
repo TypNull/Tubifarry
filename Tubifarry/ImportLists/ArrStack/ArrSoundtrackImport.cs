@@ -122,6 +122,5 @@ namespace NzbDrone.Core.ImportLists.ArrStack
             APIItemEndpoint = apiItemEndpoint,
             APIStatusEndpoint = apiStatusEndpoint
         };
-
     }
 }

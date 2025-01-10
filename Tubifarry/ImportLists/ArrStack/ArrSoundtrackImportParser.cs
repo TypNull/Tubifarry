@@ -1,15 +1,14 @@
-﻿using NLog;
+﻿using FuzzySharp;
+using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Parser.Model;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Tubifarry.Core;
-using Tubifarry.ImportLists;
 
 namespace NzbDrone.Core.ImportLists.ArrStack
 {
@@ -36,7 +35,6 @@ namespace NzbDrone.Core.ImportLists.ArrStack
             _httpClient = httpClient;
             _fileCache = new FileCache(Settings.CacheDirectory);
         }
-
 
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse) => ParseResponseAsync(importListResponse).Result;
 
@@ -85,7 +83,7 @@ namespace NzbDrone.Core.ImportLists.ArrStack
                             continue;
 
                         savedAlbumDetails.Add(albumDetails);
-                        double similarity = CalculateSimilarity(albumDetails.Title, media.Title);
+                        double similarity = Fuzz.Ratio(albumDetails.Title, media.Title);
                         bool containsMovie = ContainsMovieNameAndSoundtrack(albumDetails.Title, media.Title);
                         if (similarity > 0.80 || containsMovie)
                         {
@@ -187,38 +185,6 @@ namespace NzbDrone.Core.ImportLists.ArrStack
             return MusicBrainzAlbumItem.FromXml(releaseGroup, ns);
         }
 
-        private static double CalculateSimilarity(string a, string b)
-        {
-            a = NormalizeTitle(a);
-            b = NormalizeTitle(b);
-
-            int levenshteinDistance = ComputeLevenshteinDistance(a, b);
-            double maxLength = Math.Max(a.Length, b.Length);
-            return 1.0 - (levenshteinDistance / maxLength);
-        }
-
-        private static int ComputeLevenshteinDistance(string a, string b)
-        {
-            int[,] dp = new int[a.Length + 1, b.Length + 1];
-
-            for (int i = 0; i <= a.Length; i++)
-                dp[i, 0] = i;
-
-            for (int j = 0; j <= b.Length; j++)
-                dp[0, j] = j;
-
-            for (int i = 1; i <= a.Length; i++)
-            {
-                for (int j = 1; j <= b.Length; j++)
-                {
-                    int cost = (a[i - 1] == b[j - 1]) ? 0 : 1;
-                    dp[i, j] = Math.Min(Math.Min(dp[i - 1, j] + 1, dp[i, j - 1] + 1), dp[i - 1, j - 1] + cost);
-                }
-            }
-
-            return dp[a.Length, b.Length];
-        }
-
         private static ImportListItemInfo CreateImportItem(MusicBrainzSearchItem albumInfo, MusicBrainzAlbumItem albumDetails) => new()
         {
             Artist = albumDetails.Artist ?? albumInfo.Artist,
@@ -238,14 +204,10 @@ namespace NzbDrone.Core.ImportLists.ArrStack
 
         public static string GenerateCacheKey(string title, int id)
         {
-            string validFilename = new(title.Where(c => !Path.GetInvalidFileNameChars().Contains(c)).ToArray());
-            string truncatedTitle = validFilename.Length > 20 ? validFilename[..20] : validFilename;
-
-            string hashInput = $"{title}_{id}";
-            using SHA256 sha256 = SHA256.Create();
-            byte[] hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(hashInput));
-            string hash = BitConverter.ToString(hashBytes).Replace("-", "")[..5].ToLower();
-            return $"{truncatedTitle}_{hash}";
+            HashCode hash = new();
+            hash.Add(title);
+            hash.Add(id);
+            return hash.ToHashCode().ToString("x8");
         }
     }
 }

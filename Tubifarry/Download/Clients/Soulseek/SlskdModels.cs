@@ -1,57 +1,93 @@
 ﻿using NzbDrone.Common.Disk;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers.Soulseek;
 using NzbDrone.Core.Parser.Model;
 using System.Text.Json;
 
 namespace NzbDrone.Core.Download.Clients.Soulseek
 {
-    class SlskdDownloadItem
+    public class SlskdDownloadItem
     {
         private readonly DownloadClientItem _downloadClientItem;
+        private DateTime _lastUpdateTime;
+        private long _lastDownloadedSize;
 
-        public string ID { get; set; } = string.Empty;
+        public int ID { get; set; }
         public List<SlskdFileData> FileData { get; set; } = new();
         public string Username { get; set; } = string.Empty;
         public RemoteAlbum RemoteAlbum { get; set; }
         public SlskdDownloadDirectory? SlskdDownloadDirectory { get; set; }
 
-        public SlskdDownloadItem(string id, RemoteAlbum remoteAlbum)
+        public SlskdDownloadItem(RemoteAlbum remoteAlbum)
         {
-            ID = id;
             RemoteAlbum = remoteAlbum;
             FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(RemoteAlbum.Release.Source) ?? new();
-            _downloadClientItem = new() { DownloadId = ID, CanBeRemoved = true, CanMoveFiles = true };
+            _lastUpdateTime = DateTime.UtcNow;
+            _lastDownloadedSize = 0;
+            HashCode hash = new();
+            foreach (SlskdFileData file in FileData)
+                hash.Add(file.Filename);
+            ID = hash.ToHashCode();
+            _downloadClientItem = new() { DownloadId = ID.ToString(), CanBeRemoved = true, CanMoveFiles = true };
         }
 
         public DownloadClientItem GetDownloadClientItem(string downloadPath)
         {
-            _downloadClientItem.OutputPath = new OsPath(Path.Combine(downloadPath, SlskdDownloadDirectory?.Directory ?? ""));
+            _downloadClientItem.OutputPath = new OsPath(Path.Combine(downloadPath, SlskdDownloadDirectory?.Directory
+            .Replace('\\', '/')
+            .TrimEnd('/')
+            .Split('/')
+            .LastOrDefault() ?? ""));
             _downloadClientItem.Title = RemoteAlbum.Release.Title;
+
             if (SlskdDownloadDirectory?.Files == null)
                 return _downloadClientItem;
 
             long totalSize = SlskdDownloadDirectory.Files.Sum(file => file.Size);
             long remainingSize = SlskdDownloadDirectory.Files.Sum(file => file.BytesRemaining);
-            TimeSpan? remainingTime = SlskdDownloadDirectory.Files.Any()
-                ? SlskdDownloadDirectory.Files.Max(file => file.RemainingTime) : null;
+            long downloadedSize = totalSize - remainingSize;
+
+            DateTime now = DateTime.UtcNow;
+            TimeSpan timeSinceLastUpdate = now - _lastUpdateTime;
+            long sizeSinceLastUpdate = downloadedSize - _lastDownloadedSize;
+            double downloadSpeed = timeSinceLastUpdate.TotalSeconds > 0 ? sizeSinceLastUpdate / timeSinceLastUpdate.TotalSeconds : 0;
+            TimeSpan? remainingTime = downloadSpeed > 0 ? TimeSpan.FromSeconds(remainingSize / downloadSpeed) : null;
+
+            _lastUpdateTime = now;
+            _lastDownloadedSize = downloadedSize;
+
+            List<DownloadItemStatus> fileStatuses = SlskdDownloadDirectory.Files.Select(file => file.GetStatus()).ToList();
+            List<string> failedFiles = SlskdDownloadDirectory.Files
+                .Where(file => file.GetStatus() == DownloadItemStatus.Failed)
+                .Select(file => Path.GetFileName(file.Filename)).ToList();
 
             DownloadItemStatus status = DownloadItemStatus.Queued;
 
-            if (SlskdDownloadDirectory.Files.All(file => file.IsCompleted))
-                status = DownloadItemStatus.Completed;
-            else if (SlskdDownloadDirectory.Files.Any(file => file.IsFailed))
+            if ((double)failedFiles.Count / fileStatuses.Count * 100 > 30)
+            {
                 status = DownloadItemStatus.Failed;
-            else if (SlskdDownloadDirectory.Files.Any(file => file.IsPaused))
+                _downloadClientItem.Message = $"Downloading {failedFiles.Count} files failed: {string.Join(", ", failedFiles)}";
+            }
+            else if (failedFiles.Any())
+            {
+                status = DownloadItemStatus.Warning;
+                _downloadClientItem.Message = $"Downloading {failedFiles.Count} files failed: {string.Join(", ", failedFiles)}";
+            }
+            else if (fileStatuses.All(status => status == DownloadItemStatus.Completed))
+                status = DownloadItemStatus.Completed;
+            else if (fileStatuses.Any(status => status == DownloadItemStatus.Paused))
                 status = DownloadItemStatus.Paused;
-            else if (SlskdDownloadDirectory.Files.Any(file => file.IsDownloading))
+            else if (fileStatuses.Any(status => status == DownloadItemStatus.Downloading))
                 status = DownloadItemStatus.Downloading;
-            else if (SlskdDownloadDirectory.Files.Any(file => file.IsWarning))
+            else if (fileStatuses.Any(status => status == DownloadItemStatus.Warning))
                 status = DownloadItemStatus.Warning;
 
+            // Update DownloadClientItem
             _downloadClientItem.TotalSize = totalSize;
             _downloadClientItem.RemainingSize = remainingSize;
             _downloadClientItem.RemainingTime = remainingTime;
             _downloadClientItem.Status = status;
+
             return _downloadClientItem;
         }
     }
@@ -75,30 +111,37 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
     }
 
     public record SlskdDownloadFile(
-        string Id,
-        string Username,
-        string Direction,
-        string Filename,
-        long Size,
-        long StartOffset,
-        string State,
-        DateTime RequestedAt,
-        DateTime EnqueuedAt,
-        DateTime StartedAt,
-        long BytesTransferred,
-        double AverageSpeed,
-        long BytesRemaining,
-        TimeSpan ElapsedTime,
-        double PercentComplete,
-        TimeSpan RemainingTime
-    )
+       string Id,
+       string Username,
+       string Direction,
+       string Filename,
+       long Size,
+       long StartOffset,
+       string State,
+       DateTime RequestedAt,
+       DateTime EnqueuedAt,
+       DateTime StartedAt,
+       long BytesTransferred,
+       double AverageSpeed,
+       long BytesRemaining,
+       TimeSpan ElapsedTime,
+       double PercentComplete,
+       TimeSpan RemainingTime
+   )
     {
-        public bool IsCompleted => State == "Completed";
-        public bool IsFailed => State == "Failed";
-        public bool IsPaused => State == "Paused";
-        public bool IsDownloading => State == "Downloading";
-        public bool IsWarning => State == "Warning";
-        public bool IsQueued => State == "Queued";
+        public DownloadItemStatus GetStatus() => State switch
+        {
+            "Requested" => DownloadItemStatus.Queued, // "Requested" is treated as "Queued"
+            "Queued, Remotely" or "Queued, Locally" => DownloadItemStatus.Queued, // Both are queued states
+            "Initializing" => DownloadItemStatus.Queued, // "Initializing" is treated as "Queued"
+            "InProgress" => DownloadItemStatus.Downloading, // "InProgress" maps to "Downloading"
+            "Completed, Succeeded" => DownloadItemStatus.Completed, // Successful completion
+            "Completed, Cancelled" => DownloadItemStatus.Failed, // Cancelled is treated as "Failed"
+            "Completed, TimedOut" => DownloadItemStatus.Failed, // Timed out is treated as "Failed"
+            "Completed, Errored" => DownloadItemStatus.Failed, // Errored is treated as "Failed"
+            "Completed, Rejected" => DownloadItemStatus.Failed, // Rejected is treated as "Failed"
+            _ => DownloadItemStatus.Queued // Default to "Queued" for unknown states
+        };
 
         public static IEnumerable<SlskdDownloadFile> GetFiles(JsonElement filesElement)
         {
@@ -127,5 +170,23 @@ namespace NzbDrone.Core.Download.Clients.Soulseek
                 );
             }
         }
+    }
+
+
+    public readonly struct DownloadKey
+    {
+        public int OuterKey { get; }
+        public int InnerKey { get; }
+
+        public DownloadKey(int outerKey, int innerKey)
+        {
+            OuterKey = outerKey;
+            InnerKey = innerKey;
+        }
+
+        public override readonly bool Equals(object? obj) => obj is DownloadKey other && OuterKey == other.OuterKey && InnerKey == other.InnerKey;
+        public override readonly int GetHashCode() => HashCode.Combine(OuterKey, InnerKey);
+        public static bool operator ==(DownloadKey left, DownloadKey right) => left.Equals(right);
+        public static bool operator !=(DownloadKey left, DownloadKey right) => !(left == right);
     }
 }

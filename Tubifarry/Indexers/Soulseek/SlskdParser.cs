@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using FuzzySharp;
+using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
@@ -24,7 +25,7 @@ namespace NzbDrone.Core.Indexers.Soulseek
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<ReleaseInfo> releases = new();
+            List<AlbumData> albumDatas = new();
             try
             {
                 using JsonDocument jsonDoc = JsonDocument.Parse(indexerResponse.Content);
@@ -33,10 +34,10 @@ namespace NzbDrone.Core.Indexers.Soulseek
                 if (!root.TryGetProperty("searchText", out JsonElement searchTextElement) || !root.TryGetProperty("responses", out JsonElement responsesElement) || !root.TryGetProperty("id", out JsonElement idElement))
                 {
                     _logger.Error("Required fields are missing in the slskd search response.");
-                    return releases;
+                    return new List<ReleaseInfo>();
                 }
 
-                SlskdSearchTextData searchTextData = SlskdSearchTextData.ParseSearchText(searchTextElement.GetString() ?? string.Empty);
+                SlskdSearchData searchTextData = SlskdSearchData.ParseSearchText(indexerResponse.Request);
 
                 foreach (JsonElement responseElement in GetResponses(responsesElement))
                 {
@@ -45,43 +46,39 @@ namespace NzbDrone.Core.Indexers.Soulseek
                     if (!responseElement.TryGetProperty("files", out JsonElement filesElement))
                         continue;
 
-                    string username = responseElement.TryGetProperty("username", out JsonElement usernameElement) ? usernameElement.GetString() ?? "Unknown User" : "Unknown User";
-
-                    List<SlskdFileData> files = SlskdFileData.GetFiles(filesElement).ToList();
+                    List<SlskdFileData> files = SlskdFileData.GetFiles(filesElement, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions).ToList();
                     List<IGrouping<string, SlskdFileData>> directories = files.GroupBy(f => f.Filename?[..f.Filename.LastIndexOf('\\')] ?? "").ToList();
-
                     foreach (IGrouping<string, SlskdFileData>? directory in directories)
                     {
                         if (string.IsNullOrEmpty(directory.Key))
                             continue;
-
-                        SlskdFolderData folderData = SlskdFolderData.ParseFolderName(directory.Key);
-                        AlbumData albumData = CreateAlbumData(idElement.GetString()!, directory, username, searchTextData, folderData);
-                        releases.Add(albumData.ToReleaseInfo());
+                        SlskdFolderData folderData = SlskdFolderData.ParseFolderName(directory.Key).FillWithSlskdData(responseElement);
+                        AlbumData albumData = CreateAlbumData(idElement.GetString()!, directory, searchTextData, folderData);
+                        albumDatas.Add(albumData);
                     }
                 }
-                if (idElement.GetString() is string searchID)
-                    RemoveSearch(searchID).Wait();
+                if (bool.TryParse(indexerResponse.HttpRequest.Headers["X-INTERACTIVE"], out bool delay) && idElement.GetString() is string searchID)
+                    RemoveSearch(searchID, albumDatas.Any() && delay);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to parse Slskd search response.");
             }
-            return releases.OrderByDescending(r => r.Size).ToList();
+            return albumDatas.Select(a => a.ToReleaseInfo()).ToList();
         }
 
-        private AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, string username, SlskdSearchTextData searchTextData, SlskdFolderData folderData)
+        private AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, SlskdSearchData searchData, SlskdFolderData folderData)
         {
-            string hash = $"{username} {directory.Key}".GetHashCode().ToString("X");
+            string hash = $"{folderData.Username} {directory.Key}".GetHashCode().ToString("X");
 
-            bool isArtistContained = !string.IsNullOrEmpty(searchTextData.Artist) && directory.Key.Contains(searchTextData.Artist, StringComparison.OrdinalIgnoreCase);
-            bool isAlbumContained = !string.IsNullOrEmpty(searchTextData.Album) && directory.Key.Contains(searchTextData.Album, StringComparison.OrdinalIgnoreCase);
+            bool isArtistContained = !string.IsNullOrEmpty(searchData.Artist) && Fuzz.PartialRatio(directory.Key, searchData.Artist) > 80;
+            bool isAlbumContained = !string.IsNullOrEmpty(searchData.Album) && Fuzz.PartialRatio(directory.Key, searchData.Album) > 80;
 
-            string? artist = isArtistContained ? searchTextData.Artist : folderData.Artist;
-            string? album = isAlbumContained ? searchTextData.Album : folderData.Album;
+            string? artist = isArtistContained ? searchData.Artist : folderData.Artist;
+            string? album = isAlbumContained ? searchData.Album : folderData.Album;
 
-            artist = string.IsNullOrEmpty(artist) ? searchTextData.Artist : artist;
-            album = string.IsNullOrEmpty(album) ? searchTextData.Album : album;
+            artist = string.IsNullOrEmpty(artist) ? searchData.Artist : artist;
+            album = string.IsNullOrEmpty(album) ? searchData.Album : album;
 
             string? mostCommonExtension = GetMostCommonExtension(directory);
 
@@ -96,14 +93,15 @@ namespace NzbDrone.Core.Indexers.Soulseek
 
             return new AlbumData("Slskd")
             {
-                AlbumId = $"/api/v0/transfers/downloads/{username}",
+                AlbumId = $"/api/v0/transfers/downloads/{folderData.Username}",
                 ArtistName = artist ?? "Unknown Artist",
                 AlbumName = album ?? "Unknown Album",
                 ReleaseDate = folderData.Year,
                 ReleaseDateTime = (string.IsNullOrEmpty(folderData.Year) || !int.TryParse(folderData.Year, out int yearInt) ? DateTime.MinValue : new DateTime(yearInt, 1, 1)),
-                Codec = AudioFormatHelper.GetAudioFormatFromCodec(mostCommonExtension ?? string.Empty),
+                Codec = AudioFormatHelper.GetAudioCodecFromExtension(mostCommonExtension ?? string.Empty),
                 Bitrate = bitRate ?? 0,
                 Size = totalSize,
+                Priotity = folderData.CalculatePriority(),
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
                 InfoUrl = $"{(string.IsNullOrEmpty(Settings.ExternalUrl) ? Settings.BaseUrl : Settings.ExternalUrl)}/searches/{searchId}",
                 Duration = totalDuration
@@ -121,24 +119,26 @@ namespace NzbDrone.Core.Indexers.Soulseek
         {
             if (responsesElement.ValueKind != JsonValueKind.Array)
                 yield break;
-
             foreach (JsonElement response in responsesElement.EnumerateArray())
                 yield return response;
         }
 
-        public async Task RemoveSearch(string searchId)
+        public void RemoveSearch(string searchId, bool delay = false)
         {
-            try
+            Task.Run(async () =>
             {
-                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}").SetHeader("X-API-KEY", Settings.ApiKey).Build();
-
-                request.Method = HttpMethod.Delete;
-                HttpResponse response = await _httpClient.ExecuteAsync(request);
-            }
-            catch (HttpException ex)
-            {
-                _logger.Error(ex, $"Failed to remove slskd search with ID: {searchId}");
-            }
+                try
+                {
+                    if (delay) await Task.Delay(30000);
+                    HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}").SetHeader("X-API-KEY", Settings.ApiKey).Build();
+                    request.Method = HttpMethod.Delete;
+                    HttpResponse response = await _httpClient.ExecuteAsync(request);
+                }
+                catch (HttpException ex)
+                {
+                    _logger.Error(ex, $"Failed to remove slskd search with ID: {searchId}");
+                }
+            });
         }
 
     }

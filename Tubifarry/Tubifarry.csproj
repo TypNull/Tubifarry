@@ -10,11 +10,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="FuzzySharp" Version="2.0.2" />
 		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.34.2">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Shard.DownloadAssistant" Version="1.0.8" />
+		<PackageReference Include="Shard.DownloadAssistant" Version="1.0.9" />
 		<PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
 		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
 		<PackageReference Include="YouTubeMusicAPI" Version="2.1.1" />

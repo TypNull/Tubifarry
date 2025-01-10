@@ -42,13 +42,12 @@ namespace NzbDrone.Core.Indexers.Soulseek
             try
             {
                 HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application")
-                    .SetHeader("X-API-KEY", Settings.ApiKey)
-                    .Build();
+                    .SetHeader("X-API-KEY", Settings.ApiKey).Build();
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
 
                 HttpResponse response = await _httpClient.ExecuteAsync(request);
-                _logger.Info($"TestConnection Response: {response.Content}");
+                _logger.Debug($"TestConnection Response: {response.Content}");
 
                 if (response.StatusCode != HttpStatusCode.OK)
                     return new ValidationFailure("BaseUrl", $"Unable to connect to Slskd. Status: {response.StatusCode}");

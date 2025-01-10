@@ -31,6 +31,7 @@ namespace Tubifarry.Core
 
         // Soulseek
         public long? Size { get; set; }
+        public int Priotity { get; set; }
 
         // Not used
         public AudioFormat Codec { get; set; } = AudioFormat.AAC;
@@ -47,7 +48,7 @@ namespace Tubifarry.Core
             Album = AlbumName,
             DownloadUrl = AlbumId,
             InfoUrl = InfoUrl,
-            PublishDate = ReleaseDateTime,
+            PublishDate = ReleaseDateTime == DateTime.MinValue ? DateTime.UtcNow : ReleaseDateTime,
             DownloadProtocol = nameof(YoutubeDownloadProtocol),
             Title = ConstructTitle(),
             Codec = Codec.ToString(),
@@ -101,7 +102,7 @@ namespace Tubifarry.Core
         /// </summary>
         /// <param name="albumName">The album name to normalize.</param>
         /// <returns>The normalized album name.</returns>
-        private string NormalizeAlbumName(string albumName)
+        private static string NormalizeAlbumName(string albumName)
         {
             Regex featRegex = new(@"(?i)\b(feat\.|ft\.|featuring)\b", RegexOptions.IgnoreCase);
             if (featRegex.IsMatch(albumName))

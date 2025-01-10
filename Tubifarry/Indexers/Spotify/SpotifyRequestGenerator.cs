@@ -30,11 +30,8 @@ namespace NzbDrone.Core.Indexers.Spotify
 
         public IndexerPageableRequestChain GetRecentRequests()
         {
-            _logger.Debug("Generating requests for recent releases.");
             IndexerPageableRequestChain pageableRequests = new();
-
             pageableRequests.Add(GetRecentReleaseRequests());
-
             return pageableRequests;
         }
 
@@ -47,7 +44,7 @@ namespace NzbDrone.Core.Indexers.Spotify
             IndexerRequest req = new(url, HttpAccept.Json);
             req.HttpRequest.Headers.Add("Authorization", $"Bearer {_token}");
 
-            _logger.Debug($"Created request for recent releases: {url}");
+            _logger.Trace($"Created request for recent releases: {url}");
             yield return req;
         }
 
@@ -56,7 +53,6 @@ namespace NzbDrone.Core.Indexers.Spotify
             _logger.Debug($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
             IndexerPageableRequestChain chain = new();
 
-            // Construct the search query to include both album and artist
             string searchQuery = $"album:{searchCriteria.AlbumQuery} artist:{searchCriteria.ArtistQuery}";
             chain.AddTier(GetRequests(searchQuery, "album"));
 
@@ -68,7 +64,6 @@ namespace NzbDrone.Core.Indexers.Spotify
             _logger.Debug($"Generating search requests for artist: {searchCriteria.ArtistQuery}");
             IndexerPageableRequestChain chain = new();
 
-            // Construct the search query for the artist
             string searchQuery = $"artist:{searchCriteria.ArtistQuery}";
             chain.AddTier(GetRequests(searchQuery, "album"));
 
@@ -86,14 +81,12 @@ namespace NzbDrone.Core.Indexers.Spotify
             for (int page = 0; page < MaxPages; page++)
             {
                 int offset = page * PageSize;
-
-                // Build the URL with the formatted query
                 string url = $"https://api.spotify.com/v1/search?q={formattedQuery}&type={searchType}&limit={PageSize}&offset={offset}";
 
                 IndexerRequest req = new(url, HttpAccept.Json);
                 req.HttpRequest.Headers.Add("Authorization", $"Bearer {_token}");
 
-                _logger.Debug($"Created search request for query '{searchQuery}' (page {page + 1}): {url}");
+                _logger.Trace($"Created search request for query '{searchQuery}' (page {page + 1}): {url}");
                 yield return req;
             }
         }
@@ -115,7 +108,7 @@ namespace NzbDrone.Core.Indexers.Spotify
             {
                 try
                 {
-                    _logger.Debug("Attempting to create a new Spotify token.");
+                    _logger.Trace("Attempting to create a new Spotify token.");
                     HttpGet getter = new(new(HttpMethod.Get, "https://open.spotify.com/get_access_token?reason=transport&productType=web_player"));
                     _token = await (await getter.LoadResponseAsync()).Content.ReadAsStringAsync(token);
                     JsonElement dynamicObject = JsonSerializer.Deserialize<JsonElement>(_token)!;
@@ -123,7 +116,7 @@ namespace NzbDrone.Core.Indexers.Spotify
                     if (_token == null)
                         return false;
                     _tokenExpiry = DateTime.Now.AddMinutes(59);
-                    _logger.Debug("Successfully created a new Spotify token.");
+                    _logger.Trace("Successfully created a new Spotify token.");
 
                 }
                 catch (Exception ex)

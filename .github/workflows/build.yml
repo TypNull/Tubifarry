@@ -32,6 +32,23 @@ jobs:
           echo "Extracted version: $TAG_VERSION"
           echo "PACKAGE_VERSION=$TAG_VERSION" >> $GITHUB_ENV
 
+          # Log the extracted version
+          echo "Version: $TAG_VERSION"
+
+          # Check if the version is a pre-release (starts with 0.)
+          if [[ "$TAG_VERSION" == 0.* ]]; then
+            echo "This is a pre-release version."
+            echo "IS_PRERELEASE=true" >> $GITHUB_ENV
+          else
+            echo "This is a stable release."
+            echo "IS_PRERELEASE=false" >> $GITHUB_ENV
+          fi
+
+      - name: Log version and pre-release status
+        run: |
+          echo "Version: $PACKAGE_VERSION"
+          echo "Is Pre-release: $IS_PRERELEASE"
+
       - name: Extract repository name without owner
         id: extract_repo_name
         run: |
@@ -92,6 +109,7 @@ jobs:
         run: |
           echo "COMMIT_MESSAGES: $COMMIT_MESSAGES"
           echo "TAG_DESCRIPTION: $TAG_DESCRIPTION"
+          echo "IS_PRERELEASE: $IS_PRERELEASE"
 
       - name: Create GitHub Release and Upload Artifact
         uses: softprops/action-gh-release@v1
