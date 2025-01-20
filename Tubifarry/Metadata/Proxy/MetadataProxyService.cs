@@ -1,0 +1,101 @@
+﻿using DryIoc;
+using NLog;
+using NzbDrone.Core.Datastore;
+using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.Messaging.Events;
+using NzbDrone.Core.MetadataSource;
+using NzbDrone.Core.ThingiProvider;
+using NzbDrone.Core.ThingiProvider.Events;
+using Tubifarry.Metadata.Proxy.Mixed;
+using Tubifarry.Metadata.Proxy.SkyHook;
+
+namespace Tubifarry.Metadata.Proxy
+{
+    public class ProxyServiceStarter : ProviderFactory<IMetadata, MetadataDefinition>
+    {
+        public static IProxyService? ProxyService { get; private set; }
+        public ProxyServiceStarter(IProxyService service, IMetadataRepository providerRepository, IEnumerable<IMetadata> providers, IConnectionStringFactory connectionStringFactory, IServiceProvider serviceProvider, IEventAggregator eventAggregator, Logger logger)
+            : base(providerRepository, providers, serviceProvider, eventAggregator, logger) { ProxyService = service; }
+    }
+
+    public interface IProxyService
+    {
+        public IList<IProxy> Proxys { get; }
+        void CheckProxy();
+    }
+
+    public class MetadataProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>
+    {
+        private readonly ILogger _logger;
+        private readonly IMetadataFactory _metadataFactory;
+        private readonly IContainer _container;
+        private readonly IProxy[] _proxys;
+        private readonly List<IProxy> _activeProxys;
+        private IProxy? _activeProxy;
+
+        public IList<IProxy> Proxys => _proxys;
+
+        private readonly Type[] _interfaces = new Type[]{
+            typeof(IProvideArtistInfo),
+            typeof(IProvideAlbumInfo),
+            typeof(ISearchForNewAlbum),
+            typeof(ISearchForNewEntity),
+            typeof(ISearchForNewArtist)
+        };
+
+
+        public MetadataProxyService(IMetadataFactory metadataFactory, IContainer container, Logger logger)
+        {
+            _logger = logger;
+            _metadataFactory = metadataFactory;
+            _container = container;
+            _proxys = _metadataFactory.GetAvailableProviders().Where(x => x is IProxy).Cast<IProxy>().ToArray();
+            _activeProxys = _proxys.Where(x => x.Definition.Enable).ToList();
+            CheckProxy();
+        }
+
+        public void CheckProxy()
+        {
+            if (!_proxys.Any())
+                return;
+            if (!_activeProxys.Any())
+                EnableProxy(_proxys.First(x => x is SkyHookMetadataProxy));
+            else if (_activeProxys.Count > 1)
+                EnableProxy(_activeProxys.FirstOrDefault(x => x is IMixedProxy) ?? _proxys.First(x => x is IMixedProxy));
+            else if (_activeProxys.First() is IMixedProxy)
+                EnableProxy(_proxys.First(x => x is SkyHookMetadataProxy));
+            else
+                EnableProxy(_activeProxys.First());
+        }
+
+        private void EnableProxy(IProxy proxy)
+        {
+            if (proxy == _activeProxy)
+                return;
+
+            _logger.Info($"Enabling {proxy.GetType().Name} as Proxy");
+
+            foreach (Type interfaceType in _interfaces)
+                _container.Register(interfaceType, proxy.GetType(), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
+
+            ISearchForNewAlbum artistSearchService = _container.Resolve<ISearchForNewAlbum>();
+            if (artistSearchService.GetType() == proxy.GetType())
+                _logger.Debug($"Metadata provider updated successfully to {proxy.GetType().Name}");
+            else
+                _logger.Error($"Metadata provider did not update successfully to {proxy.GetType().Name}! Please restart Lidarr to update!");
+            _activeProxy = proxy;
+        }
+
+        public void Handle(ProviderUpdatedEvent<IMetadata> message)
+        {
+            IProxy? updatedProxy = _proxys.FirstOrDefault(x => x.Definition.ImplementationName == message.Definition.ImplementationName);
+            if (updatedProxy == null)
+                return;
+            if (message.Definition.Enable)
+                _activeProxys.Add(updatedProxy);
+            else
+                _activeProxys.Remove(updatedProxy);
+            CheckProxy();
+        }
+    }
+}
