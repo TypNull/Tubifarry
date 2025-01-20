@@ -2,14 +2,20 @@
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.ThingiProvider;
 
-namespace Tubifarry.Proxy
+namespace Tubifarry.Metadata.Proxy
 {
-    public abstract class ConsumerProxyPlaceholder<TSettings> : IMetadata
-        where TSettings : IProviderConfig, new()
+    public interface IProxy : IProvider, IProvideArtistInfo, ISearchForNewArtist, IProvideAlbumInfo, ISearchForNewAlbum, ISearchForNewEntity { }
+    public abstract class ConsumerProxyPlaceholder<TSettings> : IMetadata, IProxy
+      where TSettings : IProviderConfig, new()
     {
+        protected Lazy<IProxyService> _proxyService;
+
+        protected ConsumerProxyPlaceholder(Lazy<IProxyService> proxyService) => _proxyService = proxyService;
+
         public abstract string Name { get; }
 
         public Type ConfigContract => typeof(TSettings);
@@ -44,12 +50,28 @@ namespace Tubifarry.Proxy
         public List<ImageFileResult> ArtistImages(Artist artist) => new();
         public List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumPath) => new();
         public List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
-
-        public abstract ValidationResult Test();
         public virtual object RequestAction(string action, IDictionary<string, string> query) => default!;
 
         protected TSettings? Settings => (TSettings)Definition!.Settings;
 
         public override string ToString() => GetType().Name;
+
+        public abstract Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string id);
+
+        public abstract Artist GetArtistInfo(string lidarrId, int metadataProfileId);
+
+        public abstract HashSet<string> GetChangedAlbums(DateTime startTime);
+
+        public abstract HashSet<string> GetChangedArtists(DateTime startTime);
+
+        public abstract List<Album> SearchForNewAlbum(string title, string artist);
+
+        public abstract List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds);
+
+        public abstract List<Artist> SearchForNewArtist(string title);
+
+        public abstract List<object> SearchForNewEntity(string title);
+
+        public abstract ValidationResult Test();
     }
 }
