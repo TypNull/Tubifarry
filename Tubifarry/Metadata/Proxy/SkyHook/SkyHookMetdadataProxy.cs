@@ -13,7 +13,7 @@ using NzbDrone.Core.ThingiProvider;
 
 namespace Tubifarry.Metadata.Proxy.SkyHook
 {
-    public class SkyHookMetadataProxy : SkyHookProxy, IProxy, IMetadata
+    public class SkyHookMetadataProxy : SkyHookProxy, IProxy, IMetadata, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity
     {
         public SkyHookMetadataProxy(IHttpClient httpClient, IMetadataRequestBuilder requestBuilder, IArtistService artistService, IAlbumService albumService, Logger logger, IMetadataProfileService metadataProfileService, ICacheManager cacheManager) : base(httpClient, requestBuilder, artistService, albumService, logger, metadataProfileService, cacheManager)
         { }
