@@ -28,7 +28,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 return true;
 
             HashSet<string>? validProxyNames = ProxyServiceStarter.ProxyService?.Proxys?
-                .Where(x => !(x is IMixedProxy))
+                .Where(x => x is not IMixedProxy)
                 .Select(x => x.Definition.Name)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -54,7 +54,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
             _customConversion = _defaultConversion.ToList();
         }
 
-        [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Specify custom conversion rules in the format. These rules will override the default settings.")]
+        [FieldDefinition(9, Label = "Priority Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "")]
         public IEnumerable<KeyValuePair<string, string>> CustomConversion
         {
             get => _customConversion;

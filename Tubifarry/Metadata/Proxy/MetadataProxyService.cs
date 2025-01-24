@@ -3,7 +3,6 @@ using NLog;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Messaging.Events;
-using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.ThingiProvider.Events;
 using Tubifarry.Metadata.Proxy.Mixed;
@@ -24,7 +23,7 @@ namespace Tubifarry.Metadata.Proxy
         void CheckProxy();
     }
 
-    public class MetadataProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>
+    public class MetadataProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>, IHandle<ProviderAddedEvent<IMetadata>>
     {
         private readonly ILogger _logger;
         private readonly IMetadataFactory _metadataFactory;
@@ -36,13 +35,11 @@ namespace Tubifarry.Metadata.Proxy
         public IList<IProxy> Proxys => _proxys;
 
         private readonly Type[] _interfaces = new Type[]{
-            typeof(IProvideArtistInfo),
-            typeof(IProvideAlbumInfo),
-            typeof(ISearchForNewAlbum),
-            typeof(ISearchForNewEntity),
-            typeof(ISearchForNewArtist)
-        };
-
+        typeof(IProxyProvideArtistInfo),
+        typeof(IProxyProvideAlbumInfo),
+        typeof(IProxySearchForNewAlbum),
+        typeof(IProxySearchForNewEntity),
+        typeof(IProxySearchForNewArtist)};
 
         public MetadataProxyService(IMetadataFactory metadataFactory, IContainer container, Logger logger)
         {
@@ -51,6 +48,8 @@ namespace Tubifarry.Metadata.Proxy
             _container = container;
             _proxys = _metadataFactory.GetAvailableProviders().Where(x => x is IProxy).Cast<IProxy>().ToArray();
             _activeProxys = _proxys.Where(x => x.Definition.Enable).ToList();
+            foreach (Type interfaceType in typeof(ProxyForMetadataProxy).GetInterfaces())
+                _container.Register(interfaceType, typeof(ProxyForMetadataProxy), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
             CheckProxy();
         }
 
@@ -77,12 +76,6 @@ namespace Tubifarry.Metadata.Proxy
 
             foreach (Type interfaceType in _interfaces)
                 _container.Register(interfaceType, proxy.GetType(), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
-
-            ISearchForNewAlbum artistSearchService = _container.Resolve<ISearchForNewAlbum>();
-            if (artistSearchService.GetType() == proxy.GetType())
-                _logger.Debug($"Metadata provider updated successfully to {proxy.GetType().Name}");
-            else
-                _logger.Error($"Metadata provider did not update successfully to {proxy.GetType().Name}! Please restart Lidarr to update!");
             _activeProxy = proxy;
         }
 
@@ -97,5 +90,7 @@ namespace Tubifarry.Metadata.Proxy
                 _activeProxys.Remove(updatedProxy);
             CheckProxy();
         }
+
+        public void Handle(ProviderAddedEvent<IMetadata> message) => CheckProxy();
     }
 }
