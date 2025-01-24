@@ -3,14 +3,14 @@ using NLog;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Music;
 
-namespace Tubifarry.Metadata.Proxy.CustomProxy
+namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
-    public class CustomMetadataProxy : ConsumerProxyPlaceholder<CustomMetadataProxySettings>, IMetadata
+    public class DiscogsMetadataProxy : ConsumerProxyPlaceholder<DiscogsMetadataProxySettings>, IMetadata
     {
-        public override string Name => "Custom";
+        public override string Name => "Discogs";
         private readonly Logger _logger;
 
-        public CustomMetadataProxy(Lazy<IProxyService> proxyService, Logger logger) : base(proxyService) => _logger = logger;
+        public DiscogsMetadataProxy(Lazy<IProxyService> proxyService, Logger logger) : base(proxyService) => _logger = logger;
 
 
         public override ValidationResult Test()
