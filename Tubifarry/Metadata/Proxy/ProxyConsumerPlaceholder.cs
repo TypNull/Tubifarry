@@ -2,13 +2,12 @@
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
-using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.ThingiProvider;
 
 namespace Tubifarry.Metadata.Proxy
 {
-    public interface IProxy : IProvider, IProvideArtistInfo, ISearchForNewArtist, IProvideAlbumInfo, ISearchForNewAlbum, ISearchForNewEntity { }
+    public interface IProxy : IProvider, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity { }
     public abstract class ConsumerProxyPlaceholder<TSettings> : IMetadata, IProxy
       where TSettings : IProviderConfig, new()
     {
