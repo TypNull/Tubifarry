@@ -102,7 +102,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         private void PostProcess(SlskdDownloadItem item, SlskdDownloadFile file) => item.PostProcessTasks.Add(Task.Run(async () =>
         {
             string filename = file.Filename.Replace('\\', '/').TrimEnd('/').Split('/').LastOrDefault() ?? "";
-            string filePath = Path.Combine(item.GetFullFolderPath(Settings.DownloadPath).FullPath, filename);
+            string filePath = Path.Combine(item.GetFullFolderPath(GetRemoteToLocal()).FullPath, filename);
 
             _logger.Trace($"Starting post-processing for file: {filePath}");
 
@@ -125,7 +125,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             UpdateDownloadItemsAsync().Wait();
             DownloadClientItemClientInfo clientInfo = DownloadClientItemClientInfo.FromDownloadClient(this, false);
-            foreach (DownloadClientItem? clientItem in GetDownloadItems().Select(x => x.GetDownloadClientItem(Settings.DownloadPath, Settings.GetTimeout())))
+            foreach (DownloadClientItem? clientItem in GetDownloadItems().Select(x => x.GetDownloadClientItem(GetRemoteToLocal(), Settings.GetTimeout())))
             {
                 clientItem.DownloadClientInfo = clientInfo;
                 yield return clientItem;
@@ -202,7 +202,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         public override DownloadClientInfo GetStatus() => new()
         {
             IsLocalhost = Settings.IsLocalhost,
-            OutputRootFolders = new List<OsPath> { Settings.IsRemotePath ? _remotePathMappingService.RemapRemoteToLocal(Settings.BaseUrl, new OsPath(Settings.DownloadPath)) : new OsPath(Settings.DownloadPath) }
+            OutputRootFolders = new List<OsPath> { _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath)) }
         };
 
         private SlskdDownloadItem? GetDownloadItem(string downloadId) => GetDownloadItem(int.Parse(downloadId));
@@ -210,7 +210,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         private IEnumerable<SlskdDownloadItem> GetDownloadItems() => _downloadMappings.Where(kvp => kvp.Key.OuterKey == Definition.Id).Select(kvp => kvp.Value);
         private void AddDownloadItem(SlskdDownloadItem item) => _downloadMappings[new DownloadKey(Definition.Id, item.ID)] = item;
         private bool RemoveDownloadItem(string downloadId) => _downloadMappings.Remove(new DownloadKey(Definition.Id, int.Parse(downloadId)));
-
+        private OsPath GetRemoteToLocal() => _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath));
 
         protected override void Test(List<ValidationFailure> failures) => failures.AddIfNotNull(TestConnection().Result);
 
@@ -251,12 +251,9 @@ namespace Tubifarry.Download.Clients.Soulseek
                 if (string.IsNullOrEmpty(serverState) || !serverState.Contains("Connected"))
                     return new ValidationFailure("BaseUrl", $"Slskd server is not connected. State: {serverState}");
 
+                Settings.DownloadPath = await FetchDownloadPathAsync() ?? string.Empty;
                 if (string.IsNullOrEmpty(Settings.DownloadPath))
-                {
-                    Settings.DownloadPath = await FetchDownloadPathAsync() ?? string.Empty;
-                    if (string.IsNullOrEmpty(Settings.DownloadPath))
-                        return new ValidationFailure("DownloadPath", "DownloadPath could not be found or is invalid.");
-                }
+                    return new ValidationFailure("DownloadPath", "DownloadPath could not be found or is invalid.");
                 return null!;
             }
             catch (HttpException ex)

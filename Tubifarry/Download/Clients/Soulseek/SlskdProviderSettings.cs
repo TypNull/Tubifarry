@@ -2,6 +2,7 @@
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
+using System.Text.RegularExpressions;
 
 namespace Tubifarry.Download.Clients.Soulseek
 {
@@ -19,12 +20,6 @@ namespace Tubifarry.Download.Clients.Soulseek
             RuleFor(c => c.ApiKey)
                 .NotEmpty()
                 .WithMessage("API Key is required.");
-
-            // Validate DownloadPath can be null or empty, or a valid directory path
-            RuleFor(x => x.DownloadPath)
-                .Must(path => string.IsNullOrEmpty(path) || Path.IsPathRooted(path))
-                .WithMessage("Download path must be a valid directory path.")
-                .When(x => !string.IsNullOrEmpty(x.DownloadPath));
 
             // Validate LRCLIBInstance URL
             RuleFor(x => x.LRCLIBInstance)
@@ -46,24 +41,23 @@ namespace Tubifarry.Download.Clients.Soulseek
 
     public class SlskdProviderSettings : IProviderConfig
     {
+        private static readonly Regex _hostRegex = new(@"^(?:https?:\/\/)?([^\/:\?]+)(?::\d+)?(?:\/|$)", RegexOptions.Compiled);
         private static readonly SlskdProviderSettingsValidator Validator = new();
+        private string? _host;
 
         [FieldDefinition(0, Label = "URL", Type = FieldType.Url, Placeholder = "http://localhost:5030", HelpText = "The URL of your Slskd instance.")]
         public string BaseUrl { get; set; } = "http://localhost:5030";
 
-        [FieldDefinition(2, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "The API key for your Slskd instance. You can find or set this in the Slskd's settings under 'Options'.", Placeholder = "Enter your API key")]
+        [FieldDefinition(1, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "The API key for your Slskd instance. You can find or set this in the Slskd's settings under 'Options'.", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
-        [FieldDefinition(3, Label = "Download Path", Type = FieldType.Path, HelpText = "Specify the directory where downloaded files will be saved. If not specified, Slskd's default download path is used.")]
-        public string DownloadPath { get; set; } = string.Empty;
-
-        [FieldDefinition(5, Label = "Use LRCLIB for Lyrics", HelpText = "Enable this option to fetch lyrics from LRCLIB after the download is complete.", Type = FieldType.Checkbox)]
+        [FieldDefinition(2, Label = "Use LRCLIB for Lyrics", HelpText = "Enable this option to fetch lyrics from LRCLIB after the download is complete.", Type = FieldType.Checkbox)]
         public bool UseLRCLIB { get; set; } = false;
 
-        [FieldDefinition(6, Label = "LRC Lib Instance", Type = FieldType.Url, HelpText = "The URL of a LRC Lib instance to connect to. Default is 'https://lrclib.net'.", Advanced = true)]
+        [FieldDefinition(3, Label = "LRC Lib Instance", Type = FieldType.Url, HelpText = "The URL of a LRC Lib instance to connect to. Default is 'https://lrclib.net'.", Advanced = true)]
         public string LRCLIBInstance { get; set; } = "https://lrclib.net";
 
-        [FieldDefinition(7, Label = "Timeout", Type = FieldType.Textbox, HelpText = "Specify the maximum time to wait for a response from the Slskd instance before timing out. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes). Set leave blank for no timeout.", Unit = "hours", Advanced = true, Placeholder = "Enter timeout in hours")]
+        [FieldDefinition(4, Label = "Timeout", Type = FieldType.Textbox, HelpText = "Specify the maximum time to wait for a response from the Slskd instance before timing out. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes). Set leave blank for no timeout.", Unit = "hours", Advanced = true, Placeholder = "Enter timeout in hours")]
         public double? Timeout { get; set; }
 
         [FieldDefinition(8, Label = "Retry Attempts", Type = FieldType.Number, HelpText = "The number of times to retry downloading a file if it fails.", Advanced = true, Placeholder = "Enter retry attempts")]
@@ -72,8 +66,16 @@ namespace Tubifarry.Download.Clients.Soulseek
         [FieldDefinition(98, Label = "Is Fetched remote", Type = FieldType.Checkbox, Hidden = HiddenType.Hidden)]
         public bool IsRemotePath { get; set; }
 
-        [FieldDefinition(99, Label = "Is Localhost", Type = FieldType.Checkbox, Hidden = HiddenType.Hidden)]
+        [FieldDefinition(99, Label = "Host", Type = FieldType.Textbox, Hidden = HiddenType.Hidden)]
+        public string Host
+        {
+            get => _host ??= (_hostRegex.Match(BaseUrl) is { Success: true } match) ? match.Groups[1].Value : BaseUrl;
+            set { }
+        }
+
         public bool IsLocalhost { get; set; }
+
+        public string DownloadPath { get; set; } = string.Empty;
 
         public TimeSpan? GetTimeout() => Timeout == null ? null : TimeSpan.FromHours(Timeout.Value);
 
