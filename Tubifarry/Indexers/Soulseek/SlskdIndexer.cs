@@ -12,7 +12,7 @@ namespace Tubifarry.Indexers.Soulseek
 {
     public class SlskdIndexer : HttpIndexerBase<SlskdSettings>
     {
-        public override string Name => "Slsdk";
+        public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
