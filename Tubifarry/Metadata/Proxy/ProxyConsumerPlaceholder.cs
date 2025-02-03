@@ -25,23 +25,8 @@ namespace Tubifarry.Metadata.Proxy
 
         public ProviderDefinition? Definition { get; set; }
 
-        public string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
-        {
-            string existingFilename = Path.Combine(artist.Path, metadataFile.RelativePath);
-            string extension = Path.GetExtension(existingFilename).TrimStart('.');
-            string newFileName = Path.ChangeExtension(trackFile.Path, extension);
-
-            return newFileName;
-        }
-
-        public string GetFilenameAfterMove(Artist artist, string albumPath, MetadataFile metadataFile)
-        {
-            string existingFilename = Path.GetFileName(metadataFile.RelativePath);
-            string newFileName = Path.Combine(artist.Path, albumPath, existingFilename);
-
-            return newFileName;
-        }
-
+        public string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile) => Path.ChangeExtension(trackFile.Path, Path.GetExtension(Path.Combine(artist.Path, metadataFile.RelativePath)).TrimStart('.'));
+        public string GetFilenameAfterMove(Artist artist, string albumPath, MetadataFile metadataFile) => Path.Combine(artist.Path, albumPath, Path.GetFileName(metadataFile.RelativePath));
         public MetadataFile FindMetadataFile(Artist artist, string path) => default!;
         public MetadataFileResult ArtistMetadata(Artist artist) => default!;
         public MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
@@ -51,7 +36,7 @@ namespace Tubifarry.Metadata.Proxy
         public List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
         public virtual object RequestAction(string action, IDictionary<string, string> query) => default!;
 
-        protected TSettings? Settings => (TSettings)Definition!.Settings;
+        protected TSettings? Settings => Definition?.Settings == null ? default : (TSettings)Definition!.Settings;
 
         public override string ToString() => GetType().Name;
 

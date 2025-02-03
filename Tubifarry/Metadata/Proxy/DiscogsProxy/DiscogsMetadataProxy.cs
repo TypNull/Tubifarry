@@ -7,56 +7,35 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
     public class DiscogsMetadataProxy : ConsumerProxyPlaceholder<DiscogsMetadataProxySettings>, IMetadata
     {
-        public override string Name => "Discogs";
+        private readonly IDiscogsProxy _discogsProxy;
         private readonly Logger _logger;
 
-        public DiscogsMetadataProxy(Lazy<IProxyService> proxyService, Logger logger) : base(proxyService) => _logger = logger;
+        public override string Name => "Discogs";
+        private DiscogsMetadataProxySettings ActiveSettings => Settings ?? DiscogsMetadataProxySettings.Instance!;
 
-
-        public override ValidationResult Test()
+        public DiscogsMetadataProxy(Lazy<IProxyService> proxyService, IDiscogsProxy discogsProxy, Logger logger) : base(proxyService)
         {
-            _logger.Info("Test");
-            return new();
+            _discogsProxy = discogsProxy;
+            _logger = logger;
+            _logger.Info("DiscogsMetadataProxy initialized.");
         }
 
-        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string id)
-        {
-            throw new NotImplementedException();
-        }
+        public override ValidationResult Test() => _discogsProxy.Test(ActiveSettings);
 
-        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId)
-        {
-            throw new NotImplementedException();
-        }
+        public override List<Album> SearchForNewAlbum(string title, string artist) => _discogsProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
-        public override HashSet<string> GetChangedAlbums(DateTime startTime)
-        {
-            throw new NotImplementedException();
-        }
+        public override List<Artist> SearchForNewArtist(string title) => _discogsProxy.SearchNewArtist(ActiveSettings, title);
 
-        public override HashSet<string> GetChangedArtists(DateTime startTime)
-        {
-            throw new NotImplementedException();
-        }
+        public override List<object> SearchForNewEntity(string title) => _discogsProxy.SearchNewEntity(ActiveSettings, title);
 
-        public override List<Album> SearchForNewAlbum(string title, string artist)
-        {
-            throw new NotImplementedException();
-        }
+        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _discogsProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
 
-        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
-        {
-            throw new NotImplementedException();
-        }
+        public override HashSet<string> GetChangedAlbums(DateTime startTime) => _discogsProxy.GetChangedAlbums(ActiveSettings, startTime);
 
-        public override List<Artist> SearchForNewArtist(string title)
-        {
-            throw new NotImplementedException();
-        }
+        public override HashSet<string> GetChangedArtists(DateTime startTime) => _discogsProxy.GetChangedArtists(ActiveSettings, startTime);
 
-        public override List<object> SearchForNewEntity(string title)
-        {
-            throw new NotImplementedException();
-        }
+        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) => _discogsProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
+
+        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _discogsProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
     }
 }
