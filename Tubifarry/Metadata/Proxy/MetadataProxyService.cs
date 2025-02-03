@@ -2,19 +2,19 @@
 using NLog;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
-using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.ThingiProvider.Events;
 using Tubifarry.Metadata.Proxy.Mixed;
 using Tubifarry.Metadata.Proxy.SkyHook;
 
 namespace Tubifarry.Metadata.Proxy
 {
-    public class ProxyServiceStarter : ProviderFactory<IMetadata, MetadataDefinition>
+    public class ProxyServiceStarter : IHandle<ApplicationStartingEvent>
     {
         public static IProxyService? ProxyService { get; private set; }
-        public ProxyServiceStarter(IProxyService service, IMetadataRepository providerRepository, IEnumerable<IMetadata> providers, IConnectionStringFactory connectionStringFactory, IServiceProvider serviceProvider, IEventAggregator eventAggregator, Logger logger)
-            : base(providerRepository, providers, serviceProvider, eventAggregator, logger) { ProxyService = service; }
+        public ProxyServiceStarter(IProxyService service, Logger logger) { ProxyService = service; }
+        public void Handle(ApplicationStartingEvent message) { }
     }
 
     public interface IProxyService
@@ -46,7 +46,7 @@ namespace Tubifarry.Metadata.Proxy
             _logger = logger;
             _metadataFactory = metadataFactory;
             _container = container;
-            _proxys = _metadataFactory.GetAvailableProviders().Where(x => x is IProxy).Cast<IProxy>().ToArray();
+            _proxys = _metadataFactory.GetAvailableProviders().OfType<IProxy>().ToArray();
             _activeProxys = _proxys.Where(x => x.Definition.Enable).ToList();
             foreach (Type interfaceType in typeof(ProxyForMetadataProxy).GetInterfaces())
                 _container.Register(interfaceType, typeof(ProxyForMetadataProxy), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);

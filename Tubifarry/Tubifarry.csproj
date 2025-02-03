@@ -15,6 +15,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+		<PackageReference Include="ParkSquare.Discogs" Version="8.0.0" />
 		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.0" />
 		<PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
 		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
