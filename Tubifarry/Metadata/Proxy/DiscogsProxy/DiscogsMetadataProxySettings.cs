@@ -1,8 +1,8 @@
 ﻿using FluentValidation;
 using NzbDrone.Core.Annotations;
-using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
+using ParkSquare.Discogs;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
@@ -10,18 +10,22 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
     {
     }
 
-    public class DiscogsMetadataProxySettings : IProviderConfig
+    public class DiscogsMetadataProxySettings : IProviderConfig, IClientConfig
     {
         private static readonly DiscogsMetadataProxySettingsValidator Validator = new();
 
-        private readonly IEnumerable<KeyValuePair<string, string>> _defaultConversion;
+        [FieldDefinition(1, Label = "Token", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "Your Discogs personal access token", Placeholder = "Enter your API key")]
+        public string AuthToken { get; set; } = string.Empty;
 
-        public DiscogsMetadataProxySettings()
-        { }
+        [FieldDefinition(2, Label = "Page Number", Type = FieldType.Number, HelpText = "Page number for pagination", Placeholder = "1")]
+        public int PageNumber { get; set; } = 1;
 
-        [FieldDefinition(9, Label = "Discogs Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Specify custom conversion rules in the format. These rules will override the default settings.")]
-        public IEnumerable<KeyValuePair<string, string>> CustomConversion { get; set; }
+        [FieldDefinition(3, Label = "Page Size", Type = FieldType.Number, HelpText = "Page size for pagination", Placeholder = "10")]
+        public int PageSize { get; set; } = 2;
 
+        public string BaseUrl => "https://api.discogs.com";
+        public DiscogsMetadataProxySettings() => Instance = this;
+        public static DiscogsMetadataProxySettings? Instance { get; private set; }
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }
