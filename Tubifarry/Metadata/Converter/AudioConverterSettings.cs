@@ -22,11 +22,11 @@ namespace Tubifarry.Metadata.Converter
 
             // Validate custom conversion rules
             RuleFor(x => x.CustomConversion)
-                .Must(customConversions => customConversions == null || customConversions.All(IsValidConversionRule))
+                .Must(customConversions => customConversions?.All(IsValidConversionRule) != false)
                 .WithMessage("Custom conversion rules must be in the format 'source -> target' (e.g., mp3 to flac).");
 
             RuleFor(x => x.CustomConversion)
-                .Must(customConversions => customConversions == null || customConversions.All(IsValidLossyConversion))
+                .Must(customConversions => customConversions?.All(IsValidLossyConversion) != false)
                 .WithMessage("Lossy formats cannot be converted to non-lossy formats.");
 
             RuleFor(x => x)
@@ -39,7 +39,7 @@ namespace Tubifarry.Metadata.Converter
             if (string.IsNullOrWhiteSpace(rule.Key) || string.IsNullOrWhiteSpace(rule.Value))
                 return false;
 
-            bool isValidSource = Enum.TryParse(rule.Key, true, out AudioFormat sourceFormat) && sourceFormat != AudioFormat.Unknown;
+            bool isValidSource = (string.Equals(rule.Key, "all", StringComparison.OrdinalIgnoreCase)) || (Enum.TryParse(rule.Key, true, out AudioFormat sourceFormat) && sourceFormat != AudioFormat.Unknown);
             bool isValidTarget = Enum.TryParse(rule.Value, true, out AudioFormat targetFormat) && targetFormat != AudioFormat.Unknown;
 
             return isValidSource && isValidTarget;
@@ -47,7 +47,7 @@ namespace Tubifarry.Metadata.Converter
 
         private bool IsValidLossyConversion(KeyValuePair<string, string> rule)
         {
-            if (string.IsNullOrWhiteSpace(rule.Key) || string.IsNullOrWhiteSpace(rule.Value))
+            if (rule.Key.Equals("all", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             if (!Enum.TryParse(rule.Key, true, out AudioFormat sourceFormat) || !Enum.TryParse(rule.Value, true, out AudioFormat targetFormat))

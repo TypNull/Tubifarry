@@ -45,6 +45,8 @@ namespace Tubifarry.Metadata.Converter
             }
 
             AudioFormat targetFormat = GetTargetFormatForTrack(trackFormat);
+            if (targetFormat == AudioFormat.Unknown)
+                return;
 
             _logger.Debug("Converting track from {0} to {1}: {2}", trackFormat, targetFormat, trackFile.Path);
 
@@ -61,12 +63,23 @@ namespace Tubifarry.Metadata.Converter
         private AudioFormat GetTargetFormatForTrack(AudioFormat trackFormat)
         {
             foreach (KeyValuePair<string, string> rule in Settings.CustomConversion)
-                if (rule.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase))
-                    if (Enum.TryParse(rule.Value, true, out AudioFormat customTargetFormat))
-                    {
-                        _logger.Trace("Using custom target format {0} for track format {1}", customTargetFormat, trackFormat);
-                        return customTargetFormat;
-                    }
+            {
+                if (rule.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase) && Enum.TryParse(rule.Value, true, out AudioFormat customTargetFormat))
+                {
+                    _logger.Trace("Using custom target format {0} for track format {1}", customTargetFormat, trackFormat);
+                    return customTargetFormat;
+                }
+            }
+            if (Settings.CustomConversion.FirstOrDefault(x => x.Key.Equals("all", StringComparison.OrdinalIgnoreCase)) is KeyValuePair<string, string> all && Enum.TryParse(all.Value, true, out AudioFormat customAllTargetsFormat))
+            {
+                _logger.Trace("Using custom target format {0} for track format {1}", customAllTargetsFormat, trackFormat);
+                if (AudioFormatHelper.IsLossyFormat(trackFormat) && !AudioFormatHelper.IsLossyFormat(customAllTargetsFormat))
+                {
+                    _logger.Warn("Blocked lossy ➔ lossless conversion via 'all' rule for: {0}", trackFormat);
+                    return AudioFormat.Unknown;
+                }
+                return customAllTargetsFormat;
+            }
             return (AudioFormat)Settings.TargetFormat;
         }
 
@@ -79,10 +92,10 @@ namespace Tubifarry.Metadata.Converter
                 return false;
             }
 
-            bool shouldConvertCustom = Settings.CustomConversion.Any() && Settings.CustomConversion.Any(rule => rule.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase));
-            bool shouldConvertDefault = IsFormatEnabledForConversion(trackFormat);
-            bool shouldConvert = shouldConvertCustom || shouldConvertDefault;
-            return shouldConvert;
+            bool hasDirectRule = Settings.CustomConversion.Any(r => r.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase));
+            bool hasGlobalRule = Settings.CustomConversion.Any(r => r.Key.Equals("all", StringComparison.OrdinalIgnoreCase));
+            bool defaultConversion = IsFormatEnabledForConversion(trackFormat);
+            return hasDirectRule || hasGlobalRule || defaultConversion;
         }
 
         private bool IsFormatEnabledForConversion(AudioFormat format) => format switch
@@ -95,6 +108,9 @@ namespace Tubifarry.Metadata.Converter
             AudioFormat.Vorbis => Settings.ConvertOther,
             AudioFormat.OGG => Settings.ConvertOther,
             AudioFormat.WMA => Settings.ConvertOther,
+            AudioFormat.ALAC => Settings.ConvertOther,
+            AudioFormat.AIFF => Settings.ConvertOther,
+            AudioFormat.AMR => Settings.ConvertOther,
             _ => false
         };
     }

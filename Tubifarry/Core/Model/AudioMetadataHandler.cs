@@ -33,6 +33,7 @@ namespace Tubifarry.Core.Model
     { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-compression_level 10", "-application audio" } },
     { AudioFormat.Vorbis, new[] { "-codec:a libvorbis", "-q:a 7" } },
     { AudioFormat.FLAC,   new[] { "-codec:a flac" } },
+    { AudioFormat.ALAC,   new[] { "-codec:a alac" } },
     { AudioFormat.WAV,    new[] { "-codec:a pcm_s16le" } },
     { AudioFormat.MP4,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
     { AudioFormat.AIFF,   new[] { "-codec:a pcm_s16le" } },
@@ -107,7 +108,7 @@ namespace Tubifarry.Core.Model
                     return true;
 
                 byte[] header = new byte[8];
-                using (FileStream stream = new(TrackPath, FileMode.Open, FileAccess.Read))
+                await using (FileStream stream = new(TrackPath, FileMode.Open, FileAccess.Read))
                 {
                     await stream.ReadAsync(header);
                 }
@@ -297,8 +298,7 @@ namespace Tubifarry.Core.Model
 
             if (!isInstalled)
             {
-                string[] paths = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>();
-                foreach (string path in paths)
+                foreach (string path in Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>())
                 {
                     if (Directory.Exists(path))
                     {

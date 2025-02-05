@@ -16,7 +16,8 @@ namespace Tubifarry.Core.Utilities
         OGG,
         MIDI,
         AMR,
-        WMA
+        WMA,
+        ALAC
     }
 
     internal static class AudioFormatHelper
@@ -30,7 +31,6 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.AMR,
             AudioFormat.WMA
         };
-
 
         private static readonly int[] _standardBitrates = { 0, 96, 128, 160, 192, 256, 320 };
 
@@ -66,6 +66,7 @@ namespace Tubifarry.Core.Utilities
             "mid" or "midi" => AudioFormat.MIDI,
             "amr" => AudioFormat.AMR,
             "wma" => AudioFormat.WMA,
+            "alac" => AudioFormat.ALAC,
             _ => AudioFormat.Unknown // Default for unknown formats
         };
 
@@ -86,6 +87,7 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.WMA => ".wma",
             AudioFormat.MP4 => ".mp4",
             AudioFormat.OGG => ".ogg",
+            AudioFormat.ALAC => ".m4a",
             _ => ".aac" // Default to AAC if the format is unknown
         };
 
@@ -116,16 +118,19 @@ namespace Tubifarry.Core.Utilities
             "mp3" => AudioFormat.MP3,
             "opus" => AudioFormat.Opus,
             "ogg" or "vorbis" => AudioFormat.Vorbis,
-            "flac" or "alac" => AudioFormat.FLAC,
+            "flac" => AudioFormat.FLAC,
             "wav" => AudioFormat.WAV,
             "aiff" or "aif" or "aifc" => AudioFormat.AIFF,
             "mid" or "midi" => AudioFormat.MIDI,
             "amr" => AudioFormat.AMR,
             "wma" => AudioFormat.WMA,
-            _ => AudioFormat.Unknown // Default for unknown extensions
+            "alac" => AudioFormat.ALAC,
+            _ => AudioFormat.Unknown
         };
 
-
+        /// <summary>
+        /// Rounds a bitrate to the nearest standard value.
+        /// </summary>
         public static int RoundToStandardBitrate(int bitrateKbps) => _standardBitrates.OrderBy(b => Math.Abs(b - bitrateKbps)).First();
     }
 }
