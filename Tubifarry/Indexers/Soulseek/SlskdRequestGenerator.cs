@@ -50,6 +50,7 @@ namespace Tubifarry.Indexers.Soulseek
                 chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, halfAlbumTitle, searchCriteria.InteractiveSearch, tarckCount));
             }
             chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, null, searchCriteria.InteractiveSearch, tarckCount));
+            chain.AddTier(DeferredGetRequests(null, searchCriteria.AlbumQuery, searchCriteria.InteractiveSearch, tarckCount));
             return chain;
         }
 
@@ -61,14 +62,15 @@ namespace Tubifarry.Indexers.Soulseek
             IndexerPageableRequestChain chain = new();
             List<string> aliases = searchCriteria.Artist.Metadata.Value.Aliases;
             for (int i = 0; i < 3 && i < aliases.Count && Settings.UseFallbackSearch; i++)
+            {
                 if (aliases[i].Length > 3)
                     chain.AddTier(DeferredGetRequests(aliases[i], null, searchCriteria.InteractiveSearch, tarckCount));
-
+            }
             return chain;
         }
 
 
-        private IEnumerable<IndexerRequest> DeferredGetRequests(string artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
+        private IEnumerable<IndexerRequest> DeferredGetRequests(string? artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
         {
             _searchResultsRequest = null;
             IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, fullAlbum).Result;
@@ -76,10 +78,11 @@ namespace Tubifarry.Indexers.Soulseek
                 yield return request;
         }
 
-        private async Task<IndexerRequest?> GetRequestsAsync(string artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
+        private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
         {
             try
             {
+                _logger.Info($"Search: {artist} {album}");
                 var searchData = new
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -114,7 +117,7 @@ namespace Tubifarry.Indexers.Soulseek
                     Album = fullAlbum ?? album ?? "",
                     Artist = artist,
                     Interactive = interactive,
-                    MimimumFiles = Math.Max(Settings.MinimumResponseFileCount, Settings.FilterLessFilesThanAlbum ? 0 : 1)
+                    MimimumFiles = Math.Max(Settings.MinimumResponseFileCount, Settings.FilterLessFilesThanAlbum ? trackCount : 1)
                 }.ToJson();
 
                 return new IndexerRequest(request);
@@ -178,11 +181,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         private static double CalculateQuadraticDelay(double progress)
         {
-            double a = 16;
-            double b = -16;
-            double c = 5;
+            const double a = 16;
+            const double b = -16;
+            const double c = 5;
 
-            double delay = a * Math.Pow(progress, 2) + b * progress + c;
+            double delay = (a * Math.Pow(progress, 2)) + (b * progress) + c;
             return Math.Clamp(delay, 0.5, 5);
         }
 

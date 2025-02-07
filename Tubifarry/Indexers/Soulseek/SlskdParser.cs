@@ -49,8 +49,7 @@ namespace Tubifarry.Indexers.Soulseek
                         continue;
 
                     List<SlskdFileData> files = SlskdFileData.GetFiles(filesElement, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions).ToList();
-                    List<IGrouping<string, SlskdFileData>> directories = files.GroupBy(f => f.Filename?[..f.Filename.LastIndexOf('\\')] ?? "").ToList();
-                    foreach (IGrouping<string, SlskdFileData>? directory in directories)
+                    foreach (IGrouping<string, SlskdFileData>? directory in files.GroupBy(f => f.Filename?[..f.Filename.LastIndexOf('\\')] ?? "").ToList())
                     {
                         if (string.IsNullOrEmpty(directory.Key))
                             continue;

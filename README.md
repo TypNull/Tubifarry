@@ -1,9 +1,10 @@
 # Tubifarry for Lidarr 🎶  
 ![Downloads](https://img.shields.io/github/downloads/TypNull/Tubifarry/total)  ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TypNull/Tubifarry)  ![GitHub last commit](https://img.shields.io/github/last-commit/TypNull/Tubifarry)  ![License](https://img.shields.io/github/license/TypNull/Tubifarry)  ![GitHub stars](https://img.shields.io/github/stars/TypNull/Tubifarry)  
 
-Tubifarry is a versatile plugin for **Lidarr** that enhances your music library by fetching metadata from **Spotify** and enabling direct music downloads from **YouTube**. While it is not explicitly a Spotify-to-YouTube downloader, it leverages the YouTube API to seamlessly integrate music downloads into your Lidarr setup. Built on the foundation of trevTV's projects, Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
+Tubifarry is a versatile plugin for **Lidarr** that enhances your music library by indexing from **Spotify** and enabling direct music downloads from **YouTube**. While it is not explicitly a `Spotify-to-YouTube` downloader, it leverages the YouTube API to seamlessly integrate music downloads into your Lidarr setup. Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
 
-Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This makes it easy to manage and download soundtracks for your favorite movies and TV shows. 🎬🎵  
+Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This makes it easy to manage and download soundtracks for your favorite movies and TV shows. 🎬🎵
+For further customization, Codec Tinker lets you convert audio files between formats using FFmpeg, helping you optimize your library.⚙️  
 
 ---
 
@@ -25,7 +26,7 @@ To use Tubifarry, ensure your Lidarr setup is on the `plugins` branch. Follow th
 ### Docker Setup (Hotio Image) 🐳  
 For Docker users using Hotio's image, use the following path:  
 ```yml  
-    image: ghcr.io/hotio/lidarr:pr-plugins  
+image: ghcr.io/hotio/lidarr:pr-plugins
 ```  
 
 ### Non-Docker Installation  
@@ -140,13 +141,13 @@ The **Queue Cleaner** automatically processes items in your Lidarr queue that ha
      Choose the default format for conversions (e.g., FLAC, Opus, MP3).  
 
    - **Custom Conversion Rules**:  
-     Define rules like `wavTOflac` or `AAC_to_MP3` for specific format conversions.  
+     Define rules like `wav -> flac`, `AAC -> MP3` or `all -> alac` for more specific conversions.  
 
    **Note**: Lossy formats (e.g., MP3, AAC) cannot be converted to non-lossy formats (e.g., FLAC, WAV).  
 
 2. **Enable Format-Specific Conversion**  
-   Toggle checkboxes to enable conversion for specific formats:  
-   - **Convert MP3**, **Convert AAC**, **Convert FLAC**, etc.  
+   Toggle checkboxes or use custom rules to enable conversion for specific formats:  
+   - **Convert MP3**, **Convert FLAC**, etc.  
 
 ---
 
