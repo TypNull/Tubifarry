@@ -15,7 +15,7 @@ namespace Tubifarry.Indexers.Youtube
         public override string Name => "Youtube";
         public override string Protocol => nameof(YoutubeDownloadProtocol);
         public override bool SupportsRss => false;
-        public override bool SupportsSearch => false;
+        public override bool SupportsSearch => true;
         public override int PageSize => 50;
         public override TimeSpan RateLimit => new(30);
 

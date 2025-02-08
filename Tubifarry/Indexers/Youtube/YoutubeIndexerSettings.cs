@@ -28,7 +28,7 @@ namespace Tubifarry.Indexers.Youtube
         [FieldDefinition(0, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;
 
-        [FieldDefinition(1, Label = "Cookie Path", Type = FieldType.FilePath, Hidden = HiddenType.HiddenIfNotSet, Placeholder = "/path/to/cookies.txt", HelpText = "Specify the path to the Spotify cookies file. This is optional but required for accessing restricted content.", Advanced = true)]
+        [FieldDefinition(1, Label = "Cookie Path", Type = FieldType.FilePath, Hidden = HiddenType.Visible, Placeholder = "/path/to/cookies.txt", HelpText = "Specify the path to the Spotify cookies file. This is optional but required for accessing restricted content.", Advanced = true)]
         public string CookiePath { get; set; } = string.Empty;
 
         public string BaseUrl { get; set; } = string.Empty;

@@ -10,6 +10,8 @@
 			<InputAssemblies Include="$(OutputPath)Xabe.FFmpeg.Downloader.dll" />
 			<InputAssemblies Include="$(OutputPath)FuzzySharp.dll" />
 			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
+			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
+			<InputAssemblies Include="$(OutputPath)Jint.dll" />
 		</ItemGroup>
 
         <ILRepack

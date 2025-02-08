@@ -48,7 +48,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                 {
                     RemoveItemAsync(item).Wait();
                 }
-                catch (Exception) { }
+                catch { }
                 return null!;
             }
             return item.ID.ToString();
@@ -152,8 +152,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             downloads?.ForEach(user =>
             {
                 user.TryGetProperty("directories", out JsonElement directoriesElement);
-                IEnumerable<SlskdDownloadDirectory> data = SlskdDownloadDirectory.GetDirectories(directoriesElement);
-                foreach (SlskdDownloadDirectory dir in data)
+                foreach (SlskdDownloadDirectory dir in SlskdDownloadDirectory.GetDirectories(directoriesElement))
                 {
                     HashCode hash = new();
                     List<string> sortedFilenames = dir.Files?

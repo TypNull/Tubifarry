@@ -27,6 +27,12 @@ namespace Tubifarry.Download.Clients.YouTube
 
         public NamingConfig? NameingConfig { get; set; }
 
+        public int RandomDelayMin { get; set; } = 100;
+
+        public int RandomDelayMax { get; set; } = 2000;
+
+        public int MaxDownloadSpeed { get; set; }
+
         public YouTubeAlbumOptions() { }
 
         protected YouTubeAlbumOptions(YouTubeAlbumOptions options) : base(options)
@@ -41,6 +47,9 @@ namespace Tubifarry.Download.Clients.YouTube
             ReEncodeOptions = options.ReEncodeOptions;
             LRCLIBInstance = options.LRCLIBInstance;
             DownloadPath = options.DownloadPath;
+            RandomDelayMin = options.RandomDelayMin;
+            RandomDelayMax = options.RandomDelayMax;
+            MaxDownloadSpeed = options.MaxDownloadSpeed;
         }
     }
 }

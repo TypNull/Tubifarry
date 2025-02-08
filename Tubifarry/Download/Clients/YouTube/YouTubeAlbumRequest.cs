@@ -33,7 +33,7 @@ namespace Tubifarry.Download.Clients.YouTube
         private readonly Logger _logger;
 
         private DateTime _lastUpdateTime = DateTime.MinValue;
-        private long _lastRemainingSize = 0;
+        private long _lastRemainingSize;
         private byte[]? _albumCover;
 
         private ReleaseInfo ReleaseInfo => _remoteAlbum.Release;
@@ -88,6 +88,7 @@ namespace Tubifarry.Download.Clients.YouTube
         {
             string albumBrowseID = await Options.YouTubeMusicClient!.GetAlbumBrowseIdAsync(ReleaseInfo.DownloadUrl, token).ConfigureAwait(false);
             AlbumInfo albumInfo = await Options.YouTubeMusicClient.GetAlbumInfoAsync(albumBrowseID, token).ConfigureAwait(false);
+            await ApplyRandomDelayAsync(token);
             if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
             {
                 LogAndAppendMessage($"No tracks to download found in the album: {ReleaseInfo.Album}", LogLevel.Debug);
@@ -157,16 +158,14 @@ namespace Tubifarry.Download.Clients.YouTube
                 CreateSpeedReporter = true,
                 SpeedReporterTimeout = 1,
                 Priority = RequestPriority.Normal,
+                MaxBytesPerSecond = Options.MaxDownloadSpeed,
                 DelayBetweenAttemps = Options.DelayBetweenAttemps,
                 Filename = _releaseFormatter.BuildTrackFilename(null, musicInfo, _albumData) + ".m4a",
                 DestinationPath = _destinationPath.FullPath,
                 Handler = Options.Handler,
                 DeleteFilesOnFailure = true,
                 Chunks = Options.Chunks,
-                RequestFailed = (req, path) =>
-                {
-                    LogAndAppendMessage($"Downloading track '{trackInfo.Name}' in album '{albumInfo.Name}' failed.", LogLevel.Debug);
-                },
+                RequestFailed = (_, __) => LogAndAppendMessage($"Downloading track '{trackInfo.Name}' in album '{albumInfo.Name}' failed.", LogLevel.Debug),
                 WriteMode = WriteMode.AppendOrTruncate,
             });
 
@@ -176,7 +175,7 @@ namespace Tubifarry.Download.Clients.YouTube
                 Priority = RequestPriority.High,
                 DelayBetweenAttemps = Options.DelayBetweenAttemps,
                 Handler = Options.Handler,
-                RequestFailed = (req, path) =>
+                RequestFailed = (_, __) =>
                 {
                     LogAndAppendMessage($"Post-processing for track '{trackInfo.Name}' in album '{albumInfo.Name}' failed.", LogLevel.Debug);
                     try
@@ -184,7 +183,7 @@ namespace Tubifarry.Download.Clients.YouTube
                         if (File.Exists(downloadingReq.Destination))
                             File.Delete(downloadingReq.Destination);
                     }
-                    catch (Exception) { }
+                    catch { }
                 },
                 CancellationToken = Token
             });
@@ -267,7 +266,16 @@ namespace Tubifarry.Download.Clients.YouTube
                 ReadOnlyMemory<char> chunk = chunkEnumerator.Current;
                 distinctMessages.Add(chunk.ToString());
             }
-            return string.Join("", distinctMessages);
+            return string.Concat(distinctMessages);
+        }
+
+        private async Task ApplyRandomDelayAsync(CancellationToken token)
+        {
+            if (Options.RandomDelayMin > 0 && Options.RandomDelayMax > 0)
+            {
+                int delay = new Random().Next(Options.RandomDelayMin, Options.RandomDelayMax);
+                await Task.Delay(delay, token).ConfigureAwait(false);
+            }
         }
 
         private long GetRemainingSize() => Math.Max(_trackContainer.Sum(x => x.ContentLength), ReleaseInfo.Size) - _trackContainer.Sum(x => x.BytesDownloaded);

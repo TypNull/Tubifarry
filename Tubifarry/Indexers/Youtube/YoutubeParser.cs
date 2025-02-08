@@ -12,7 +12,6 @@ using YouTubeMusicAPI.Types;
 
 namespace Tubifarry.Indexers.Youtube
 {
-
     public interface IYoutubeParser : IParseIndexerResponse
     {
         public void SetCookies(string path);
@@ -73,7 +72,7 @@ namespace Tubifarry.Indexers.Youtube
                     ?.Where(token => token["musicShelfRenderer"] is not null)
                     ?.Select(token => token.First!);
 
-            if (shelvesData is null || !shelvesData.Any())
+            if (shelvesData?.Any() != true)
             {
                 _logger?.Warn($"Parsing search failed. Request response does not contain any shelves.");
                 return new List<Shelf>();
