@@ -17,10 +17,9 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             _discogsProxy = discogsProxy;
             _logger = logger;
-            _logger.Info("DiscogsMetadataProxy initialized.");
         }
 
-        public override ValidationResult Test() => _discogsProxy.Test(ActiveSettings);
+        public override ValidationResult Test() => new();
 
         public override List<Album> SearchForNewAlbum(string title, string artist) => _discogsProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
@@ -28,14 +27,26 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         public override List<object> SearchForNewEntity(string title) => _discogsProxy.SearchNewEntity(ActiveSettings, title);
 
-        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _discogsProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
+        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _discogsProxy.GetAlbumInfoAsync(ActiveSettings, foreignAlbumId).GetAwaiter().GetResult();
 
-        public override HashSet<string> GetChangedAlbums(DateTime startTime) => _discogsProxy.GetChangedAlbums(ActiveSettings, startTime);
+        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _discogsProxy.GetArtistInfoAsync(ActiveSettings, lidarrId, metadataProfileId).GetAwaiter().GetResult();
 
-        public override HashSet<string> GetChangedArtists(DateTime startTime) => _discogsProxy.GetChangedArtists(ActiveSettings, startTime);
+        public override HashSet<string> GetChangedAlbums(DateTime startTime)
+        {
+            _logger.Warn("GetChangedAlbums: Discogs API does not support change tracking; returning empty set.");
+            return new HashSet<string>();
+        }
 
-        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) => _discogsProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
+        public override HashSet<string> GetChangedArtists(DateTime startTime)
+        {
+            _logger.Warn("GetChangedArtists: Discogs API does not support change tracking; returning empty set.");
+            return new HashSet<string>();
+        }
 
-        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _discogsProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
+        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
+        {
+            _logger.Warn("SearchNewAlbumByRecordingIds: Discogs API does not support fingerprint search; returning empty list.");
+            return new List<Album>();
+        }
     }
 }
