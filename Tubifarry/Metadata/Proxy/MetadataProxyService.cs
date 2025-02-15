@@ -13,13 +13,13 @@ namespace Tubifarry.Metadata.Proxy
     public class ProxyServiceStarter : IHandle<ApplicationStartingEvent>
     {
         public static IProxyService? ProxyService { get; private set; }
-        public ProxyServiceStarter(IProxyService service, Logger logger) { ProxyService = service; }
+        public ProxyServiceStarter(IProxyService service) => ProxyService = service;
         public void Handle(ApplicationStartingEvent message) { }
     }
 
     public interface IProxyService
     {
-        public IList<IProxy> Proxys { get; }
+        IList<IProxy> Proxys { get; }
         void CheckProxy();
     }
 
@@ -34,12 +34,14 @@ namespace Tubifarry.Metadata.Proxy
 
         public IList<IProxy> Proxys => _proxys;
 
-        private readonly Type[] _interfaces = new Type[]{
-        typeof(IProxyProvideArtistInfo),
-        typeof(IProxyProvideAlbumInfo),
-        typeof(IProxySearchForNewAlbum),
-        typeof(IProxySearchForNewEntity),
-        typeof(IProxySearchForNewArtist)};
+        private readonly Type[] _interfaces = new Type[]
+        {
+            typeof(IProxyProvideArtistInfo),
+            typeof(IProxyProvideAlbumInfo),
+            typeof(IProxySearchForNewAlbum),
+            typeof(IProxySearchForNewEntity),
+            typeof(IProxySearchForNewArtist)
+        };
 
         public MetadataProxyService(IMetadataFactory metadataFactory, IContainer container, Logger logger)
         {
@@ -48,6 +50,7 @@ namespace Tubifarry.Metadata.Proxy
             _container = container;
             _proxys = _metadataFactory.GetAvailableProviders().OfType<IProxy>().ToArray();
             _activeProxys = _proxys.Where(x => x.Definition.Enable).ToList();
+
             foreach (Type interfaceType in typeof(ProxyForMetadataProxy).GetInterfaces())
                 _container.Register(interfaceType, typeof(ProxyForMetadataProxy), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
             CheckProxy();
@@ -55,16 +58,31 @@ namespace Tubifarry.Metadata.Proxy
 
         public void CheckProxy()
         {
+            _logger.Debug("Checking active proxies...");
+
             if (!_proxys.Any())
                 return;
+
             if (!_activeProxys.Any())
+            {
+                _logger.Trace("No active proxies found. Enabling SkyHookMetadataProxy as default.");
                 EnableProxy(_proxys.First(x => x is SkyHookMetadataProxy));
+            }
             else if (_activeProxys.Count > 1)
+            {
+                _logger.Trace("Multiple active proxies found. Prioritizing IMixedProxy if available.");
                 EnableProxy(_activeProxys.FirstOrDefault(x => x is IMixedProxy) ?? _proxys.First(x => x is IMixedProxy));
-            else if (_activeProxys.First() is IMixedProxy)
+            }
+            else if (_activeProxys[0] is IMixedProxy)
+            {
+                _logger.Trace("Only one active proxy, but it's an IMixedProxy. Switching to SkyHookMetadataProxy.");
                 EnableProxy(_proxys.First(x => x is SkyHookMetadataProxy));
+            }
             else
-                EnableProxy(_activeProxys.First());
+            {
+                _logger.Trace("Enabling the only active proxy: {0}.", _activeProxys[0].GetType().Name);
+                EnableProxy(_activeProxys[0]);
+            }
         }
 
         private void EnableProxy(IProxy proxy)
@@ -72,7 +90,7 @@ namespace Tubifarry.Metadata.Proxy
             if (proxy == _activeProxy)
                 return;
 
-            _logger.Info($"Enabling {proxy.GetType().Name} as Proxy");
+            _logger.Debug("Enabling {0} as the active proxy.", proxy.GetType().Name);
 
             foreach (Type interfaceType in _interfaces)
                 _container.Register(interfaceType, proxy.GetType(), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
@@ -84,10 +102,16 @@ namespace Tubifarry.Metadata.Proxy
             IProxy? updatedProxy = _proxys.FirstOrDefault(x => x.Definition.ImplementationName == message.Definition.ImplementationName);
             if (updatedProxy == null)
                 return;
+
             if (message.Definition.Enable)
-                _activeProxys.Add(updatedProxy);
-            else
+            {
+                if (!_activeProxys.Contains(updatedProxy))
+                    _activeProxys.Add(updatedProxy);
+            }
+            else if (_activeProxys.Contains(updatedProxy))
+            {
                 _activeProxys.Remove(updatedProxy);
+            }
             CheckProxy();
         }
 
