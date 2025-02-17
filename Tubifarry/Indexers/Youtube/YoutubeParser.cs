@@ -2,6 +2,7 @@
 using NLog;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
+using System.Net;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
@@ -14,7 +15,7 @@ namespace Tubifarry.Indexers.Youtube
 {
     public interface IYoutubeParser : IParseIndexerResponse
     {
-        public void SetCookies(string path);
+        public void SetAuth(YoutubeIndexerSettings settings);
     }
 
     /// <summary>
@@ -26,6 +27,7 @@ namespace Tubifarry.Indexers.Youtube
 
         private readonly Logger _logger;
         private string? _cookiePath;
+        private string? _poToken;
 
         public YoutubeParser(Logger logger)
         {
@@ -33,12 +35,21 @@ namespace Tubifarry.Indexers.Youtube
             _ytClient = new YouTubeMusicClient();
         }
 
-        public void SetCookies(string path)
+        /// <summary>
+        /// Sets cookies and poToken for the YouTube Music client.
+        /// </summary>
+        /// <param name="settings">The settings containing cookie path and poToken.</param>
+        public void SetAuth(YoutubeIndexerSettings settings)
         {
-            if (string.IsNullOrEmpty(path) || path == _cookiePath)
+            if (settings.CookiePath == _cookiePath && settings.PoToken == _poToken)
                 return;
-            _cookiePath = path;
-            _ytClient = new(cookies: CookieManager.ParseCookieFile(path));
+            if (string.IsNullOrEmpty(settings.CookiePath) && string.IsNullOrEmpty(settings.PoToken))
+                return;
+
+            _cookiePath = settings.CookiePath;
+            _poToken = settings.PoToken;
+            Cookie[]? cookies = !string.IsNullOrEmpty(settings.CookiePath) ? CookieManager.ParseCookieFile(settings.CookiePath) : null;
+            _ytClient = new YouTubeMusicClient(cookies: cookies, poToken: settings.PoToken);
         }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)

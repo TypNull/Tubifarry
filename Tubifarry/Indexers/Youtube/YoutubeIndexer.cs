@@ -42,7 +42,7 @@ namespace Tubifarry.Indexers.Youtube
 
         protected override Task Test(List<ValidationFailure> failures)
         {
-            _parseIndexerResponse.SetCookies(Settings.CookiePath);
+            _parseIndexerResponse.SetAuth(Settings);
             _indexerRequestGenerator.SetCookies(Settings.CookiePath);
             return Task.CompletedTask;
         }

@@ -19,7 +19,7 @@ namespace Tubifarry.Download.Clients.YouTube
         public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider);
         public IEnumerable<DownloadClientItem> GetItems();
         public void RemoveItem(DownloadClientItem item);
-        public void SetCookies(string path);
+        public void SetAuth(YoutubeProviderSettings settings);
     }
 
     public class YoutubeDownloadManager : IYoutubeDownloadManager
@@ -29,7 +29,7 @@ namespace Tubifarry.Download.Clients.YouTube
         private YouTubeMusicClient _ytClient;
         private Task? _testTask;
         private string? _cookiePath;
-
+        private string? _poToken;
 
         /// <summary>
         /// Private constructor to prevent external instantiation.
@@ -42,12 +42,19 @@ namespace Tubifarry.Download.Clients.YouTube
             _ytClient = new YouTubeMusicClient();
         }
 
-        public void SetCookies(string path)
+        /// <summary>
+        /// Sets cookies and poToken for the YouTube Music client.
+        /// </summary>
+        public void SetAuth(YoutubeProviderSettings settings)
         {
-            if (string.IsNullOrEmpty(path) || path == _cookiePath)
+            if (settings.CookiePath == _cookiePath && settings.PoToken == _poToken)
                 return;
-            _cookiePath = path;
-            _ytClient = new(cookies: CookieManager.ParseCookieFile(path));
+            if (string.IsNullOrEmpty(settings.CookiePath) && string.IsNullOrEmpty(settings.PoToken))
+                return;
+            _cookiePath = settings.CookiePath;
+            _poToken = settings.PoToken;
+            System.Net.Cookie[]? cookies = !string.IsNullOrEmpty(settings.CookiePath) ? CookieManager.ParseCookieFile(settings.CookiePath) : null;
+            _ytClient = new YouTubeMusicClient(poToken: settings.PoToken, cookies: cookies);
         }
 
         public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider)

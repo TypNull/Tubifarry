@@ -12,6 +12,7 @@
 			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
 			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
+			<InputAssemblies Include="$(OutputPath)System.Text.Json.dll" />
 		</ItemGroup>
 
         <ILRepack

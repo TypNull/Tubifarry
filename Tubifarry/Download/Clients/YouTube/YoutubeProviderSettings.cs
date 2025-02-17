@@ -66,6 +66,11 @@ namespace Tubifarry.Download.Clients.YouTube
                 .WithMessage("Max download speed must be greater than or equal to 0.")
                 .LessThanOrEqualTo(2_500)
                 .WithMessage("Max download speed must be less than or equal to 20 Mbps (2,500 KB/s).");
+
+            // Validate poToken
+            RuleFor(x => x.PoToken)
+               .Length(32, 64).When(x => !string.IsNullOrEmpty(x.PoToken))
+               .WithMessage("Proof of Origin (poToken) must be between 32 and 64 characters if provided.");
         }
     }
 
@@ -108,6 +113,9 @@ namespace Tubifarry.Download.Clients.YouTube
 
         [FieldDefinition(11, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits the download speed per download.", Unit = "KB/s", Advanced = true)]
         public int MaxDownloadSpeed { get; set; }
+
+        [FieldDefinition(12, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
+        public string PoToken { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

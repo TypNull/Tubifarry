@@ -35,7 +35,7 @@ namespace Tubifarry.Indexers.Spotify
 
         protected override async Task Test(List<ValidationFailure> failures)
         {
-            _parseIndexerResponse.SetCookies(Settings.CookiePath);
+            _parseIndexerResponse.SetAuth(Settings);
             failures.AddIfNotNull(await TestConnection());
         }
 

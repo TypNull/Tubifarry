@@ -52,7 +52,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
         protected override void Test(List<ValidationFailure> failures)
         {
-            _dlManager.SetCookies(Settings.CookiePath);
+            _dlManager.SetAuth(Settings);
             if (string.IsNullOrEmpty(Settings.DownloadPath))
                 failures.AddRange(PermissionTester.TestAllPermissions(Settings.FFmpegPath, _logger));
             failures.AddIfNotNull(TestFFmpeg().Result);
