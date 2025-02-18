@@ -1,4 +1,5 @@
-﻿using NLog;
+﻿using FuzzySharp;
+using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Music;
@@ -10,6 +11,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
     public class DiscogsProxy : IDiscogsProxy
     {
+        private const string _identifier = "@discogs";
         private readonly Logger _logger;
         private readonly ConcurrentDictionary<string, CacheEntry<object>> _cache = new();
         private readonly TimeSpan CacheDuration = TimeSpan.FromHours(10);
@@ -85,7 +87,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         public List<Album> SearchNewAlbum(DiscogsMetadataProxySettings settings, string title, string artist)
         {
-            _logger.Info($"SearchNewAlbum: title '{title}', artist '{artist}'");
+            _logger.Debug($"SearchNewAlbum: title '{title}', artist '{artist}'");
             try
             {
                 //Check for artist id in artist string! and master and release
@@ -93,7 +95,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 {
                     DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken, PageSize = settings.PageSize };
                     DiscogsRelease? release = apiService.GetReleaseAsync(r.Id).GetAwaiter().GetResult();
-                    return DiscogsMappingHelper.MapAlbumFromRelease(release);
+                    return DiscogsMappingHelper.MapAlbumFromRelease(release!);
                 }, "release", artist).GetAwaiter().GetResult();
                 return albums.GroupBy(a => new { a.CleanTitle, a.AlbumType }).Select(g => g.First()).ToList();
             }
@@ -142,17 +144,27 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 switch (item.Type?.ToLowerInvariant())
                 {
                     case "artist":
-                        mappedResults.Add(DiscogsMappingHelper.MapArtistFromSearchItem(item));
+                        DiscogsArtist? artistResult = GetCachedAsync<DiscogsArtist>(settings, $"artist:{item.Id + _identifier}").GetAwaiter().GetResult();
+                        if (artistResult != null)
+                            mappedResults.Add(DiscogsMappingHelper.MapArtistFromDiscogsArtist(artistResult));
+                        else
+                            mappedResults.Add(DiscogsMappingHelper.MapArtistFromSearchItem(item));
                         break;
                     case "release":
-                        DiscogsRelease? release = apiService.GetReleaseAsync(item.Id).GetAwaiter().GetResult();
+                        DiscogsRelease? release = GetCachedAsync<DiscogsRelease>(settings, $"release:{item.Id + _identifier}").GetAwaiter().GetResult() ?? apiService.GetReleaseAsync(item.Id).GetAwaiter().GetResult();
                         if (release != null)
+                        {
                             mappedResults.Add(DiscogsMappingHelper.MapAlbumFromRelease(release));
+                            SetCachedAsync(settings, $"release:{item.Id + _identifier}", release).GetAwaiter();
+                        }
                         break;
                     case "master":
-                        DiscogsMasterRelease? master = apiService.GetMasterReleaseAsync(item.Id).GetAwaiter().GetResult();
+                        DiscogsMasterRelease? master = GetCachedAsync<DiscogsMasterRelease>(settings, $"master:{item.Id + _identifier}").GetAwaiter().GetResult() ?? apiService.GetMasterReleaseAsync(item.Id).GetAwaiter().GetResult();
                         if (master != null)
+                        {
                             mappedResults.Add(DiscogsMappingHelper.MapAlbumFromMasterRelease(master));
+                            SetCachedAsync(settings, $"master:{item.Id + _identifier}", master).GetAwaiter();
+                        }
                         break;
                 }
             }
@@ -166,18 +178,17 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             // Determine if we should use the master release details
             bool useMaster = existingAlbum?.SecondaryTypes.Any(st => st.Id == 36) ?? false;
-            _logger.Trace("Using {0} release details for AlbumId: {1}", useMaster ? "Master" : "Regular", foreignAlbumId);
+            _logger.Trace("Using {0} release details for AlbumId: {1}", useMaster ? "Master" : "release", foreignAlbumId);
 
             DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken };
 
             // Fetch release details based on the release type and retrieve primary artist information
             (Album mappedAlbum, object releaseForTracks) = useMaster ? await GetMasterReleaseDetailsAsync(settings, foreignAlbumId, apiService) : await GetReleaseDetailsAsync(settings, foreignAlbumId, apiService);
-            DiscogsArtist discogsArtist = await GetPrimaryArtistAsync(settings, foreignAlbumId, useMaster, existingAlbum!);
-            _logger.Trace("Retrieved primary artist with ID: {0} for AlbumId: {1}", discogsArtist.Id, foreignAlbumId);
+            DiscogsArtist? discogsArtist = await GetPrimaryArtistAsync(settings, foreignAlbumId, useMaster, existingAlbum!);
 
             // Process artist info and mapping
-            Artist existingArtist = _artistService.FindById(discogsArtist.Id.ToString()) ?? DiscogsMappingHelper.MapArtistFromDiscogsArtist(discogsArtist);
-            _logger.Trace("Processed artist information for ArtistId: {0}", discogsArtist.Id);
+            Artist existingArtist = (existingAlbum?.Artist?.Value ?? (discogsArtist != null ? DiscogsMappingHelper.MapArtistFromDiscogsArtist(discogsArtist) : null)) ?? throw new ModelNotFoundException(typeof(Artist), 0);
+            _logger.Trace("Processed artist information for ArtistId: {0}", existingArtist.ForeignArtistId);
             existingArtist.Albums ??= new LazyLoaded<List<Album>>(new List<Album>());
 
             mappedAlbum.Artist = existingArtist;
@@ -196,14 +207,14 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             albumRelease.Tracks = tracks;
 
             _logger.Trace("Completed processing for AlbumId: {0}. Total Tracks: {1}", foreignAlbumId, tracks.Count);
-            return new Tuple<string, Album, List<ArtistMetadata>>(discogsArtist.Id.ToString(), finalAlbum, new List<ArtistMetadata> { existingArtist.Metadata.Value });
+            return new Tuple<string, Album, List<ArtistMetadata>>(existingArtist.ForeignArtistId, finalAlbum, new List<ArtistMetadata> { existingArtist.Metadata.Value });
         }
 
 
         private async Task<(Album, object)> GetMasterReleaseDetailsAsync(DiscogsMetadataProxySettings settings, string id, DiscogsApiService apiService)
         {
             string masterKey = $"master:{id}";
-            DiscogsMasterRelease? masterRelease = await GetCachedAsync<DiscogsMasterRelease>(settings, masterKey) ?? await apiService.GetMasterReleaseAsync(int.Parse(id));
+            DiscogsMasterRelease? masterRelease = await GetCachedAsync<DiscogsMasterRelease>(settings, masterKey) ?? await apiService.GetMasterReleaseAsync(int.Parse(RemoveIdentifier(id)));
             await SetCachedAsync(settings, masterKey, masterRelease!);
             return (DiscogsMappingHelper.MapAlbumFromMasterRelease(masterRelease!), masterRelease)!;
         }
@@ -211,17 +222,17 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         private async Task<(Album, object)> GetReleaseDetailsAsync(DiscogsMetadataProxySettings settings, string id, DiscogsApiService apiService)
         {
             string releaseKey = $"release:{id}";
-            DiscogsRelease? release = await GetCachedAsync<DiscogsRelease>(settings, releaseKey) ?? await apiService.GetReleaseAsync(int.Parse(id));
+            DiscogsRelease? release = await GetCachedAsync<DiscogsRelease>(settings, releaseKey) ?? await apiService.GetReleaseAsync(int.Parse(RemoveIdentifier(id)));
             await SetCachedAsync(settings, releaseKey, release!);
             return (DiscogsMappingHelper.MapAlbumFromRelease(release!), release)!;
         }
 
-        private async Task<DiscogsArtist> GetPrimaryArtistAsync(DiscogsMetadataProxySettings settings, string id, bool useMaster, Album existingAlbum)
+        private async Task<DiscogsArtist?> GetPrimaryArtistAsync(DiscogsMetadataProxySettings settings, string id, bool useMaster, Album existingAlbum)
         {
             string key = useMaster ? $"master:{id}" : $"release:{id}";
             object? release = useMaster ? await GetCachedAsync<DiscogsMasterRelease>(settings, key) : await GetCachedAsync<DiscogsRelease>(settings, key);
             IEnumerable<DiscogsArtist> artists = ((IEnumerable<DiscogsArtist>)(release as dynamic)?.Artists!) ?? Enumerable.Empty<DiscogsArtist>();
-            return artists.FirstOrDefault(x => x.Id.ToString() == existingAlbum?.Artist?.Value.ForeignArtistId)!;
+            return artists.FirstOrDefault(x => Fuzz.Ratio(x.Name, existingAlbum.Artist.Value.Name) > 80);
         }
 
         public async Task<Artist> GetArtistInfoAsync(DiscogsMetadataProxySettings settings, string foreignArtistId, int metadataProfileId)
@@ -235,14 +246,15 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             {
                 _logger.Debug($"Artist not found in cache. Fetching from Discogs API for ID: {foreignArtistId}.");
                 DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken };
-                artist = await apiService.GetArtistAsync(int.Parse(foreignArtistId));
+                artist = await apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)));
             }
 
-            Artist? existingArtist = _artistService.FindById(artist!.Id.ToString());
-            existingArtist ??= DiscogsMappingHelper.MapArtistFromDiscogsArtist(artist);
-            existingArtist.Albums = await FetchAlbumsForArtistAsync(settings, existingArtist, artist.Id);
+            Artist? existingArtist = _artistService.FindById(foreignArtistId);
+            existingArtist ??= DiscogsMappingHelper.MapArtistFromDiscogsArtist(artist!);
+            existingArtist.Albums = await FetchAlbumsForArtistAsync(settings, existingArtist, artist!.Id);
+            existingArtist.MetadataProfileId = metadataProfileId;
 
-            _logger.Trace($"Processed artist: {artist.Name} (ID: {artist.Id}).");
+            _logger.Trace($"Processed artist: {artist.Name} (ID: {existingArtist.ForeignArtistId}).");
             await SetCachedAsync(settings, artistCacheKey, artist);
             return existingArtist;
         }
@@ -278,7 +290,9 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             return albums;
         }
 
-        private static bool IsDiscogsidQuery(string query) => query.StartsWith("discogs:") || query.StartsWith("discogsid:");
+        public static bool IsDiscogsidQuery(string? query) => query?.StartsWith("discogs:") == true || query?.StartsWith("discogsid:") == true;
         private static string SanitizeToUnicode(string input) => string.IsNullOrEmpty(input) ? input : new string(input.Where(c => c <= 0xFFFF).ToArray());
+        private static string RemoveIdentifier(string input) => input.EndsWith(_identifier, StringComparison.OrdinalIgnoreCase) ? input.Remove(input.Length - _identifier.Length) : input;
+
     }
 }
