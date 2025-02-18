@@ -90,7 +90,7 @@ namespace Tubifarry.Metadata.Proxy
             if (proxy == _activeProxy)
                 return;
 
-            _logger.Debug("Enabling {0} as the active proxy.", proxy.GetType().Name);
+            _logger.Info($"Enabling {proxy.GetType().Name} as the active proxy.");
 
             foreach (Type interfaceType in _interfaces)
                 _container.Register(interfaceType, proxy.GetType(), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
