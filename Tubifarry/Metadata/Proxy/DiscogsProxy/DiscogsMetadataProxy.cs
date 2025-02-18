@@ -2,10 +2,12 @@
 using NLog;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Music;
+using System.Text.RegularExpressions;
+using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
-    public class DiscogsMetadataProxy : ConsumerProxyPlaceholder<DiscogsMetadataProxySettings>, IMetadata
+    public class DiscogsMetadataProxy : ConsumerProxyPlaceholder<DiscogsMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly IDiscogsProxy _discogsProxy;
         private readonly Logger _logger;
@@ -48,5 +50,53 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             _logger.Warn("SearchNewAlbumByRecordingIds: Discogs API does not support fingerprint search; returning empty list.");
             return new List<Album>();
         }
+
+
+        public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
+        {
+            if (DiscogsProxy.IsDiscogsidQuery(albumTitle) || DiscogsProxy.IsDiscogsidQuery(artistName))
+                return MetadataSupportLevel.Supported;
+            Regex regex = new(@"^\s*\w+:");
+
+            if ((albumTitle != null && regex.IsMatch(albumTitle)) || (artistName != null && regex.IsMatch(artistName)))
+                return MetadataSupportLevel.Unsupported;
+            return MetadataSupportLevel.ImplicitSupported;
+        }
+
+        public MetadataSupportLevel CanHandleId(string id)
+        {
+            if (id.EndsWith("@discogs"))
+                return MetadataSupportLevel.Supported;
+            else return MetadataSupportLevel.Unsupported;
+        }
+
+        public MetadataSupportLevel CanHandleIRecordingIds(params string[] recordingIds)
+        {
+            return MetadataSupportLevel.Unsupported;
+        }
+
+        public MetadataSupportLevel CanHandleChanged()
+        {
+            return MetadataSupportLevel.Unsupported;
+        }
+
+        public string? SupportsLink(List<Links> links)
+        {
+            if (links == null || links.Count == 0)
+                return null;
+            Regex discogsRegex = new(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase);
+
+            foreach (Links link in links)
+            {
+                if (string.IsNullOrWhiteSpace(link.Url))
+                    continue;
+
+                Match match = discogsRegex.Match(link.Url);
+                if (match.Success && match.Groups.Count > 1)
+                    return match.Groups[1].Value;
+            }
+            return null;
+        }
+
     }
 }

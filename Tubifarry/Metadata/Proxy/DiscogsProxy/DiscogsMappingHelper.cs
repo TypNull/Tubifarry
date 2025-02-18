@@ -9,6 +9,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
     public static class DiscogsMappingHelper
     {
+        private const string _identifier = "@discogs";
         private static readonly Dictionary<string, string> PrimaryTypeMap = new(StringComparer.OrdinalIgnoreCase)
         {
             ["album"] = "Album",
@@ -171,13 +172,13 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             Album album = new()
             {
-                ForeignAlbumId = masterRelease.Id.ToString(),
+                ForeignAlbumId = masterRelease.Id + _identifier,
                 Title = masterRelease.Title ?? string.Empty,
                 ReleaseDate = ParseReleaseDate(masterRelease.Year),
                 Genres = masterRelease.Genres != null || masterRelease.Styles != null ? new List<string>(masterRelease.Genres ?? Enumerable.Empty<string>()).Concat(masterRelease.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
                 CleanTitle = Parser.NormalizeTitle(masterRelease.Title ?? string.Empty),
                 Overview = "Found on Discogs",
-                Images = masterRelease.Images?.Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Images = masterRelease.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
                 Links = new List<Links> { new() { Url = masterRelease.ResourceUrl, Name = "Discogs" } },
                 AlbumType = "Album",
                 Ratings = new Ratings(),
@@ -185,7 +186,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             AlbumRelease albumRelease = new()
             {
-                ForeignReleaseId = masterRelease.Id.ToString(),
+                ForeignReleaseId = masterRelease.Id + _identifier,
                 Title = masterRelease.Title,
                 Status = "Official",
                 Media = new List<Medium> { new() { Format = "Digital Media", Name = "Digital Media", Number = 1 } },
@@ -210,13 +211,13 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             Album album = new()
             {
-                ForeignAlbumId = release.Id.ToString(),
+                ForeignAlbumId = release.Id + _identifier,
                 Title = release.Title,
                 ReleaseDate = ParseReleaseDate(release),
                 Genres = release.Genres != null || release.Styles != null ? new List<string>(release.Genres ?? Enumerable.Empty<string>()).Concat(release.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
                 CleanTitle = Parser.NormalizeTitle(release.Title ?? string.Empty),
                 Overview = release.Notes?.Trim(),
-                Images = release.Images?.Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Images = release.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
                 Links = new List<Links> { new() { Url = release.ResourceUrl, Name = "Discogs" } },
                 Ratings = ComputeCommunityRating(release.Community)
             };
@@ -224,7 +225,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             AlbumRelease albumRelease = new()
             {
-                ForeignReleaseId = release.Id.ToString(),
+                ForeignReleaseId = release.Id + _identifier,
                 Title = release.Title ?? string.Empty,
                 Status = release.Status ?? "Official",
                 Media = release.Formats?.Select(f => new Medium
@@ -254,7 +255,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             return new Track
             {
-                ForeignTrackId = $"{masterRelease.Id}_{t.Position}",
+                ForeignTrackId = $"{masterRelease.Id + _identifier}_{t.Position}",
                 Title = t.Title,
                 Duration = ParseDuration(t.Duration ?? "0") * 1000,
                 TrackNumber = absoluteNumber.ToString(),
@@ -262,7 +263,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 AlbumReleaseId = album.Id,
                 ArtistMetadataId = album.ArtistMetadataId,
                 Ratings = new Ratings(),
-                ForeignRecordingId = $"{masterRelease.Id}_{t.Position}",
+                ForeignRecordingId = $"{masterRelease.Id + _identifier}_{t.Position}",
                 Album = album,
                 ArtistMetadata = album.ArtistMetadata,
                 Artist = album.Artist,
@@ -284,7 +285,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             return new Track
             {
-                ForeignTrackId = $"{release.Id}_{t.Position}",
+                ForeignTrackId = $"{release.Id + _identifier}_{t.Position}",
                 Title = t.Title,
                 Duration = ParseDuration(t.Duration ?? "0") * 1000,
                 TrackNumber = absoluteNumber.ToString(),
@@ -292,7 +293,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 AlbumReleaseId = album.Id,
                 ArtistMetadataId = album.ArtistMetadataId,
                 Ratings = new Ratings(),
-                ForeignRecordingId = $"{release.Id}_{t.Position}",
+                ForeignRecordingId = $"{release.Id + _identifier}_{t.Position}",
                 Album = album,
                 ArtistMetadata = album.ArtistMetadata,
                 Artist = album.Artist,
@@ -310,7 +311,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             Album album = new()
             {
-                ForeignAlbumId = release.Id.ToString(),
+                ForeignAlbumId = release.Id + _identifier,
                 Title = release.Title,
                 Overview = release.Role ?? "Found on Discogs",
                 ReleaseDate = ParseReleaseDate(release.Year),
@@ -333,7 +334,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             Metadata = new ArtistMetadata()
             {
                 Name = discogsArtist.Name ?? string.Empty,
-                ForeignArtistId = discogsArtist.Id.ToString(),
+                ForeignArtistId = discogsArtist.Id + _identifier,
                 Aliases = discogsArtist.NameVariations ?? new List<string>(),
                 Images = discogsArtist.Images?.Select(img => MapImage(img, true)).ToList() ?? new List<MediaCover>()!,
                 Ratings = new Ratings(),
@@ -430,7 +431,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             Metadata = new ArtistMetadata()
             {
                 Name = searchItem.Title ?? string.Empty,
-                ForeignArtistId = searchItem.Id.ToString(),
+                ForeignArtistId = searchItem.Id + _identifier,
                 Overview = "Found on Discogs",
                 Images = new List<MediaCover> { new() { Url = searchItem.Thumb, CoverType = MapCoverType("primary", true) } },
                 Links = new List<Links> { new() { Url = searchItem.ResourceUrl, Name = "Discogs" } },

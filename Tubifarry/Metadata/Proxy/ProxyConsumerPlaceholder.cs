@@ -7,11 +7,17 @@ using NzbDrone.Core.ThingiProvider;
 
 namespace Tubifarry.Metadata.Proxy
 {
-    public interface IProxy : IProvider, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity { }
+    public enum ProxyMode { Public, Internal }
+    public interface IProxy : IProvider, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity
+    {
+        public ProxyMode ProxyMode { get; protected set; }
+    }
     public abstract class ConsumerProxyPlaceholder<TSettings> : IMetadata, IProxy
       where TSettings : IProviderConfig, new()
     {
         protected Lazy<IProxyService> _proxyService;
+
+        public ProxyMode ProxyMode { get; set; }
 
         protected ConsumerProxyPlaceholder(Lazy<IProxyService> proxyService) => _proxyService = proxyService;
 

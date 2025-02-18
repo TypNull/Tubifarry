@@ -11,31 +11,20 @@ namespace Tubifarry.Metadata.Proxy.Mixed
     {
         public MixedMetadataProxySettingsValidator()
         {
-            // Validate proxy names
-            RuleFor(x => x.CustomConversion)
-                .Must(BeValidCustomConversion)
-                .WithMessage("Custom conversion contains invalid proxy names.");
-
-            // Validate string values (must be integers between 0 and 50)
-            RuleForEach(x => x.CustomConversion)
+            // Validate string values (must be integers between 0 and 50).
+            RuleForEach(x => x.Priotities)
                 .Must(kvp => int.TryParse(kvp.Value, out int intValue) && intValue >= 0 && intValue <= 50)
-                .WithMessage("Value for '{PropertyName}' must be a number between 0 and 50.");
-        }
+                .WithMessage("The priotity for a Proxy must be a number between 0 and 50.");
 
-        private bool BeValidCustomConversion(IEnumerable<KeyValuePair<string, string>> customConversion)
-        {
-            if (customConversion == null)
-                return true;
+            // Validate ArtistQueryTimeoutSeconds.
+            RuleFor(x => x.ArtistQueryTimeoutSeconds)
+                .GreaterThan(0)
+                .WithMessage("Artist Query Timeout must be greater than 0 seconds.");
 
-            HashSet<string>? validProxyNames = ProxyServiceStarter.ProxyService?.Proxys?
-                .Where(x => x is not IMixedProxy)
-                .Select(x => x.Definition.Name)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            if (validProxyNames == null)
-                return true;
-
-            return customConversion.All(kvp => validProxyNames.Contains(kvp.Key));
+            // Validate MaxThreshold (must not exceed 25).
+            RuleFor(x => x.MaxThreshold)
+                .InclusiveBetween(1, 25)
+                .WithMessage("Max Threshold must be between 1 and 25.");
         }
     }
 
@@ -43,19 +32,24 @@ namespace Tubifarry.Metadata.Proxy.Mixed
     {
         private static readonly MixedMetadataProxySettingsValidator Validator = new();
 
-        private readonly IEnumerable<KeyValuePair<string, string>> _defaultConversion;
+        private readonly IEnumerable<KeyValuePair<string, string>> _priotities;
+        public static MixedMetadataProxySettings? Instance { get; private set; }
 
         public MixedMetadataProxySettings()
         {
-            _defaultConversion = ProxyServiceStarter.ProxyService?.Proxys?
-                .Where(x => x is not IMixedProxy)
+            _priotities = ProxyServiceStarter.ProxyService?.Proxys?
+                .Where(x => x is ISupportMetadataMixing)
+                .Where(x => x.ProxyMode != ProxyMode.Internal)
                 .Select(x => new KeyValuePair<string, string>(x.Definition.Name, x is SkyHookMetadataProxy ? "0" : "50"))
                 .ToList() ?? Enumerable.Empty<KeyValuePair<string, string>>();
-            _customConversion = _defaultConversion.ToList();
+            _customConversion = _priotities.ToList();
+            Instance = this;
+            ArtistQueryTimeoutSeconds = 30;
+            MaxThreshold = 15;
         }
 
-        [FieldDefinition(9, Label = "Priority Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "")]
-        public IEnumerable<KeyValuePair<string, string>> CustomConversion
+        [FieldDefinition(1, Label = "Priority Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Define priority rules for proxies. Values must be between 0 and 50.")]
+        public IEnumerable<KeyValuePair<string, string>> Priotities
         {
             get => _customConversion;
             set
@@ -63,15 +57,31 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 if (value != null)
                 {
                     Dictionary<string, string> customDict = value.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-                    List<KeyValuePair<string, string>> merged = _defaultConversion
+                    _customConversion = _priotities
                         .Select(kvp => new KeyValuePair<string, string>(kvp.Key, customDict.TryGetValue(kvp.Key, out string? customValue) ? customValue : kvp.Value))
+                        .OrderBy(x => x.Value)
                         .ToList();
-                    _customConversion = merged;
                 }
             }
         }
 
         private IEnumerable<KeyValuePair<string, string>> _customConversion;
+
+        [FieldDefinition(2, Label = "Maximal usable threshold", Section = MetadataSectionType.Metadata, Type = FieldType.Number, HelpText = "The maximum threshold added to a lower priority proxy to still use for populating data.", Placeholder = "15")]
+        public int MaxThreshold { get; set; }
+
+        [FieldDefinition(3, Label = "Dynamic threshold", Section = MetadataSectionType.Metadata, Type = FieldType.Checkbox, HelpText = "Generate a dynamic threshold based on old results or use a static one.")]
+        public bool DynamicThresholdMode { get; set; }
+
+        [FieldDefinition(4, Label = "Storing Path", Section = MetadataSectionType.Metadata, Type = FieldType.Path, HelpText = "Path to store the dynamic threshold for usage after restarts.")]
+        public string WeightsPath { get; set; } = string.Empty;
+
+        [FieldDefinition(5, Label = "Artist Query Timeout", Unit = "Seconds", Section = MetadataSectionType.Metadata, Type = FieldType.Number, HelpText = "Timeout for artist queries when previous albums exist.", Placeholder = "30")]
+        public int ArtistQueryTimeoutSeconds { get; set; }
+
+        [FieldDefinition(6, Label = "Multi-Source Population", Section = MetadataSectionType.Metadata, Type = FieldType.Checkbox, HelpText = "Enable queries to multiple metadata providers when populating artist information. Uses fallback strategy when previous album data exists.")]
+        public bool PopulateWithMultipleProxies { get; set; } = true;
+        public bool TryFindArtist { get; internal set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
