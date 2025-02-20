@@ -35,7 +35,7 @@ namespace Tubifarry.Indexers.Youtube
         [FieldDefinition(1, Label = "Cookie Path", Type = FieldType.FilePath, Hidden = HiddenType.Visible, Placeholder = "/path/to/cookies.txt", HelpText = "Specify the path to the Spotify cookies file. This is optional but required for accessing restricted content.", Advanced = true)]
         public string CookiePath { get; set; } = string.Empty;
 
-        [FieldDefinition(2, Label = "PoToken)", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
+        [FieldDefinition(2, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
         public string PoToken { get; set; } = string.Empty;
 
         public string BaseUrl { get; set; } = string.Empty;
