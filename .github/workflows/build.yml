@@ -17,13 +17,14 @@ jobs:
   build:
     strategy:
       matrix:
-        framework: [ net6.0 ]
+        framework: [net6.0]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: Extract version from tag
         id: extract_version
@@ -31,29 +32,32 @@ jobs:
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
           echo "Extracted version: $TAG_VERSION"
           echo "PACKAGE_VERSION=$TAG_VERSION" >> $GITHUB_ENV
-
-          # Log the extracted version
-          echo "Version: $TAG_VERSION"
-
-          # Check if the version is a pre-release (starts with 0.)
           if [[ "$TAG_VERSION" == 0.* ]]; then
-            echo "This is a pre-release version."
             echo "IS_PRERELEASE=true" >> $GITHUB_ENV
           else
-            echo "This is a stable release."
             echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
 
-      - name: Log version and pre-release status
+      - name: Determine branch and modify package name
+        id: branch_check
         run: |
-          echo "Version: $PACKAGE_VERSION"
-          echo "Is Pre-release: $IS_PRERELEASE"
+          BRANCH_NAME=$(git branch -r --contains HEAD | sed -e 's/ *origin\///g' | grep -v HEAD | head -n 1)
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "No branch found; defaulting to master"
+            BRANCH_NAME="master"
+          fi
+          if [ "$BRANCH_NAME" = "master" ]; then
+            BUILD_SUFFIX="net6.0"
+          else
+            BUILD_SUFFIX="$BRANCH_NAME"
+          fi
+          echo "Detected branch: $BRANCH_NAME, Build suffix: $BUILD_SUFFIX"
+          echo "BUILD_SUFFIX=$BUILD_SUFFIX" >> $GITHUB_ENV
 
-      - name: Extract repository name without owner
+      - name: Extract repository name
         id: extract_repo_name
         run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          echo "Repository name: $REPO_NAME"
+          REPO_NAME=$(basename $GITHUB_REPOSITORY)
           echo "PLUGIN_NAME=$REPO_NAME" >> $GITHUB_ENV
 
       - name: Setup .NET Core
@@ -67,7 +71,10 @@ jobs:
 
       - name: Build with package version
         run: |
-          dotnet build *.sln -c Release -f ${{ matrix.framework }} -p:Version=${{ env.PACKAGE_VERSION }} -p:AssemblyVersion=${{ env.PACKAGE_VERSION }} -p:FileVersion=${{ env.PACKAGE_VERSION }}
+          dotnet build *.sln -c Release -f ${{ matrix.framework }} \
+            -p:Version=${{ env.PACKAGE_VERSION }} \
+            -p:AssemblyVersion=${{ env.PACKAGE_VERSION }} \
+            -p:FileVersion=${{ env.PACKAGE_VERSION }}
 
       - name: Find Plugin Output Directory
         id: find_plugin_dir
@@ -77,52 +84,91 @@ jobs:
             echo "Error: Plugin output directory not found!"
             exit 1
           fi
-          echo "PLUGIN_OUTPUT_DIR=$PLUGIN_OUTPUT_DIR" >> $GITHUB_OUTPUT
+          echo "PLUGIN_OUTPUT_DIR=$PLUGIN_OUTPUT_DIR" >> $GITHUB_ENV
 
-      - name: Zip files matching pattern
+      - name: Zip Plugin
         run: |
-          cd ./_plugins/net6.0/${{ env.PLUGIN_NAME }}/
-          zip -r ${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ matrix.framework }}.zip *.${{ env.PLUGIN_NAME }}.* *.Plugin.${{ env.PLUGIN_NAME }}.*
+          cd ${{ env.PLUGIN_OUTPUT_DIR }}
+          zip -r ${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ env.BUILD_SUFFIX }}.zip *.${{ env.PLUGIN_NAME }}.* *.Plugin.${{ env.PLUGIN_NAME }}.*
 
       - name: Get commit messages since last release
         id: get_commit_messages
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) 2>/dev/null || true)
-          if [ -z "$LAST_TAG" ]; then
-            echo "No previous tag found. Using initial commit."
-            COMMIT_MESSAGES=$(git log --pretty=format:"- %s")
+          CURRENT_TAG=${GITHUB_REF#refs/tags/}
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${CURRENT_TAG}^ 2>/dev/null || true)
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. Retrieving all commit messages up to ${CURRENT_TAG}."
+            COMMIT_MESSAGES=$(git log --pretty=format:"- %h %s" $CURRENT_TAG)
           else
-            COMMIT_MESSAGES=$(git log $LAST_TAG..HEAD --pretty=format:"- %s")
+            COMMIT_MESSAGES=$(git log ${PREVIOUS_TAG}..${CURRENT_TAG} --pretty=format:"- %h %s")
           fi
           if [ -z "$COMMIT_MESSAGES" ]; then
-            COMMIT_MESSAGES=$(git log --oneline $(git describe --tags --abbrev=0)@^..@ | sed 's/^/- /')
+            echo "No commit messages found!"
+            COMMIT_MESSAGES="- No significant changes."
           fi
-          if [ -z "$COMMIT_MESSAGES" ]; then
-            COMMIT_MESSAGES=$(git log --all --oneline | sed 's/^/- /')
-          fi
-          echo "Commit messages: $COMMIT_MESSAGES"
+          echo "Commit messages from ${PREVIOUS_TAG:-start} to ${CURRENT_TAG}: $COMMIT_MESSAGES"
           echo "COMMIT_MESSAGES<<EOF" >> $GITHUB_ENV
           echo "$COMMIT_MESSAGES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
+      - name: Fetch Minimum Lidarr Version from Submodule
+        id: fetch_minimum_lidarr_version
+        run: |
+          if [ -f "Submodules/Lidarr/azure-pipelines.yml" ]; then
+            RAW_YAML=$(cat Submodules/Lidarr/azure-pipelines.yml)
+          else
+            echo "Error: Submodules/Lidarr/azure-pipelines.yml not found!"
+            exit 1
+          fi
+          MAJOR_VERSION=$(echo "$RAW_YAML" | grep "majorVersion:" | head -n 1 | sed "s/.*majorVersion: *'\([^']*\)'.*/\1/")
+          echo "Extracted majorVersion: $MAJOR_VERSION"
+          DOT_COUNT=$(echo "$MAJOR_VERSION" | awk -F. '{print NF-1}')
+          if [ "$DOT_COUNT" -eq 2 ]; then
+            MINIMUM_LIDARR_VERSION="${MAJOR_VERSION}.0"
+          else
+            MINIMUM_LIDARR_VERSION="$MAJOR_VERSION"
+          fi
+          echo "Minimum Lidarr Version: $MINIMUM_LIDARR_VERSION"
+          echo "MINIMUM_LIDARR_VERSION=$MINIMUM_LIDARR_VERSION" >> $GITHUB_ENV
+
       - name: Debug environment variables
         run: |
           echo "COMMIT_MESSAGES: $COMMIT_MESSAGES"
-          echo "TAG_DESCRIPTION: $TAG_DESCRIPTION"
+          echo "TAG_VERSION: $TAG_VERSION"
           echo "IS_PRERELEASE: $IS_PRERELEASE"
+          echo "BUILD_SUFFIX: $BUILD_SUFFIX"
+          echo "MINIMUM_LIDARR_VERSION: $MINIMUM_LIDARR_VERSION"
 
       - name: Create GitHub Release and Upload Artifact
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref }}
-          name: 🚀 Release ${{ env.PACKAGE_VERSION }}
+          name: "🚀 Release ${{ env.PACKAGE_VERSION }}"
           body: |
-            ### 📝 **Changes**
+            ### 📝 What's New:
             ${{ env.COMMIT_MESSAGES }}
 
-            ----
+            ---
 
-            ### 📦 **Artifact**
-            The plugin artifact is attached to this release. Download it below!
+            ### 📥 Installation Notes:
+
+            #### Docker Setup (Hotio Image) 🐳  
+            ```yml  
+            image: ghcr.io/hotio/lidarr:pr-plugins
+            ```  
+
+            #### Non-Docker Setup  
+            Go to `System -> General -> Branch` and Replace "master" with "plugins"
+
+            **Plugin Installation:**  
+            - In Lidarr, navigate to **System -> Plugins**
+            - Paste the URL: `https://github.com/${{ github.repository }}`
+
+            ---
+
+            ### 📦 Artifact
+            **Package:** [${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ env.BUILD_SUFFIX }}](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ env.BUILD_SUFFIX }}.zip)
+            **Minimum Lidarr Version:** ${{ env.MINIMUM_LIDARR_VERSION }}
+          prerelease: ${{ env.IS_PRERELEASE }}
           files: |
-            ${{ steps.find_plugin_dir.outputs.PLUGIN_OUTPUT_DIR }}/${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ matrix.framework }}.zip
+            ${{ env.PLUGIN_OUTPUT_DIR }}/${{ env.PLUGIN_NAME }}-v${{ env.PACKAGE_VERSION }}.${{ env.BUILD_SUFFIX }}.zip
