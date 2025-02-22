@@ -53,7 +53,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
-            if (DiscogsProxy.IsDiscogsidQuery(albumTitle) || DiscogsProxy.IsDiscogsidQuery(artistName))
+            if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
                 return MetadataSupportLevel.Supported;
             Regex regex = new(@"^\s*\w+:");
 

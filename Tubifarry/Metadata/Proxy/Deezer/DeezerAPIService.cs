@@ -120,7 +120,6 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                     .AddQueryParam("limit", itemsPerPage.ToString(), true);
                 JsonElement response = await ExecuteRequestWithRetryAsync(pagedRequest);
 
-                _logger.Info(response.ToString());
                 if (response.TryGetProperty("data", out JsonElement dataElement))
                 {
                     List<T>? pageResults = JsonSerializer.Deserialize<List<T>>(dataElement.GetRawText());
