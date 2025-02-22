@@ -142,11 +142,12 @@ namespace Tubifarry.Core.Model
             }
         }
 
-        private class CachedData<T>
-        {
-            public T? Data { get; set; }
-            public DateTime CreatedAt { get; set; }
-            public TimeSpan ExpirationDuration { get; set; }
-        }
+    }
+
+    public class CachedData<T>
+    {
+        public T? Data { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public TimeSpan ExpirationDuration { get; set; }
     }
 }

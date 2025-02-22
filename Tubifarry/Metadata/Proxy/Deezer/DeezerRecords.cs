@@ -29,7 +29,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("genre_id")] int GenreId,
         [property: JsonPropertyName("genres")] DeezerGenresWrapper? Genres,
         [property: JsonPropertyName("label")] string? Label,
-        [property: JsonPropertyName("nb_tracks")] int NbTracks,
+        [property: JsonPropertyName("nb_tracks")] int NumberOfTracks,
         [property: JsonPropertyName("duration")] int Duration,
         [property: JsonPropertyName("fans")] int Fans,
         [property: JsonPropertyName("release_date")] DateTime ReleaseDate,
