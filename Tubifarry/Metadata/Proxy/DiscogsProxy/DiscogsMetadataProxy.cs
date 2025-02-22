@@ -51,7 +51,6 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             return new List<Album>();
         }
 
-
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
             if (DiscogsProxy.IsDiscogsidQuery(albumTitle) || DiscogsProxy.IsDiscogsidQuery(artistName))
@@ -97,6 +96,5 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             }
             return null;
         }
-
     }
 }
