@@ -22,6 +22,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         private int _rateLimitUsed = 0;
         private int _rateLimitRemaining = 60;
         private DateTime _lastRequestTime = DateTime.MinValue;
+        private TimeSpan _rateLimit = TimeSpan.FromSeconds(0.5);
 
         public DiscogsApiService(IHttpClient httpClient)
         {
@@ -116,6 +117,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             try
             {
                 await WaitForRateLimit();
+                requestBuilder.WithRateLimit(_rateLimit.TotalSeconds);
                 HttpRequest request = requestBuilder.Build();
                 HttpResponse response = await _httpClient.GetAsync(request);
                 UpdateRateLimitTracking(response);
