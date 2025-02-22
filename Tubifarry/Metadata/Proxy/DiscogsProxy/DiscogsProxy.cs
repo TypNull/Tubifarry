@@ -31,7 +31,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         private async Task<T?> GetCachedAsync<T>(DiscogsMetadataProxySettings settings, string key)
         {
-            if (settings.CacheType == SearchSniperCacheType.Permanent)
+            if (settings.CacheType == CacheType.Permanent)
             {
                 _permanentCache ??= new FileCache(settings.CacheDirectory);
                 T? result = await _permanentCache.GetAsync<T>(key);
@@ -54,7 +54,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         private async Task SetCachedAsync(DiscogsMetadataProxySettings settings, string key, object value)
         {
-            if (settings.CacheType == SearchSniperCacheType.Permanent)
+            if (settings.CacheType == CacheType.Permanent)
             {
                 _permanentCache ??= new FileCache(settings.CacheDirectory);
                 await _permanentCache.SetAsync(key, value, CacheDuration);

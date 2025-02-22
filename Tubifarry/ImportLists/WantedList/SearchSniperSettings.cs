@@ -19,7 +19,7 @@ namespace Tubifarry.ImportLists.WantedList
             RuleFor(c => c.CacheDirectory)
                 .Must((settings, path) =>
                 {
-                    if (settings.CacheType == (int)SearchSniperCacheType.Permanent)
+                    if (settings.CacheType == (int)CacheType.Permanent)
                         return !string.IsNullOrEmpty(path) && Directory.Exists(path);
                     return true;
                 })
@@ -53,8 +53,8 @@ namespace Tubifarry.ImportLists.WantedList
         [FieldDefinition(4, Label = "Picks Per Interval", Type = FieldType.Number, Placeholder = "5", HelpText = "The number of random albums to search for during each refresh interval.")]
         public int RandomPicksPerInterval { get; set; } = 5;
 
-        [FieldDefinition(5, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(SearchSniperCacheType), HelpText = "The type of cache to use for storing search results. Memory cache is faster but does not persist after restart. Permanent cache persists on disk but requires a valid directory.")]
-        public int CacheType { get; set; } = (int)SearchSniperCacheType.Memory;
+        [FieldDefinition(5, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "The type of cache to use for storing search results. Memory cache is faster but does not persist after restart. Permanent cache persists on disk but requires a valid directory.")]
+        public int CacheType { get; set; } = (int)WantedList.CacheType.Memory;
 
         public string BaseUrl { get; set; } = string.Empty;
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
@@ -63,7 +63,7 @@ namespace Tubifarry.ImportLists.WantedList
     /// <summary>
     /// Defines the type of cache used by the Search Sniper feature.
     /// </summary>
-    public enum SearchSniperCacheType
+    public enum CacheType
     {
         /// <summary>
         /// Cache is stored in memory. This is faster but does not persist after the application restarts.
