@@ -2,7 +2,7 @@
 
 namespace Tubifarry.Core.Utilities
 {
-    internal class CookieManager
+    internal static class CookieManager
     {
         internal static Cookie[] ParseCookieFile(string filePath)
         {
@@ -49,7 +49,7 @@ namespace Tubifarry.Core.Utilities
                     cookies.Add(cookie);
                 }
             }
-            catch (Exception) { }
+            catch { }
             return cookies.ToArray();
         }
     }

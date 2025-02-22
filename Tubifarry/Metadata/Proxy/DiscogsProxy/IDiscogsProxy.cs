@@ -9,5 +9,6 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         List<object> SearchNewEntity(DiscogsMetadataProxySettings settings, string title);
         Task<Tuple<string, Album, List<ArtistMetadata>>> GetAlbumInfoAsync(DiscogsMetadataProxySettings settings, string foreignAlbumId);
         Task<Artist> GetArtistInfoAsync(DiscogsMetadataProxySettings settings, string lidarrId, int metadataProfileId);
+        bool IsDiscogsidQuery(string? artistName);
     }
 }

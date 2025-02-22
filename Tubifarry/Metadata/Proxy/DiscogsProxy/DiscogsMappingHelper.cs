@@ -2,7 +2,6 @@
 using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
-using System.Globalization;
 using System.Text;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
@@ -10,29 +9,6 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
     public static class DiscogsMappingHelper
     {
         private const string _identifier = "@discogs";
-        private static readonly Dictionary<string, string> PrimaryTypeMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["album"] = "Album",
-            ["broadcast"] = "Broadcast",
-            ["ep"] = "EP",
-            ["single"] = "Single"
-        };
-
-        private static readonly Dictionary<string, SecondaryAlbumType> SecondaryTypeMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["compilation"] = SecondaryAlbumType.Compilation,
-            ["soundtrack"] = SecondaryAlbumType.Soundtrack,
-            ["spokenword"] = SecondaryAlbumType.Spokenword,
-            ["interview"] = SecondaryAlbumType.Interview,
-            ["live"] = SecondaryAlbumType.Live,
-            ["remix"] = SecondaryAlbumType.Remix,
-            ["dj mix"] = SecondaryAlbumType.DJMix,
-            ["mixtape"] = SecondaryAlbumType.Mixtape,
-            ["demo"] = SecondaryAlbumType.Demo,
-            ["audio Drama"] = SecondaryAlbumType.Audiodrama,
-            ["master"] = new SecondaryAlbumType { Id = 36, Name = "Master" },
-            ["release"] = new SecondaryAlbumType { Id = 37, Name = "Release" }
-        };
 
         private static readonly Dictionary<string, string> FormatMap = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -133,34 +109,9 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         /// <summary>
         /// Maps Discogs format descriptions to album types.
         /// </summary>
-        public static void MapAlbumTypes(DiscogsRelease release, Album album) => MapAlbumTypes(release.Formats?.SelectMany(f => f.Descriptions ?? Enumerable.Empty<string>()), album);
+        public static void MapAlbumTypes(DiscogsRelease release, Album album) => AlbumMapper.MapAlbumTypes(release.Formats?.SelectMany(f => f.Descriptions ?? Enumerable.Empty<string>()), album);
 
-        public static void MapAlbumTypes(DiscogsArtistRelease release, Album album) => MapAlbumTypes((release.Format ?? string.Empty).Split(',').Append(release.Type!).Select(f => f.Trim()), album);
-
-        private static void MapAlbumTypes(IEnumerable<string>? formatDescriptions, Album album)
-        {
-            album.AlbumType = "Studio";
-            if (formatDescriptions != null)
-            {
-                foreach (string desc in formatDescriptions)
-                {
-                    if (PrimaryTypeMap.TryGetValue(desc.ToLower(), out string? primaryType))
-                    {
-                        album.AlbumType = primaryType;
-                        break;
-                    }
-                }
-
-                HashSet<SecondaryAlbumType> secondaryTypes = new();
-                foreach (string desc in formatDescriptions)
-                {
-                    if (SecondaryTypeMap.TryGetValue(desc.ToLower(), out SecondaryAlbumType? secondaryType))
-                        secondaryTypes.Add(secondaryType);
-                }
-
-                album.SecondaryTypes = secondaryTypes.ToList();
-            }
-        }
+        public static void MapAlbumTypes(DiscogsArtistRelease release, Album album) => AlbumMapper.MapAlbumTypes((release.Format ?? string.Empty).Split(',').Append(release.Type!).Select(f => f.Trim()), album);
 
         /// <summary>
         /// Maps a DiscogsMasterRelease to an Album. Note that artist information is not set.
@@ -195,12 +146,18 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             album.AlbumReleases = new List<AlbumRelease> { albumRelease };
             album.AnyReleaseOk = true;
-            album.SecondaryTypes = new List<SecondaryAlbumType> { SecondaryTypeMap["master"] };
+
+            album.SecondaryTypes = new List<SecondaryAlbumType> { AlbumMapper.SecondaryTypeMap["master"] };
+            List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(masterRelease.Title ?? string.Empty);
+            album.SecondaryTypes.AddRange(titleTypes);
+            if (album.SecondaryTypes.Count == 1)
+                album.SecondaryTypes.Add(SecondaryAlbumType.Studio);
 
             if (!string.IsNullOrEmpty(masterRelease.MainReleaseUrl))
                 album.Links.Add(new Links { Url = masterRelease.MainReleaseUrl, Name = "Main Release" });
             if (!string.IsNullOrEmpty(masterRelease.VersionsUrl))
                 album.Links.Add(new Links { Url = masterRelease.VersionsUrl, Name = "Versions" });
+
             return album;
         }
 
@@ -219,9 +176,15 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Overview = release.Notes?.Trim(),
                 Images = release.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
                 Links = new List<Links> { new() { Url = release.ResourceUrl, Name = "Discogs" } },
-                Ratings = ComputeCommunityRating(release.Community)
+                Ratings = ComputeCommunityRating(release.Community),
+                SecondaryTypes = new(),
             };
+
+            album.SecondaryTypes = new List<SecondaryAlbumType> { AlbumMapper.SecondaryTypeMap["release"] };
             MapAlbumTypes(release, album);
+            List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(release.Title ?? string.Empty);
+            album.SecondaryTypes.AddRange(titleTypes);
+            album.SecondaryTypes = album.SecondaryTypes.DistinctBy(x => x.Id).ToList();
 
             AlbumRelease albumRelease = new()
             {
@@ -317,11 +280,27 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 ReleaseDate = ParseReleaseDate(release.Year),
                 CleanTitle = Parser.NormalizeTitle(release.Title ?? string.Empty),
                 Ratings = new Ratings(),
-
                 Genres = new List<string> { release.Label ?? string.Empty },
                 Images = new List<MediaCover> { new() { Url = release.Thumb } },
             };
+
+            album.AlbumReleases = new List<AlbumRelease>()
+            {
+                new()
+                {
+                    Status = "Official",
+                    Album = album,
+                    Title = release.Title,
+                    Tracks = new List<Track>(),
+                    ForeignReleaseId = release.Id + _identifier
+                }
+            };
+
             MapAlbumTypes(release, album);
+            List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(release.Title ?? string.Empty);
+            album.SecondaryTypes.AddRange(titleTypes);
+            if (album.SecondaryTypes.Count == 1)
+                album.SecondaryTypes.Add(SecondaryAlbumType.Studio);
             return album;
         }
 
@@ -338,7 +317,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Aliases = discogsArtist.NameVariations ?? new List<string>(),
                 Images = discogsArtist.Images?.Select(img => MapImage(img, true)).ToList() ?? new List<MediaCover>()!,
                 Ratings = new Ratings(),
-                Links = discogsArtist.Urls?.Select(url => new Links { Url = url, Name = GetLinkNameFromUrl(url) }).ToList() ?? new List<Links>(),
+                Links = discogsArtist.Urls?.Select(url => new Links { Url = url, Name = AlbumMapper.GetLinkNameFromUrl(url) }).ToList() ?? new List<Links>(),
                 Type = discogsArtist.Role ?? string.Empty,
                 Genres = new List<string>(),
                 Overview = BuildArtistOverview(discogsArtist),
@@ -348,36 +327,6 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             Name = discogsArtist.Name,
             CleanName = discogsArtist.Name.CleanArtistName()
         };
-
-        /// <summary>
-        /// Extracts a link name from a URL.
-        /// </summary>
-        public static string GetLinkNameFromUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return "Website";
-
-            try
-            {
-                Uri uri = new(url);
-                string[] hostParts = uri.Host.Split('.', StringSplitOptions.RemoveEmptyEntries);
-
-                if (hostParts.Contains("bandcamp"))
-                    return "Bandcamp";
-                if (hostParts.Contains("facebook"))
-                    return "Facebook";
-                if (hostParts.Contains("youtube"))
-                    return "YouTube";
-                if (hostParts.Contains("soundcloud"))
-                    return "SoundCloud";
-                if (hostParts.Contains("discogs"))
-                    return "Discogs";
-
-                string mainDomain = hostParts.Length > 1 ? hostParts[^2] : hostParts[0];
-                return mainDomain.ToUpper(CultureInfo.InvariantCulture);
-            }
-            catch { return "Website"; }
-        }
 
         public static Album MergeAlbums(Album existingAlbum, Album mappedAlbum)
         {
