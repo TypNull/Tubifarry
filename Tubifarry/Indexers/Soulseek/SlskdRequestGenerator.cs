@@ -47,9 +47,9 @@ namespace Tubifarry.Indexers.Soulseek
                 string[] albumWords = searchCriteria.AlbumQuery.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
                 string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
-                chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, halfAlbumTitle, searchCriteria.InteractiveSearch, tarckCount));
+                chain.AddTier(DeferredGetRequests(searchCriteria.CleanArtistQuery, halfAlbumTitle, searchCriteria.InteractiveSearch, tarckCount));
             }
-            chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, null, searchCriteria.InteractiveSearch, tarckCount));
+            chain.AddTier(DeferredGetRequests(searchCriteria.CleanArtistQuery, null, searchCriteria.InteractiveSearch, tarckCount));
             chain.AddTier(DeferredGetRequests(null, searchCriteria.AlbumQuery, searchCriteria.InteractiveSearch, tarckCount));
             return chain;
         }
@@ -57,9 +57,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
-            _logger.Trace($"Generating search requests for artist: {searchCriteria.ArtistQuery}");
+            _logger.Debug($"Generating search requests for artist: {searchCriteria.CleanArtistQuery}");
             int tarckCount = searchCriteria.Albums.FirstOrDefault()?.AlbumReleases.Value.Min(x => x.TrackCount) ?? 0;
             IndexerPageableRequestChain chain = new();
+            chain.AddTier(DeferredGetRequests(searchCriteria.CleanArtistQuery, null, searchCriteria.InteractiveSearch, tarckCount));
+
             List<string> aliases = searchCriteria.Artist.Metadata.Value.Aliases;
             for (int i = 0; i < 3 && i < aliases.Count && Settings.UseFallbackSearch; i++)
             {
