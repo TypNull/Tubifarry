@@ -4,7 +4,7 @@ using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.ImportLists.LastFm;
 using NzbDrone.Core.Validation;
 
-namespace Tubifarry.ImportLists.LastFmRecomendation
+namespace Tubifarry.ImportLists.LastFmRecommendation
 {
     public class LastFmRecommendSettingsValidator : AbstractValidator<LastFmRecommendSettings>
     {
