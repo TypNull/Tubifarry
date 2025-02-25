@@ -2,7 +2,7 @@
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.ImportLists.LastFm;
 
-namespace Tubifarry.ImportLists.LastFmRecomendation
+namespace Tubifarry.ImportLists.LastFmRecommendation
 {
     public class LastFmRecomendRequestGenerator : IImportListRequestGenerator
     {
