@@ -19,32 +19,30 @@ namespace Tubifarry.Core.Model
         public byte[]? AlbumCover { get; set; }
         public bool UseID3v2_3 { get; set; }
 
-
         public AudioMetadataHandler(string originalPath)
         {
             TrackPath = originalPath;
-            _logger = NzbDroneLogger.GetLogger(this); ;
+            _logger = NzbDroneLogger.GetLogger(this);
         }
 
         private static readonly Dictionary<AudioFormat, string[]> ConversionParameters = new()
-{
-    { AudioFormat.AAC,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
-    { AudioFormat.MP3,    new[] { "-codec:a libmp3lame", "-q:a 0", "-preset insane" } },
-    { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-compression_level 10", "-application audio" } },
-    { AudioFormat.Vorbis, new[] { "-codec:a libvorbis", "-q:a 7" } },
-    { AudioFormat.FLAC,   new[] { "-codec:a flac" } },
-    { AudioFormat.ALAC,   new[] { "-codec:a alac" } },
-    { AudioFormat.WAV,    new[] { "-codec:a pcm_s16le" } },
-    { AudioFormat.MP4,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
-    { AudioFormat.AIFF,   new[] { "-codec:a pcm_s16le" } },
-    { AudioFormat.OGG,    new[] { "-codec:a libvorbis", "-q:a 7" } },
-    { AudioFormat.AMR,    new[] { "-codec:a libopencore_amrnb", "-ar 8000", "-ab 12.2k" } },
-    { AudioFormat.WMA,    new[] { "-codec:a wmav2", "-b:a 192k" } }
-};
-
+        {
+            { AudioFormat.AAC,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
+            { AudioFormat.MP3,    new[] { "-codec:a libmp3lame", "-q:a 0", "-preset insane" } },
+            { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-compression_level 10", "-application audio" } },
+            { AudioFormat.Vorbis, new[] { "-codec:a libvorbis", "-q:a 7" } },
+            { AudioFormat.FLAC,   new[] { "-codec:a flac" } },
+            { AudioFormat.ALAC,   new[] { "-codec:a alac" } },
+            { AudioFormat.WAV,    new[] { "-codec:a pcm_s16le" } },
+            { AudioFormat.MP4,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
+            { AudioFormat.AIFF,   new[] { "-codec:a pcm_s16le" } },
+            { AudioFormat.OGG,    new[] { "-codec:a libvorbis", "-q:a 7" } },
+            { AudioFormat.AMR,    new[] { "-codec:a libopencore_amrnb", "-ar 8000", "-ab 12.2k" } },
+            { AudioFormat.WMA,    new[] { "-codec:a wmav2", "-b:a 192k" } }
+        };
 
         private static readonly string[] ExtractionParameters = new[]
-{
+        {
             "-codec:a copy",
             "-vn",
             "-movflags +faststart"
@@ -59,11 +57,15 @@ namespace Tubifarry.Core.Model
 
         public async Task<bool> TryConvertToFormatAsync(AudioFormat audioFormat)
         {
+            _logger?.Trace($"Converting {Path.GetFileName(TrackPath)} to {audioFormat}");
+
             if (!CheckFFmpegInstalled())
                 return false;
 
             if (!await TryExtractAudioFromVideoAsync())
                 return false;
+
+            _logger?.Trace($"Looking up audio format: {audioFormat}");
 
             if (audioFormat == AudioFormat.Unknown)
                 return true;
@@ -83,6 +85,7 @@ namespace Tubifarry.Core.Model
                 foreach (string parameter in ConversionParameters[audioFormat])
                     conversion.AddParameter(parameter);
 
+                _logger?.Trace($"Starting FFmpeg conversion to {audioFormat}");
                 await conversion.Start();
 
                 if (File.Exists(TrackPath))
@@ -118,7 +121,10 @@ namespace Tubifarry.Core.Model
                     string containerType = kvp.Key;
                     byte[] signature = kvp.Value;
                     if (header.Skip(4).Take(signature.Length).SequenceEqual(signature))
+                    {
+                        _logger?.Trace($"Detected {containerType} video container via signature");
                         return true;
+                    }
                 }
                 return false;
             }
@@ -138,13 +144,18 @@ namespace Tubifarry.Core.Model
             if (!isVideo)
                 return true;
 
+            _logger?.Trace($"Extracting audio from video file: {Path.GetFileName(TrackPath)}");
+
             try
             {
                 IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(TrackPath);
                 IAudioStream? audioStream = mediaInfo.AudioStreams.FirstOrDefault();
 
                 if (audioStream == null)
+                {
+                    _logger?.Trace("No audio stream found in video file");
                     return false;
+                }
 
                 string codec = audioStream.Codec.ToLower();
                 string finalOutputPath = Path.ChangeExtension(TrackPath, AudioFormatHelper.GetFileExtensionForCodec(codec));
@@ -164,11 +175,12 @@ namespace Tubifarry.Core.Model
 
                 File.Move(tempOutputPath, finalOutputPath, true);
                 TrackPath = finalOutputPath;
+                _logger?.Trace($"Successfully extracted audio to {Path.GetFileName(TrackPath)}");
                 return true;
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, $"Failed to extract audio from MP4: {TrackPath}");
+                _logger?.Error(ex, $"Failed to extract audio from video: {TrackPath}");
                 return false;
             }
         }
@@ -182,9 +194,16 @@ namespace Tubifarry.Core.Model
                 string lrcContent = string.Join(Environment.NewLine, Lyric.SyncedLyrics
                     .Where(lyric => !string.IsNullOrEmpty(lyric.LrcTimestamp) && !string.IsNullOrEmpty(lyric.Line))
                     .Select(lyric => $"{lyric.LrcTimestamp} {lyric.Line}"));
-                await File.WriteAllTextAsync(Path.ChangeExtension(TrackPath, ".lrc"), lrcContent, token);
+
+                string lrcPath = Path.ChangeExtension(TrackPath, ".lrc");
+                await File.WriteAllTextAsync(lrcPath, lrcContent, token);
+                _logger?.Trace($"Created LRC file with {Lyric.SyncedLyrics.Count} synced lyrics");
             }
-            catch (Exception) { return false; }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, $"Failed to create LRC file: {Path.ChangeExtension(TrackPath, ".lrc")}");
+                return false;
+            }
             return true;
         }
 
@@ -207,17 +226,23 @@ namespace Tubifarry.Core.Model
                 if (!string.Equals(currentExtension, correctExtension, StringComparison.OrdinalIgnoreCase))
                 {
                     string newPath = Path.ChangeExtension(TrackPath, correctExtension);
+                    _logger?.Trace($"Correcting file extension from {currentExtension} to {correctExtension} for codec {codec}");
                     File.Move(TrackPath, newPath);
                     TrackPath = newPath;
                 }
                 return true;
             }
-            catch (Exception) { return false; }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, $"Failed to ensure correct file extension: {TrackPath}");
+                return false;
+            }
         }
-
 
         public bool TryEmbedMetadata(AlbumInfo albumInfo, AlbumSongInfo trackInfo, ReleaseInfo releaseInfo)
         {
+            _logger?.Trace($"Embedding metadata for track: {trackInfo.Name}");
+
             try
             {
                 using TagLib.File file = TagLib.File.Create(TrackPath);
@@ -264,22 +289,21 @@ namespace Tubifarry.Core.Model
                 }
                 catch (Exception ex)
                 {
-                    _logger?.Error(ex, $"Failed to embed cover in track: {TrackPath}");
+                    _logger?.Error(ex, "Failed to embed album cover");
                 }
 
                 if (!string.IsNullOrEmpty(Lyric?.PlainLyrics))
                     file.Tag.Lyrics = Lyric.PlainLyrics;
 
                 file.Save();
+                return true;
             }
             catch (Exception ex)
             {
                 _logger?.Error(ex, $"Failed to embed metadata in track: {TrackPath}");
                 return false;
             }
-            return true;
         }
-
 
         public static bool CheckFFmpegInstalled()
         {
@@ -293,7 +317,9 @@ namespace Tubifarry.Core.Model
                 string[] ffmpegPatterns = new[] { "ffmpeg", "ffmpeg.exe", "ffmpeg.bin" };
                 string[] files = Directory.GetFiles(FFmpeg.ExecutablesPath);
                 if (files.Any(file => ffmpegPatterns.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase) && IsExecutable(file)))
+                {
                     isInstalled = true;
+                }
             }
 
             if (!isInstalled)
@@ -314,10 +340,12 @@ namespace Tubifarry.Core.Model
                 }
             }
 
+            if (!isInstalled)
+                NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler)).Trace("FFmpeg not found in configured path or system PATH");
+
             _isFFmpegInstalled = isInstalled;
             return isInstalled;
         }
-
 
         private static bool IsExecutable(string filePath)
         {
@@ -336,10 +364,7 @@ namespace Tubifarry.Core.Model
                 if (magicNumber[0] == 0xCE && magicNumber[1] == 0xFA && magicNumber[2] == 0xED && magicNumber[3] == 0xFE)
                     return true;
             }
-            catch
-            {
-            }
-
+            catch { }
             return false;
         }
 
@@ -347,6 +372,7 @@ namespace Tubifarry.Core.Model
 
         public static Task InstallFFmpeg(string path)
         {
+            NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler)).Trace($"Installing FFmpeg to: {path}");
             ResetFFmpegInstallationCheck();
             FFmpeg.SetExecutablesPath(path);
             return CheckFFmpegInstalled() ? Task.CompletedTask : FFmpegDownloader.GetLatestVersion(FFmpegVersion.Official, path);
