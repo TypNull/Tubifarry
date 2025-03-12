@@ -1,0 +1,86 @@
+name: Detect Branch from Tag or Reference
+
+on:
+  workflow_call:
+    inputs:
+      github_ref:
+        required: true
+        type: string
+        description: "The GitHub reference (usually github.ref)"
+    outputs:
+      branch_name:
+        description: "The detected branch name"
+        value: ${{ jobs.detect.outputs.branch_name }}
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_name: ${{ steps.detect_branch.outputs.branch_name }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure all Git refs are available
+        run: |
+          git fetch --prune --unshallow || git fetch --prune
+          git fetch --tags --force
+          
+          echo "Available remote branches:"
+          git branch -r
+          echo "Available tags:"
+          git tag -l
+
+      - name: Detect Branch
+        id: detect_branch
+        run: |
+          # Enhanced branch detection from tag names
+          if [[ "${{ inputs.github_ref }}" == refs/tags/* ]]; then
+            TAG_NAME=${{ inputs.github_ref }}
+            TAG_NAME=${TAG_NAME#refs/tags/}
+            DEFAULT_BRANCH=$(git remote show origin | grep 'HEAD branch' | cut -d' ' -f5)
+            
+            # Check if tag contains branch info in format v1.2.3-branch-name
+            if [[ "$TAG_NAME" == v*-* ]]; then
+              # Extract potential branch name after the dash
+              TAG_BRANCH=${TAG_NAME#*-}
+              echo "Detected potential branch suffix in tag: $TAG_BRANCH"
+              
+              # List all available branches and look for best match
+              AVAILABLE_BRANCHES=$(git branch -r | grep -v HEAD | sed -e 's/ *origin\///g')
+              echo "Available branches:"
+              echo "$AVAILABLE_BRANCHES"
+              
+              # First, try exact match
+              if echo "$AVAILABLE_BRANCHES" | grep -q "^$TAG_BRANCH$"; then
+                BRANCH_NAME="$TAG_BRANCH"
+                echo "Found exact branch match: $BRANCH_NAME"
+              # Then try to match longer branch names that contain the tag suffix
+              elif echo "$AVAILABLE_BRANCHES" | grep -q "$TAG_BRANCH"; then
+                BRANCH_NAME=$(echo "$AVAILABLE_BRANCHES" | grep "$TAG_BRANCH" | head -n 1)
+                echo "Found branch containing tag suffix: $BRANCH_NAME"
+              fi
+            fi
+            
+            # If no branch name from tag, try to find branch that contains this tag
+            if [ -z "$BRANCH_NAME" ]; then
+              echo "No branch found from tag suffix, trying git branch --contains..."
+              BRANCH_NAME=$(git branch -r --contains $TAG_NAME | grep -v HEAD | sed -e 's/ *origin\///g' | head -n 1)
+            fi
+            
+            # Fallback to the default branch if no branch is found
+            if [ -z "$BRANCH_NAME" ]; then
+              BRANCH_NAME=$DEFAULT_BRANCH
+              echo "Tag not associated with branch, using default branch: $BRANCH_NAME"
+            fi
+          else
+            # When triggered by a push, use GITHUB_REF directly
+            BRANCH_NAME=${{ inputs.github_ref }}
+            BRANCH_NAME=${BRANCH_NAME#refs/heads/}
+          fi
+          
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Detected branch: $BRANCH_NAME"

@@ -1,0 +1,206 @@
+name: Compile Project
+
+on:
+  workflow_call:
+    inputs:
+      dotnet_version:
+        required: true
+        type: string
+        description: ".NET SDK version to use"
+      plugin_name:
+        required: true
+        type: string
+        description: "Name of the plugin"
+      package_version:
+        required: true
+        type: string
+        description: "Version number for the package"
+      framework:
+        required: true
+        type: string
+        description: "Framework version extracted from project file" 
+      git_commit:
+        required: true
+        type: string
+        description: "Git commit SHA used for the build"
+      git_branch:
+        required: true
+        type: string
+        description: "Git branch name"
+      git_tag:
+        required: false
+        type: string
+        description: "Git tag if available"
+        default: ""
+      repo_url:
+        required: true
+        type: string
+        description: "Base repository URL"
+      branch_repo_url:
+        required: true
+        type: string
+        description: "Repository URL with branch path"
+      repo_owner:
+        required: true
+        type: string
+        description: "Repository owner"
+      minimum_lidarr_version:
+        required: false
+        type: string
+        description: "Minimum Lidarr version required"
+        default: ""
+    outputs:
+      build_status:
+        description: "Status of the build"
+        value: ${{ jobs.compile.outputs.build_status }}
+      plugin_output_path:
+        description: "Path to the built plugin output directory"
+        value: ${{ jobs.compile.outputs.plugin_output_path }}
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    outputs:
+      build_status: ${{ steps.build_result.outputs.status }}
+      plugin_output_path: ${{ steps.find_output.outputs.plugin_path }}
+    
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      # Add NuGet package caching
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Create global.json
+        run: |
+          echo '{"sdk":{"version": "${{ inputs.dotnet_version }}"}}' > ./global.json
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          mkdir -p ./Properties
+          
+          cat > ./Properties/release_notes.txt << EOL
+          Version: ${{ inputs.package_version }}
+          Branch: ${{ inputs.git_branch }}
+          Commit: ${{ inputs.git_commit }}
+          Framework: ${{ inputs.framework }}
+          Repository: ${{ inputs.branch_repo_url }}
+          Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}
+          Built at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          
+          Plugin Info:
+          Name: ${{ inputs.plugin_name }}
+          Owner: ${{ inputs.repo_owner }}
+          EOL
+          
+          echo "release_notes=./Properties/release_notes.txt" >> $GITHUB_OUTPUT
+
+      - name: Display Build Parameters
+        run: |
+          echo "Plugin Name: ${{ inputs.plugin_name }}"
+          echo "Package Version: ${{ inputs.package_version }}"
+          echo "Git Branch: ${{ inputs.git_branch }}"
+          echo "Git Commit: ${{ inputs.git_commit }}"
+          echo "Git Tag: ${{ inputs.git_tag }}"
+          echo "Repo URL: ${{ inputs.repo_url }}"
+          echo "Branch Repo URL: ${{ inputs.branch_repo_url }}"
+          echo "Repo Owner: ${{ inputs.repo_owner }}"
+          echo "Release Notes Path: ${{ steps.release_notes.outputs.release_notes }}"
+          echo "Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}"
+
+      - name: Build with package version and metadata
+        id: build_step
+        run: |
+          # Restore NuGet packages first
+          dotnet restore *.sln
+          
+          # Then build with all parameters
+          dotnet build *.sln -c Release -f ${{ inputs.framework }} \
+            -p:Version=${{ inputs.package_version }} \
+            -p:AssemblyVersion=${{ inputs.package_version }} \
+            -p:FileVersion=${{ inputs.package_version }} \
+            -p:Branch="${{ inputs.git_branch }}" \
+            -p:GitCommit="${{ inputs.git_commit }}" \
+            -p:GitTag="${{ inputs.git_tag }}" \
+            -p:RepoUrl="${{ inputs.branch_repo_url }}" \
+            -p:Author="${{ inputs.repo_owner }}" \
+            -p:ReleaseNotesFile="${{ steps.release_notes.outputs.release_notes }}" \
+            -p:MinimumLidarrVersion="${{ inputs.minimum_lidarr_version }}" \
+            -p:CI="true" \
+            -v:n
+
+      - name: Find Plugin Output Directory
+        id: find_output
+        run: |
+          # More thorough search for the plugin output directory
+          echo "Searching for plugin output directories..."
+          find . -name "_plugins" -type d
+          
+          # Find the plugin output directory
+          PLUGIN_OUTPUT_DIR=$(find . -type d -path "*/_plugins/*/${{ inputs.plugin_name }}" | head -n 1)
+          if [ -z "$PLUGIN_OUTPUT_DIR" ]; then
+            echo "Trying alternate search pattern..."
+            PLUGIN_OUTPUT_DIR=$(find . -type d -path "*/_plugins/*" -name "${{ inputs.plugin_name }}" | head -n 1)
+          fi
+          
+          # Fail if no plugin directory is found
+          if [ -z "$PLUGIN_OUTPUT_DIR" ]; then
+            echo "::error::Plugin output directory not found! Build may have failed to produce plugin files."
+            exit 1
+          fi
+          
+          echo "Plugin output directory: $PLUGIN_OUTPUT_DIR"
+          
+          # Check if directory contains any plugin files
+          PLUGIN_FILES_COUNT=$(find "$PLUGIN_OUTPUT_DIR" -name "*.${{ inputs.plugin_name }}.*" -o -name "*.Plugin.${{ inputs.plugin_name }}.*" | wc -l)
+          if [ "$PLUGIN_FILES_COUNT" -eq 0 ]; then
+            echo "::error::No plugin files found in output directory! Build may have failed to produce plugin files."
+            echo "Directory contents:"
+            ls -la "$PLUGIN_OUTPUT_DIR"
+            exit 1
+          fi
+          
+          echo "Found $PLUGIN_FILES_COUNT plugin files in $PLUGIN_OUTPUT_DIR"
+          echo "plugin_path=$PLUGIN_OUTPUT_DIR" >> $GITHUB_OUTPUT
+          
+          # Copy release notes to output directory
+          cp ${{ steps.release_notes.outputs.release_notes }} $PLUGIN_OUTPUT_DIR/release_notes.txt
+
+      - name: Record Build Result
+        id: build_result
+        run: |
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      # Upload the actual plugin files
+      - name: Upload Plugin Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-output
+          path: ${{ steps.find_output.outputs.plugin_path }}
+          retention-days: 1
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ./**/*.binlog
+            ./**/*.log
+          retention-days: 1
+          if-no-files-found: warn

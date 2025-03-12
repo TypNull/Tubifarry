@@ -1,0 +1,93 @@
+name: Package Plugin
+
+on:
+  workflow_call:
+    inputs:
+      plugin_name:
+        required: true
+        type: string
+        description: "Name of the plugin"
+      package_version:
+        required: true
+        type: string
+        description: "Version number for the package"
+      build_suffix:
+        required: true
+        type: string
+        description: "Build suffix based on framework and branch"
+      build_status:
+        required: true
+        type: string
+        description: "Status of the build step"
+    outputs:
+      package_path:
+        description: "Path to the final package"
+        value: ${{ jobs.package.outputs.package_path }}
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      package_path: ${{ steps.zip_plugin.outputs.package_path }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Download built plugin
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-output
+          path: ./plugin-output
+          # Don't continue on error - must have plugin to package
+
+      - name: Verify plugin artifacts are available
+        run: |
+          echo "Contents of the downloaded plugin output directory:"
+          find ./plugin-output -type f | sort
+          
+          # Fail if no plugin files found
+          PLUGIN_FILES_COUNT=$(find ./plugin-output -name "*.${{ inputs.plugin_name }}.*" -o -name "*.Plugin.${{ inputs.plugin_name }}.*" | wc -l)
+          if [ "$PLUGIN_FILES_COUNT" -eq 0 ]; then
+            echo "::error::No plugin files found in downloaded artifacts! Build may have failed to produce plugin files."
+            exit 1
+          fi
+          
+          echo "Found $PLUGIN_FILES_COUNT plugin files."
+
+      - name: Zip Plugin
+        id: zip_plugin
+        run: |
+          cd ./plugin-output
+          PACKAGE_NAME="${{ inputs.plugin_name }}-v${{ inputs.package_version }}.${{ inputs.build_suffix }}.zip"
+          
+          # List files that will be included in the package
+          echo "Files to be packaged:"
+          find . -name "*.${{ inputs.plugin_name }}.*" -o -name "*.Plugin.${{ inputs.plugin_name }}.*"
+          
+          # Create zip with all plugin files and release notes
+          find . -name "*.${{ inputs.plugin_name }}.*" -o -name "*.Plugin.${{ inputs.plugin_name }}.*" | xargs zip -r $PACKAGE_NAME
+          
+          # Add release notes to the zip if it exists
+          if [ -f "release_notes.txt" ]; then
+            zip -r $PACKAGE_NAME release_notes.txt
+          fi
+          
+          # Verify the zip was created and has content
+          if [ ! -f "$PACKAGE_NAME" ] || [ $(stat -c%s "$PACKAGE_NAME") -eq 0 ]; then
+            echo "::error::Failed to create package or package is empty!"
+            exit 1
+          fi
+          
+          echo "Created package: $PACKAGE_NAME"
+          echo "Contents of zip file:"
+          unzip -l $PACKAGE_NAME
+          
+          echo "package_path=./plugin-output/$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-package
+          path: ${{ steps.zip_plugin.outputs.package_path }}
+          retention-days: 7

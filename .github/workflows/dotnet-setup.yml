@@ -1,0 +1,83 @@
+name: Setup .NET Environment
+
+on:
+  workflow_call:
+    inputs:
+      dotnet_version:
+        required: true
+        type: string
+        description: ".NET SDK version to use"
+      framework:
+        required: false
+        type: string
+        description: "Framework version"
+        default: "net6.0"
+    outputs:
+      submodules_ready:
+        description: "Whether submodules were initialized successfully"
+        value: ${{ jobs.setup.outputs.submodules_ready }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      submodules_ready: ${{ steps.check_submodules.outputs.ready }}
+    
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+
+      - name: Setup .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      # Add NuGet package caching
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Create global.json
+        run: |
+          echo '{"sdk":{"version": "${{ inputs.dotnet_version }}"}}' > ./global.json
+
+      - name: Initialize and verify submodules
+        id: check_submodules
+        run: |
+          echo "Listing Submodules directory:"
+          ls -la Submodules/ || echo "Submodules directory not found"
+          
+          if [ -d "Submodules/Lidarr" ]; then
+            echo "Listing Lidarr submodule:"
+            ls -la Submodules/Lidarr/
+            
+            echo "Listing Lidarr source directory:"
+            ls -la Submodules/Lidarr/src/ || echo "Lidarr src directory not found"
+          else
+            echo "Lidarr submodule not found"
+          fi
+          
+          echo "Checking .gitmodules file:"
+          cat .gitmodules || echo ".gitmodules file not found"
+          
+          # Initialize submodules if they weren't checked out properly
+          if [ ! -d "Submodules/Lidarr/src" ]; then
+            echo "Manually initializing submodules..."
+            git submodule update --init --recursive
+          fi
+          
+          # Verify that submodules are now properly initialized
+          if [ -d "Submodules/Lidarr/src" ]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+            echo "Submodules successfully initialized"
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "Warning: Submodules could not be initialized"
+          fi

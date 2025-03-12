@@ -1,0 +1,78 @@
+name: "✨ Feature Request"
+description: Suggest an idea or improvement for Tubifarry
+title: "[FEATURE] "
+labels: ["enhancement"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thanks for taking the time to suggest a feature!
+        Please provide as much detail as possible to help us understand your idea.
+  
+  - type: textarea
+    id: feature-request
+    attributes:
+      label: Feature Request
+      description: Describe what you'd like to see added and why it would be valuable.
+      placeholder: |
+        I'm frustrated when... and would like to see...
+        
+        This would improve the experience by...
+    validations:
+      required: true
+  
+
+  
+  - type: dropdown
+    id: importance
+    attributes:
+      label: How important is this feature to you?
+      options:
+        - Nice to have (low priority)
+        - Would improve my experience (medium priority)
+        - Critical to my use case (high priority)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: mockups
+    attributes:
+      label: Visual Designs or Mockups
+      description: If you have any mockups, wireframes, or designs, please share them here.
+      value: |
+        <details>
+        <summary>Mockups</summary>
+        
+        <!-- Paste your mockups here... -->
+        
+        </details>
+    validations:
+      required: false
+  
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you willing to contribute to this feature?
+      description: Let us know if you'd be interested in implementing this feature
+      options:
+        - No, I'm just suggesting the idea
+        - I might contribute, but I'd need guidance
+        - Yes, I'd be willing to implement this feature
+    validations:
+      required: true
+  
+  - type: textarea
+    id: technical
+    attributes:
+      label: Technical Details (Optional)
+      description: If you have technical expertise or ideas for implementation, feel free to share.
+      value: |
+        <details>
+        <summary>Technical Details</summary>
+        
+        <!-- Add your technical implementation ideas here... -->
+        
+        </details>
+    validations:
+      required: false

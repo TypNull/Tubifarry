@@ -1,0 +1,124 @@
+name: Publish GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      plugin_name:
+        required: true
+        type: string
+        description: "Name of the plugin"
+      package_version:
+        required: true
+        type: string
+        description: "Version number for the release"
+      build_suffix:
+        required: true
+        type: string
+        description: "Build suffix based on framework and branch"
+      is_prerelease:
+        required: true
+        type: string
+        description: "Whether this is a pre-release"
+      is_latestrelease:
+        required: true
+        type: string
+        description: "Whether this should be the newest stable release"
+      release_notes_id:
+        required: true
+        type: string
+        description: "ID of the generated release notes"
+      git_commit:
+        required: true
+        type: string
+        description: "Git commit SHA used for the build"
+      branch_repo_url:
+        required: false
+        type: string
+        description: "Repository URL with branch path"
+        default: ""
+    outputs:
+      release_url:
+        description: "URL of the created release"
+        value: ${{ jobs.publish.outputs.release_url }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      release_url: ${{ steps.create_release.outputs.url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-package
+          path: ./artifacts
+
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.release_notes_id }}
+          path: ./notes
+
+      - name: Verify artifacts
+        id: verify_artifacts
+        run: |
+          echo "Artifacts directory contents:"
+          find ./artifacts -type f | sort
+          
+          # The artifact should follow the naming convention with framework from csproj
+          ARTIFACT_PATH="./artifacts/${{ inputs.plugin_name }}-v${{ inputs.package_version }}.${{ inputs.build_suffix }}.zip"
+          
+          if [ ! -f "$ARTIFACT_PATH" ]; then
+            echo "::error::Artifact not found at expected path: $ARTIFACT_PATH"
+            exit 1
+          fi
+          echo "artifact_path=$ARTIFACT_PATH" >> $GITHUB_OUTPUT
+          FILESIZE=$(stat -c%s "$ARTIFACT_PATH")
+          echo "Artifact size: $FILESIZE bytes"
+          echo "artifact_size=$FILESIZE" >> $GITHUB_OUTPUT
+          
+          # Check release notes
+          if [ ! -f "./notes/release_notes.md" ]; then
+            echo "::error::Release notes not found at expected path: ./notes/release_notes.md"
+            exit 1
+          fi
+          echo "release_notes_path=./notes/release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref }}
+          name: "🚀 Release ${{ inputs.package_version }}"
+          body_path: ${{ steps.verify_artifacts.outputs.release_notes_path }}
+          prerelease: ${{ inputs.is_prerelease == 'true' }}
+          make_latest: ${{ inputs.is_latestrelease == 'true' }}
+          files: |
+            ${{ steps.verify_artifacts.outputs.artifact_path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Verify release was created
+        run: |
+          echo "Release URL: ${{ steps.create_release.outputs.url }}"
+          if [ -z "${{ steps.create_release.outputs.url }}" ]; then
+            echo "::warning::Release URL is empty, there might have been an issue with release creation"
+          else
+            echo "Release successfully created"
+          fi
+
+      - name: Notify of successful release
+        if: success()
+        run: |
+          echo "::notice::🎉 Successfully published release v${{ inputs.package_version }} for ${{ inputs.plugin_name }}"
+          
+          # Include branch-specific URL in notification if available
+          if [ -n "${{ inputs.branch_repo_url }}" ]; then
+            echo "Repository: ${{ inputs.branch_repo_url }}"
+          fi
+          
+          echo "Release available at: ${{ steps.create_release.outputs.url }}"
