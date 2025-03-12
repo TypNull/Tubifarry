@@ -4,7 +4,7 @@ using NzbDrone.Core.Parser;
 using NzbDrone.Core.Profiles.Metadata;
 using System.Globalization;
 
-namespace Tubifarry.Metadata.Proxy
+namespace Tubifarry.Metadata.Proxy.Core
 {
     public static class AlbumMapper
     {
@@ -130,7 +130,7 @@ namespace Tubifarry.Metadata.Proxy
             List<string> releaseStatuses = new(metadataProfile.ReleaseStatuses.Where(s => s.Allowed).Select(s => s.ReleaseStatus.Name));
 
             return albums.Where(album => primaryTypes.Contains(album.AlbumType) &&
-                                ((!album.SecondaryTypes.Any() && secondaryTypes.Contains("Studio")) ||
+                                (!album.SecondaryTypes.Any() && secondaryTypes.Contains("Studio") ||
                                  album.SecondaryTypes.Any(x => secondaryTypes.Contains(x.Name))) &&
                                 album.AlbumReleases.Value.Any(x => releaseStatuses.Contains(x.Status))).ToList();
         }

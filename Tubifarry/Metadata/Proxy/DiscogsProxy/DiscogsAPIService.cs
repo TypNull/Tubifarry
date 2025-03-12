@@ -3,6 +3,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using System.Net;
 using System.Text.Json;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
@@ -10,6 +11,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
     {
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
+        private readonly ICircuitBreaker _circuitBreaker;
 
         public string? AuthToken { get; set; }
         public string BaseUrl { get; set; } = "https://api.discogs.com";
@@ -28,6 +30,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             _httpClient = httpClient;
             _logger = NzbDroneLogger.GetLogger(this);
+            _circuitBreaker = CircuitBreakerFactory.GetBreaker(this);
         }
 
         public async Task<DiscogsRelease?> GetReleaseAsync(int releaseId, string? currency = null)
@@ -116,6 +119,12 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             try
             {
+                if (_circuitBreaker.IsOpen)
+                {
+                    _logger.Warn("Circuit breaker is open, skipping request to Deezer API");
+                    return default;
+                }
+
                 await WaitForRateLimit();
                 requestBuilder.WithRateLimit(_rateLimit.TotalSeconds);
                 HttpRequest request = requestBuilder.Build();
@@ -125,7 +134,11 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 {
                     if (retryCount >= MaxRetries)
+                    {
+                        _logger.Warn("Max retries reached due to rate limiting.");
+                        _circuitBreaker.RecordFailure();
                         return default;
+                    }
 
                     int delayMs = InitialRetryDelayMs * (int)Math.Pow(2, retryCount);
                     _logger.Warn($"Rate limit exceeded. Retrying in {delayMs}ms...");
@@ -136,10 +149,13 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     HandleErrorResponse(response);
+                    _circuitBreaker.RecordFailure();
                     return default;
                 }
 
                 using JsonDocument jsonDoc = JsonDocument.Parse(response.Content);
+
+                _circuitBreaker.RecordSuccess();
                 return jsonDoc.RootElement.Clone();
             }
             catch (HttpException ex)

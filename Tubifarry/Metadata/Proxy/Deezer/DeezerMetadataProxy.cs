@@ -4,6 +4,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
+using Tubifarry.Metadata.Proxy.Core;
 using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.Deezer

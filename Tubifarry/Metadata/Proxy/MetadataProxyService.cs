@@ -5,16 +5,17 @@ using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.ThingiProvider.Events;
+using Tubifarry.Metadata.Proxy.Core;
 using Tubifarry.Metadata.Proxy.Mixed;
 using Tubifarry.Metadata.Proxy.SkyHook;
 
 namespace Tubifarry.Metadata.Proxy
 {
-    public class ProxyServiceStarter : IHandle<ApplicationStartingEvent>
+    public class ProxyServiceStarter : IHandle<ApplicationStartedEvent>
     {
         public static IProxyService? ProxyService { get; private set; }
         public ProxyServiceStarter(IProxyService service) => ProxyService = service;
-        public void Handle(ApplicationStartingEvent message) { }
+        public void Handle(ApplicationStartedEvent message) { }
     }
 
     public interface IProxyService

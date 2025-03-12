@@ -1,6 +1,7 @@
 ﻿using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Diagnostics;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.Mixed
 {
