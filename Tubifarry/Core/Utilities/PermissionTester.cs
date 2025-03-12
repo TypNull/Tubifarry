@@ -4,7 +4,7 @@ using NzbDrone.Common.Extensions;
 
 namespace Tubifarry.Core.Utilities
 {
-    public class PermissionTester
+    public static class PermissionTester
     {
         public static ValidationFailure? TestReadWritePermissions(string directoryPath, ILogger logger)
         {
