@@ -5,8 +5,14 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<AssemblyName>Lidarr.Plugin.$(MSBuildProjectName)</AssemblyName>
+		<InformationalVersion>$(AssemblyVersion)-$(Branch)</InformationalVersion>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+		<Author>TypNull</Author>
+		<Branch>master</Branch>
+		<DefineConstants Condition="'$(Branch)' == 'master'">$(DefineConstants);MASTER_BRANCH</DefineConstants>
+		<DefineConstants Condition="'$(Branch)' == 'develop'">$(DefineConstants);DEV_BRANCH</DefineConstants>
+		<DefineConstants Condition="'$(Branch)' != 'master' AND '$(Branch)' != 'develop'">$(DefineConstants);FEATURE_BRANCH</DefineConstants>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -26,74 +32,22 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\Submodules\Lidarr\src\Lidarr.Api.V1\Lidarr.Api.V1.csproj" />
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
 	</ItemGroup>
 
-	<UsingTask TaskName="FetchOwnerFromFileTask" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-		<ParameterGroup>
-			<SourceFile ParameterType="System.String" Required="true" />
-			<Owner ParameterType="System.String" Output="true" />
-			<DebugCopyFileName ParameterType="System.String" Output="true" />
-		</ParameterGroup>
-		<Task>
-			<Using Namespace="System" />
-			<Using Namespace="System.IO" />
-			<Using Namespace="System.Text.RegularExpressions" />
-			<Code Type="Fragment" Language="cs">
-				<![CDATA[
-    try
-    {
-        var sourceCode = File.ReadAllText(SourceFile);
-
-        var ownerRegex = new Regex(@"public\s+override\s+string\s+Owner\s*=>\s*@?""([^""]+)"";");
-        var ownerMatch = ownerRegex.Match(sourceCode);
-
-        if (ownerMatch.Success)
-            Owner = ownerMatch.Groups[1].Value;
-        else
-            Log.LogError("Owner property not found in the source file.");
-
-        var debugCopyFileNameRegex = new Regex(@"public\s+string\s+DebugCopyFileName\s*=>\s*@?""([^""]+)"";");
-        var debugCopyFileNameMatch = debugCopyFileNameRegex.Match(sourceCode);
-
-        if (debugCopyFileNameMatch.Success)
-            DebugCopyFileName = debugCopyFileNameMatch.Groups[1].Value;
-        else
-            DebugCopyFileName = string.Empty;
-    }
-    catch (Exception ex)
-    {
-        Log.LogErrorFromException(ex);
-    }
-    ]]>
-			</Code>
-		</Task>
-	</UsingTask>
-
-	<Target Name="FetchOwner" BeforeTargets="PostBuild" Condition="'$(Configuration)' == 'Debug'">
-		<FetchOwnerFromFileTask SourceFile="$(MSBuildProjectDirectory)\Plugin.cs">
-			<Output TaskParameter="Owner" PropertyName="PluginOwner" />
-			<Output TaskParameter="DebugCopyFileName" PropertyName="PluginDebugCopyFileName" />
-		</FetchOwnerFromFileTask>
-		<Message Text="Plugin Owner: $(PluginOwner)" Importance="high" />
-		<Message Text="Debug Copy File Name: $(PluginDebugCopyFileName)" Importance="high" Condition="'$(PluginDebugCopyFileName)' != ''" />
-	</Target>
-
-	<Target Name="PostBuild" AfterTargets="ILRepacker" Condition="'$(Configuration)' == 'Debug'">
+	<!-- Generate PluginInfo file -->
+	<Target Name="GeneratePluginInfoFile" BeforeTargets="CoreCompile">
 		<PropertyGroup>
-			<PluginName Condition="'$(PluginDebugCopyFileName)' != ''">$(PluginDebugCopyFileName)</PluginName>
-			<PluginName Condition="'$(PluginDebugCopyFileName)' == ''">$(MSBuildProjectName)</PluginName>
-			<DestinationFolder>C:\ProgramData\Lidarr\plugins\$(PluginOwner)\$(PluginName)</DestinationFolder>
+			<PluginInfoFile>$(IntermediateOutputPath)PluginInfo.cs</PluginInfoFile>
 		</PropertyGroup>
-		<Message Text="Debug Copy File Name: $(PluginDebugCopyFileName)" Importance="high" />
-		<Message Text="Plugin Name: $(PluginName)" Importance="high" />
-		<Message Text="Destination Folder: $(DestinationFolder)" Importance="high" />
-		<MakeDir Directories="$(DestinationFolder)" />
-		<Copy SourceFiles="$(TargetPath)" DestinationFiles="$(DestinationFolder)\$(PluginName).dll" SkipUnchangedFiles="true" />
-		<Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFiles="$(DestinationFolder)\$(PluginName).pdb" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
-		<Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFiles="$(DestinationFolder)\$(PluginName).deps.json" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
+		<ItemGroup>
+			<Compile Include="$(PluginInfoFile)" />
+		</ItemGroup>
+		<WriteLinesToFile File="$(PluginInfoFile)" Lines="namespace $(RootNamespace) { &#xD;&#xA;				public static class PluginInfo { &#xD;&#xA;					public const string Name = &quot;$(MSBuildProjectName)&quot;%3B&#xD;&#xA;					public const string Author = &quot;$(Author)&quot;%3B&#xD;&#xA;					public const string Branch = &quot;$(Branch)&quot;%3B&#xD;&#xA;					public const string GitCommit = &quot;$(GitCommit)&quot;%3B&#xD;&#xA;					public const string BuildDate = &quot;$([System.DateTime]::UtcNow.ToString(&quot;yyyy-MM-dd HH:mm:ss&quot;))&quot;%3B&#xD;&#xA;				} &#xD;&#xA;			}" Encoding="UTF-8" Overwrite="true" />
 	</Target>
 
+	<!-- Import the Debug.targets file -->
 	<Import Project="$(MSBuildProjectDirectory)\Debug.targets" />
 </Project>
