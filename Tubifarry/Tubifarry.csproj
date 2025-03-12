@@ -4,7 +4,6 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<AssemblyName>Lidarr.Plugin.$(MSBuildProjectName)</AssemblyName>
-		<InformationalVersion>$(AssemblyVersion)-$(Branch)</InformationalVersion>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 		<Author></Author>
