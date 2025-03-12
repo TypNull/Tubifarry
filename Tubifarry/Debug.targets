@@ -1,59 +1,15 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-	<!-- Define the FetchOwnerFromFileTask -->
-	<UsingTask TaskName="FetchOwnerFromFileTask" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-		<ParameterGroup>
-			<SourceFile ParameterType="System.String" Required="true" />
-			<Owner ParameterType="System.String" Output="true" />
-		</ParameterGroup>
-		<Task>
-			<Using Namespace="System" />
-			<Using Namespace="System.IO" />
-			<Using Namespace="System.Text.RegularExpressions" />
-			<Code Type="Fragment" Language="cs">
-				<![CDATA[
-    try
-    {
-        var sourceCode = File.ReadAllText(SourceFile);
-
-        var ownerRegex = new Regex(@"public\s+override\s+string\s+Owner\s*=>\s*@?""([^""]+)"";");
-        var ownerMatch = ownerRegex.Match(sourceCode);
-
-        if (ownerMatch.Success)
-            Owner = ownerMatch.Groups[1].Value;
-        else
-            Log.LogError("Owner property not found in the source file.");
-    }
-    catch (Exception ex)
-    {
-        Log.LogErrorFromException(ex);
-    }
-    ]]>
-			</Code>
-		</Task>
-	</UsingTask>
-
-	<!-- Define the FetchOwner target -->
-	<Target Name="FetchOwner" BeforeTargets="PostBuild" Condition="'$(Configuration)' == 'Debug'">
-		<FetchOwnerFromFileTask SourceFile="$(MSBuildProjectDirectory)\Plugin.cs">
-			<Output TaskParameter="Owner" PropertyName="PluginOwner" />
-		</FetchOwnerFromFileTask>
-		<Message Text="Plugin Owner: $(PluginOwner)" Importance="high" />
-	</Target>
-
-	<!-- Define the PostBuild target -->
+	<!-- Copy the files to the plugin folder -->
 	<Target Name="PostBuild" AfterTargets="ILRepacker" Condition="'$(Configuration)' == 'Debug'">
 		<PropertyGroup>
-			<!-- Extract the DLL name from the TargetPath -->
-			<DllName>$([System.IO.Path]::GetFileNameWithoutExtension('$(TargetPath)'))</DllName>
-			<PluginFolderName>$(MSBuildProjectName)</PluginFolderName>
-			<DestinationFolder>C:\ProgramData\Lidarr\plugins\$(PluginOwner)\$(PluginFolderName)</DestinationFolder>
+			<PluginName>$(MSBuildProjectName)</PluginName>
+			<DestinationFolder>C:\ProgramData\Lidarr\plugins\$(Author)\$(PluginName)</DestinationFolder>
 		</PropertyGroup>
-		<Message Text="DLL Name: $(DllName)" Importance="high" />
-		<Message Text="Plugin Folder Name: $(PluginFolderName)" Importance="high" />
+		<Message Text="Plugin Name: $(PluginName)" Importance="high" />
 		<Message Text="Destination Folder: $(DestinationFolder)" Importance="high" />
 		<MakeDir Directories="$(DestinationFolder)" />
-		<Copy SourceFiles="$(TargetPath)" DestinationFiles="$(DestinationFolder)\$(DllName).dll" SkipUnchangedFiles="true" />
-		<Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFiles="$(DestinationFolder)\$(DllName).pdb" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
-		<Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFiles="$(DestinationFolder)\$(DllName).deps.json" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
+		<Copy SourceFiles="$(TargetPath)" DestinationFiles="$(DestinationFolder)\Lidarr.Plugin.$(PluginName).dll" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="$(TargetDir)$(TargetName).pdb" DestinationFiles="$(DestinationFolder)\Lidarr.Plugin.$(PluginName).pdb" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).pdb')" />
+		<Copy SourceFiles="$(TargetDir)$(TargetName).deps.json" DestinationFiles="$(DestinationFolder)\Lidarr.Plugin.$(PluginName).deps.json" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)$(TargetName).deps.json')" />
 	</Target>
 </Project>
