@@ -1,0 +1,99 @@
+name: "📚 Documentation Improvement"
+description: Report issues or suggest improvements for Tubifarry documentation
+title: "[DOCS] "
+labels: ["documentation"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Documentation Improvement Request
+        Thank you for helping us improve our documentation!
+  
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs improvement?
+      options:
+        - Installation Guide
+        - User Manual
+        - API Reference
+        - FAQ
+        - Tutorial
+        - Wiki Page
+        - README
+        - Other (specify in description)
+    validations:
+      required: true
+  
+  - type: input
+    id: doc-location
+    attributes:
+      label: Documentation Location
+      description: URL or path to the documentation that needs improvement
+      placeholder: https://github.com/TypNull/Tubifarry/wiki/Installation or /docs/installation.md
+    validations:
+      required: true
+  
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current State
+      description: Describe what is currently in the documentation and why it needs improvement
+      placeholder: The current documentation is missing information about...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: suggested-changes
+    attributes:
+      label: Suggested Changes
+      description: Describe your suggested changes or additions
+      placeholder: |
+        I suggest adding a section about...
+        The following information should be included...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: proposed-text
+    attributes:
+      label: Proposed Text
+      description: If you have specific wording in mind, please provide it here
+      value: |
+        <!-- Do not remove the <details> tags, add your proposed text between them -->
+        <details>
+        <summary>Click to expand proposed text</summary>
+        
+        ## New Section Title
+        
+        Here is my suggested text for this section...
+        
+        </details>
+    validations:
+      required: false
+  
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Examples
+      description: If applicable, add screenshots or examples to illustrate your point
+      value: |
+        <!-- Do not remove the <details> tags, add your screenshots between them -->
+        <details>
+        <summary>Click to expand screenshots</summary>
+        
+        Upload or paste your screenshots here...
+        
+        </details>
+    validations:
+      required: false
+  
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to submit a pull request with these changes
+          required: false

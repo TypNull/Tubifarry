@@ -1,0 +1,177 @@
+name: Extract Git Information
+
+on:
+  workflow_call:
+    inputs:
+      tag_ref:
+        required: true
+        type: string
+        description: "The tag reference (usually github.ref)"
+    outputs:
+      git_commit:
+        description: "Git commit SHA used for the build"
+        value: ${{ jobs.git_info.outputs.git_commit }}
+      git_branch:
+        description: "Git branch name"
+        value: ${{ jobs.branch_detection.outputs.branch_name }}
+      git_tag:
+        description: "Git tag if available"
+        value: ${{ jobs.git_info.outputs.git_tag }}
+      repo_url:
+        description: "Repository URL (base URL without branch)"
+        value: ${{ jobs.git_info.outputs.repo_url }}
+      branch_repo_url:
+        description: "Repository URL with branch path for non-master branches"
+        value: ${{ jobs.git_info.outputs.branch_repo_url }}
+      repo_owner:
+        description: "Repository owner"
+        value: ${{ jobs.git_info.outputs.repo_owner }}
+      commit_messages:
+        description: "Commit messages since last release"
+        value: ${{ jobs.git_info.outputs.commit_messages }}
+      is_latestrelease:
+        description: "Whether this should be the newest stable release"
+        value: ${{ jobs.git_info.outputs.is_latestrelease }}
+
+jobs:
+  branch_detection:
+    uses: ./.github/workflows/branch-detection.yml
+    with:
+      github_ref: ${{ inputs.tag_ref }}
+
+  git_info:
+    runs-on: ubuntu-latest
+    needs: [branch_detection]
+    outputs:
+      git_commit: ${{ steps.extract_git_info.outputs.git_commit }}
+      git_tag: ${{ steps.extract_git_info.outputs.git_tag }}
+      repo_url: ${{ steps.extract_git_info.outputs.repo_url }}
+      branch_repo_url: ${{ steps.extract_git_info.outputs.branch_repo_url }}
+      repo_owner: ${{ steps.extract_git_info.outputs.repo_owner }}
+      commit_messages: ${{ steps.get_commit_messages.outputs.commit_messages }}
+      is_latestrelease: ${{ steps.check_latest_release.outputs.is_latestrelease }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure all Git refs are available
+        run: |
+          git fetch --prune --unshallow || git fetch --prune
+          git fetch --tags --force
+          
+          echo "Available remote branches:"
+          git branch -r
+          echo "Available tags:"
+          git tag -l
+
+      - name: Extract Git Information
+        id: extract_git_info
+        run: |
+          # Extract commit hash
+          GIT_COMMIT=$(git rev-parse --short HEAD)
+          echo "git_commit=$GIT_COMMIT" >> $GITHUB_OUTPUT
+          echo "Git commit: $GIT_COMMIT"
+          
+          # Get branch name from branch detection workflow
+          BRANCH_NAME="${{ needs.branch_detection.outputs.branch_name }}"
+          echo "Using branch name from detection: $BRANCH_NAME"
+          
+          # Extract tag name
+          GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "git_tag=$GIT_TAG" >> $GITHUB_OUTPUT
+          echo "Git tag: $GIT_TAG"
+          
+          # Extract repository URL
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          echo "repo_url=$REPO_URL" >> $GITHUB_OUTPUT
+          echo "Repository URL: $REPO_URL"
+          
+          # Create branch-specific repository URL
+          if [ "$BRANCH_NAME" != "master" ]; then
+            BRANCH_REPO_URL="$REPO_URL/tree/$BRANCH_NAME"
+            echo "Branch-specific URL: $BRANCH_REPO_URL"
+          else
+            BRANCH_REPO_URL="$REPO_URL"
+            echo "Using base URL for master branch: $BRANCH_REPO_URL"
+          fi
+          echo "branch_repo_url=$BRANCH_REPO_URL" >> $GITHUB_OUTPUT
+          
+          # Extract repository owner
+          REPO_OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f1)
+          echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
+          echo "Repository owner: $REPO_OWNER"
+
+      - name: Check if Latest Release
+        id: check_latest_release
+        run: |
+          BRANCH_NAME="${{ needs.branch_detection.outputs.branch_name }}"
+          CURRENT_TAG="${{ inputs.tag_ref }}"
+          CURRENT_TAG="${CURRENT_TAG#refs/tags/}"
+          VERSION_NUMBER="${CURRENT_TAG#v}"
+          
+          if [[ "$BRANCH_NAME" == "master" && ! "$VERSION_NUMBER" =~ ^0\. ]]; then
+            echo "is_latestrelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_latestrelease=false" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Branch: $BRANCH_NAME"
+          echo "Version: $VERSION_NUMBER"
+          echo "Is latest release: $(cat $GITHUB_OUTPUT | grep is_latestrelease | cut -d= -f2)"
+
+      - name: Get Commit Messages
+        id: get_commit_messages
+        run: |
+          # Get the current tag from inputs.tag_ref
+          CURRENT_TAG="${{ inputs.tag_ref }}"
+          CURRENT_TAG="${CURRENT_TAG#refs/tags/}"
+          echo "Current tag: $CURRENT_TAG"
+          
+          # Get a list of all tags sorted by creation date (newest first)
+          ALL_TAGS=$(git tag --sort=-creatordate)
+          echo "All tags:"
+          echo "$ALL_TAGS"
+          
+          # Find the previous tag (the tag after the current one in the sorted list)
+          PREVIOUS_TAG=""
+          FOUND_CURRENT=false
+          
+          for tag in $ALL_TAGS; do
+            if $FOUND_CURRENT; then
+              PREVIOUS_TAG=$tag
+              break
+            fi
+            
+            if [ "$tag" = "$CURRENT_TAG" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+          
+          echo "Previous tag found: $PREVIOUS_TAG"
+          
+          # Get commit messages between tags or all commits if no previous tag
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "No previous tag found. Retrieving all commit messages."
+            COMMIT_MESSAGES=$(git log --pretty=format:"- %h %s" -n 20)
+          else
+            echo "Getting commits between $PREVIOUS_TAG and $CURRENT_TAG"
+            COMMIT_MESSAGES=$(git log --pretty=format:"- %h %s" $PREVIOUS_TAG..$CURRENT_TAG)
+          fi
+          
+          # Check if we got any commit messages
+          if [ -z "$COMMIT_MESSAGES" ]; then
+            echo "No commit messages found!"
+            COMMIT_MESSAGES="- No significant changes detected between releases."
+          fi
+          
+          # Debug: Show the commit messages
+          echo "Commit messages:"
+          echo "$COMMIT_MESSAGES"
+          
+          # No need to base64 encode - we'll pass it directly
+          echo "commit_messages<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MESSAGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT

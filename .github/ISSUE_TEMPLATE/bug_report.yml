@@ -1,0 +1,119 @@
+name: "🐛 Bug Report"
+description: Report a bug or unexpected behavior in Tubifarry
+title: "[BUG] "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # Thank you for taking the time to report an issue!
+        Your feedback helps us make Tubifarry better for everyone.
+  
+  - type: input
+    id: tubifarry-version
+    attributes:
+      label: Tubifarry Version
+      description: What version of Tubifarry are you running?
+      placeholder: e.g., v1.8.0
+    validations:
+      required: true
+  
+  - type: input
+    id: lidarr-version
+    attributes:
+      label: Lidarr Version
+      description: What version of Lidarr are you using?
+      placeholder: e.g., v2.10.2
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Docker
+        - Other (specify in additional context)
+    validations:
+      required: true
+  
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is and the specific feature that's not working.
+      placeholder: I was trying to... and then... The search function doesn't work as expected because...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: I expected to see...
+    validations:
+      required: true
+  
+  - type: markdown
+    attributes:
+      value: |
+        ## Logs
+        
+        To help resolve your issue, trace logs are needed. Please follow these steps:
+        
+        1. **Enable trace logging** and replicate the problem you encountered
+        2. Guidance on how to enable trace logging can be found in the troubleshooting guide of Lidarr
+        3. Please paste your logs directly in the plaintext section below
+        4. Use the details tag to keep the issue readable or attach the logs as a file
+        
+        **Important:** If your logs do not contain the word **`trace`**, it will be difficult to provide help.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log Files
+      description: Please paste your trace logs below (replace the placeholder text)
+      value: |
+        <details>
+        <summary>Logs</summary>
+
+         ```plaintext
+        Paste your logs here...
+        ```
+        
+        </details>
+    validations:
+      required: true
+  
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem.
+      value: |
+        <details>
+        <summary>Screenshots</summary>
+        
+        <!-- Paste your screenshots here... -->
+        
+        </details>
+    validations:
+      required: false

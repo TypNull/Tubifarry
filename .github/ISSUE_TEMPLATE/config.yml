@@ -1,27 +1,12 @@
 # .github/ISSUE_TEMPLATE/config.yml
-
-# Disable blank issues (users must use a template)
 blank_issues_enabled: false
 
-# Set up contact links for additional support options
+# External links only - no template references
 contact_links:
-  - name: 🐛 Bug Reports
-    url: https://github.com/TypNull/Tubifarry/issues/new?template=bug_report.md
-    about: Report a bug or unexpected behavior in Tubifarry.
-
-  - name: ✨ Feature Requests
-    url: https://github.com/TypNull/Tubifarry/issues/new?template=feature_request.md
-    about: Suggest a new feature or improvement for Tubifarry.
-
-  - name: ❓ Questions & Support
+  - name: "❓ Questions & Support"
     url: https://github.com/TypNull/Tubifarry/discussions
     about: Ask questions or get help with Tubifarry in our Discussions forum.
-
-  - name: 📚 Documentation
+  
+  - name: "📖 Documentation"
     url: https://github.com/TypNull/Tubifarry/wiki
     about: Check out the official documentation for Tubifarry.
-
-# Optional: Customize the order of templates (if you have multiple templates)
-# templates:
-#   - feature_request.md
-#   - bug_report.md

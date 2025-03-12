@@ -1,0 +1,175 @@
+name: Extract Project Metadata
+
+on:
+  workflow_call:
+    inputs:
+      override_plugin_name:
+        required: false
+        type: string
+        description: "Override the plugin name if different from repository name"
+        default: ""
+    outputs:
+      plugin_name:
+        description: "The name of the plugin"
+        value: ${{ jobs.metadata.outputs.plugin_name }}
+      package_version:
+        description: "The version of the package"
+        value: ${{ jobs.metadata.outputs.package_version }}
+      build_suffix:
+        description: "Build suffix based on framework and branch name"
+        value: ${{ jobs.metadata.outputs.build_suffix }}
+      minimum_lidarr_version:
+        description: "Minimum Lidarr version required"
+        value: ${{ jobs.metadata.outputs.minimum_lidarr_version }}
+      is_prerelease:
+        description: "Whether this is a prerelease"
+        value: ${{ jobs.metadata.outputs.is_prerelease }}
+      framework:
+        description: "Framework version extracted from project file"
+        value: ${{ jobs.metadata.outputs.framework }}
+
+jobs:
+  branch_detection:
+    uses: ./.github/workflows/branch-detection.yml
+    with:
+      github_ref: ${{ github.ref }}
+
+  metadata:
+    runs-on: ubuntu-latest
+    needs: [branch_detection]
+    outputs:
+      plugin_name: ${{ steps.extract_repo_name.outputs.plugin_name }}
+      package_version: ${{ steps.extract_version.outputs.package_version }}
+      build_suffix: ${{ steps.build_info.outputs.build_suffix }}
+      branch_name: ${{ needs.branch_detection.outputs.branch_name }}
+      framework: ${{ steps.extract_framework.outputs.framework }}
+      minimum_lidarr_version: ${{ steps.fetch_minimum_lidarr_version.outputs.minimum_lidarr_version }}
+      is_prerelease: ${{ steps.extract_version.outputs.is_prerelease }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Ensure all Git refs are available
+        run: |
+          git fetch --prune --unshallow || git fetch --prune
+          git fetch --tags --force
+          
+          # Debug: Show all available branches and tags
+          echo "Available remote branches:"
+          git branch -r
+          echo "Available tags:"
+          git tag -l
+
+      - name: Extract repository name or use override
+        id: extract_repo_name
+        run: |
+          # Check if override_plugin_name is provided
+          if [ -n "${{ inputs.override_plugin_name }}" ]; then
+            PLUGIN_NAME="${{ inputs.override_plugin_name }}"
+            echo "Using provided plugin name override: $PLUGIN_NAME"
+          else
+            # Fall back to repository name
+            PLUGIN_NAME=$(basename $GITHUB_REPOSITORY)
+            echo "Using repository name as plugin name: $PLUGIN_NAME"
+          fi
+          echo "plugin_name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+
+      - name: Extract framework from project file
+        id: extract_framework
+        run: |
+          # Get plugin name 
+          PLUGIN_NAME="${{ steps.extract_repo_name.outputs.plugin_name }}"
+          echo "Looking for project file: $PLUGIN_NAME/$PLUGIN_NAME.csproj"
+          
+          # Check if the main project file exists
+          if [ -f "$PLUGIN_NAME/$PLUGIN_NAME.csproj" ]; then
+            PROJECT_FILE="$PLUGIN_NAME/$PLUGIN_NAME.csproj"
+          else
+            echo "Main project file not found, searching for any .csproj file..."
+            # Find the first .csproj file in the repo
+            PROJECT_FILE=$(find . -name "*.csproj" | head -n 1)
+          fi
+          
+          if [ -n "$PROJECT_FILE" ]; then
+            echo "Found project file: $PROJECT_FILE"
+            # Extract the TargetFramework using grep and sed
+            FRAMEWORK=$(grep -o '<TargetFramework>.*</TargetFramework>' "$PROJECT_FILE" | sed 's/<TargetFramework>\(.*\)<\/TargetFramework>/\1/')
+            echo "Extracted framework: $FRAMEWORK"
+          else
+            echo "No .csproj files found, defaulting to net6.0"
+            FRAMEWORK="net6.0"
+          fi
+          
+          # If framework is still empty, default to net6.0
+          if [ -z "$FRAMEWORK" ]; then
+            echo "Framework not found in project file, defaulting to net6.0"
+            FRAMEWORK="net6.0"
+          fi
+          
+          echo "Using framework: $FRAMEWORK"
+          echo "framework=$FRAMEWORK" >> $GITHUB_OUTPUT
+
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          # Remove branch suffix if present
+          if [[ "$TAG_VERSION" == *-* ]]; then
+            VERSION_ONLY=${TAG_VERSION%%-*}
+            echo "Extracted version without branch suffix: $VERSION_ONLY"
+            TAG_VERSION=$VERSION_ONLY
+          fi
+          echo "Extracted version: $TAG_VERSION"
+          echo "package_version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          if [[ "$TAG_VERSION" == 0.* ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine build suffix
+        id: build_info
+        run: |
+          # Get the branch name from branch detection workflow
+          BRANCH_NAME="${{ needs.branch_detection.outputs.branch_name }}"
+          echo "Using branch name from detection: $BRANCH_NAME"
+          
+          # Get the framework from the extract_framework step
+          FRAMEWORK="${{ steps.extract_framework.outputs.framework }}"
+          
+          # Format the build suffix based on branch
+          if [ "$BRANCH_NAME" = "master" ]; then
+            # On master, use only the framework
+            BUILD_SUFFIX="$FRAMEWORK"
+          else
+            # On other branches, use framework-branch format
+            BUILD_SUFFIX="$FRAMEWORK-$BRANCH_NAME"
+          fi
+          
+          echo "Framework: $FRAMEWORK"
+          echo "Build suffix: $BUILD_SUFFIX"
+          echo "build_suffix=$BUILD_SUFFIX" >> $GITHUB_OUTPUT
+
+      - name: Fetch Minimum Lidarr Version from Submodule
+        id: fetch_minimum_lidarr_version
+        run: |
+          if [ -f "Submodules/Lidarr/azure-pipelines.yml" ]; then
+            RAW_YAML=$(cat Submodules/Lidarr/azure-pipelines.yml)
+          else
+            echo "Error: Submodules/Lidarr/azure-pipelines.yml not found!"
+            exit 1
+          fi
+          MAJOR_VERSION=$(echo "$RAW_YAML" | grep "majorVersion:" | head -n 1 | sed "s/.*majorVersion: *'\([^']*\)'.*/\1/")
+          echo "Extracted majorVersion: $MAJOR_VERSION"
+          DOT_COUNT=$(echo "$MAJOR_VERSION" | awk -F. '{print NF-1}')
+          if [ "$DOT_COUNT" -eq 2 ]; then
+            MINIMUM_LIDARR_VERSION="${MAJOR_VERSION}.0"
+          else
+            MINIMUM_LIDARR_VERSION="$MAJOR_VERSION"
+          fi
+          echo "Minimum Lidarr Version: $MINIMUM_LIDARR_VERSION"
+          echo "minimum_lidarr_version=$MINIMUM_LIDARR_VERSION" >> $GITHUB_OUTPUT
