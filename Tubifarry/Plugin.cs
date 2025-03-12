@@ -10,21 +10,21 @@ using NzbDrone.Core.Profiles.Delay;
 namespace Tubifarry
 {
     public class Tubifarry : Plugin
-#if MASTER_BRANCH
+#if! MASTER_BRANCH
         , IHandle<ApplicationStartingEvent>
 #endif
     {
         private readonly Logger _logger;
-        private readonly IPluginService _pluginService;
+        private readonly Lazy<IPluginService> _pluginService;
         private readonly IManageCommandQueue _commandQueueManager;
 
         public override string Name => PluginInfo.Name;
         public override string Owner => PluginInfo.Author;
-        public override string GithubUrl => $"https://github.com/{PluginInfo.Name}/{PluginInfo.Author}/branch/{PluginInfo.Branch}";
+        public override string GithubUrl => PluginInfo.RepoUrl;
 
         private static Type[] ProtocolTypes => new Type[] { typeof(YoutubeDownloadProtocol), typeof(SoulseekDownloadProtocol) };
 
-        public Tubifarry(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, IPluginService pluginService, IManageCommandQueue commandQueueManager, Logger logger)
+        public Tubifarry(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols, Lazy<IPluginService> pluginService, IManageCommandQueue commandQueueManager, Logger logger)
         {
             _logger = logger;
             _commandQueueManager = commandQueueManager;
@@ -60,7 +60,7 @@ namespace Tubifarry
 
         public void Handle(ApplicationStartingEvent message)
         {
-            AvailableVersion = _pluginService.GetRemotePlugin(GithubUrl).Version;
+            AvailableVersion = _pluginService.Value.GetRemotePlugin(GithubUrl).Version;
             if (AvailableVersion > InstalledVersion)
                 _commandQueueManager.Push(new InstallPluginCommand() { GithubUrl = GithubUrl });
         }

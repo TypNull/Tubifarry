@@ -1,0 +1,34 @@
+﻿<Project>
+	<!-- Generate PluginInfo file -->
+	<Target Name="GeneratePluginInfoFile" BeforeTargets="CoreCompile">
+		<PropertyGroup>
+			<PluginInfoFile>$(IntermediateOutputPath)PluginInfo.cs</PluginInfoFile>
+		</PropertyGroup>
+		<ItemGroup>
+			<Compile Include="$(PluginInfoFile)" />
+		</ItemGroup>
+		<WriteLinesToFile
+			File="$(PluginInfoFile)"
+			Lines="namespace $(RootNamespace)
+{
+    public static class PluginInfo
+    {
+        public const string Name = &quot;$(MSBuildProjectName)&quot;%3B
+        public const string Author = &quot;$(Author)&quot;%3B
+        public const string Version = &quot;$(Version)&quot;%3B
+        public const string AssemblyVersion = &quot;$(AssemblyVersion)&quot;%3B
+        public const string InformationalVersion = &quot;$(InformationalVersion)&quot;%3B
+        public const string Branch = &quot;$(Branch)&quot;%3B
+        public const string GitCommit = &quot;$(GitCommit)&quot;%3B
+        public const string GitTag = &quot;$(GitTag)&quot;%3B
+        public const string RepoUrl = &quot;$(RepoUrl)&quot;%3B
+        public const string Framework = &quot;$(TargetFramework)&quot;%3B
+        public const string MinimumLidarrVersion = &quot;$(MinimumLidarrVersion)&quot;%3B
+        public const bool CI = $(CI)%3B
+        public const string BuildDate = &quot;$([System.DateTime]::UtcNow.ToString(&quot;yyyy-MM-dd HH:mm:ss&quot;))&quot;%3B
+    }
+}"
+			Encoding="UTF-8"
+			Overwrite="true" />
+	</Target>
+</Project>

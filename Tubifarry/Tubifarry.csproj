@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
 		<TargetFramework>net6.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -8,13 +7,20 @@
 		<InformationalVersion>$(AssemblyVersion)-$(Branch)</InformationalVersion>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-		<Author>TypNull</Author>
-		<Branch>master</Branch>
+		<Author></Author>
+		<Branch></Branch>
+		<GitCommit></GitCommit>
+		<GitTag></GitTag>
+		<RepoUrl></RepoUrl>
+		<ReleaseNotesFile></ReleaseNotesFile>
+		<MinimumLidarrVersion></MinimumLidarrVersion>
+		<CI>false</CI>
+		<InformationalVersion>$(AssemblyVersion)-$(Branch)</InformationalVersion>
 		<DefineConstants Condition="'$(Branch)' == 'master'">$(DefineConstants);MASTER_BRANCH</DefineConstants>
 		<DefineConstants Condition="'$(Branch)' == 'develop'">$(DefineConstants);DEV_BRANCH</DefineConstants>
 		<DefineConstants Condition="'$(Branch)' != 'master' AND '$(Branch)' != 'develop'">$(DefineConstants);FEATURE_BRANCH</DefineConstants>
 	</PropertyGroup>
-
+	
 	<ItemGroup>
 		<PackageReference Include="FuzzySharp" Version="2.0.2" />
 		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.40">
@@ -26,28 +32,18 @@
 		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
 		<PackageReference Include="YouTubeMusicAPI" Version="2.2.6" />
 	</ItemGroup>
-
+	
 	<ItemGroup>
 		<AdditionalFiles Remove="..\stylecop.json" />
 	</ItemGroup>
-
+	
 	<ItemGroup>
-		<ProjectReference Include="..\Submodules\Lidarr\src\Lidarr.Api.V1\Lidarr.Api.V1.csproj" />
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
 	</ItemGroup>
-
-	<!-- Generate PluginInfo file -->
-	<Target Name="GeneratePluginInfoFile" BeforeTargets="CoreCompile">
-		<PropertyGroup>
-			<PluginInfoFile>$(IntermediateOutputPath)PluginInfo.cs</PluginInfoFile>
-		</PropertyGroup>
-		<ItemGroup>
-			<Compile Include="$(PluginInfoFile)" />
-		</ItemGroup>
-		<WriteLinesToFile File="$(PluginInfoFile)" Lines="namespace $(RootNamespace) { &#xD;&#xA;				public static class PluginInfo { &#xD;&#xA;					public const string Name = &quot;$(MSBuildProjectName)&quot;%3B&#xD;&#xA;					public const string Author = &quot;$(Author)&quot;%3B&#xD;&#xA;					public const string Branch = &quot;$(Branch)&quot;%3B&#xD;&#xA;					public const string GitCommit = &quot;$(GitCommit)&quot;%3B&#xD;&#xA;					public const string BuildDate = &quot;$([System.DateTime]::UtcNow.ToString(&quot;yyyy-MM-dd HH:mm:ss&quot;))&quot;%3B&#xD;&#xA;				} &#xD;&#xA;			}" Encoding="UTF-8" Overwrite="true" />
-	</Target>
-
+	
 	<!-- Import the Debug.targets file -->
 	<Import Project="$(MSBuildProjectDirectory)\Debug.targets" />
+	<!-- Import the PluginInfo generation target -->
+	<Import Project="$(MSBuildProjectDirectory)\PluginInfo.targets" />
 </Project>
