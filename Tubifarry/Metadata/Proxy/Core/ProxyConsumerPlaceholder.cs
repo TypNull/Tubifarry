@@ -5,7 +5,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.ThingiProvider;
 
-namespace Tubifarry.Metadata.Proxy
+namespace Tubifarry.Metadata.Proxy.Core
 {
     public enum ProxyMode { Public, Internal }
     public interface IProxy : IProvider, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity

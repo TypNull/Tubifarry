@@ -2,7 +2,7 @@
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 
-namespace Tubifarry.Metadata
+namespace Tubifarry.Metadata.Proxy.Core
 {
     public interface IProxyProvideArtistInfo
     {

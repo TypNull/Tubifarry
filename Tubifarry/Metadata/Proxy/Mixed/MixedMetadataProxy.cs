@@ -4,6 +4,7 @@ using NLog;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Music;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.Mixed
 {
@@ -169,7 +170,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
 
         public override ValidationResult Test()
         {
-            _logger.Info("Test");
+            _logger.Debug("Test");
             return new ValidationResult();
         }
 

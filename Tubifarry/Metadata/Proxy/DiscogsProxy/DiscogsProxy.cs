@@ -5,6 +5,7 @@ using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Metadata;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {

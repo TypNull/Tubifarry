@@ -9,9 +9,10 @@ namespace Tubifarry.Metadata.Proxy.Mixed
         public void UpdateMetrics(string proxyName, double responseTimeMs, int newCount, bool success);
     }
 
-    public class AdaptiveThresholdManager : IProvideAdaptiveThreshold
+    public class AdaptiveThresholdManager : IProvideAdaptiveThreshold, IDisposable
     {
         private string? _configFilePath;
+        private bool _disposed;
         private System.Timers.Timer? _saveTimer;
         private bool _isDirty;
         private readonly object _lock = new();
@@ -135,5 +136,33 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 _isDirty = true;
             }
         }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    SaveConfig();
+                    if (_saveTimer != null)
+                    {
+                        _saveTimer.Stop();
+                        _saveTimer.Elapsed -= (s, e) => { if (_isDirty) SaveConfig(); };
+                        _saveTimer.Dispose();
+                        _saveTimer = null;
+                    }
+                }
+                _disposed = true;
+            }
+        }
+
+        ~AdaptiveThresholdManager() => Dispose(false);
+
     }
 }

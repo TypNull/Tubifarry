@@ -3,6 +3,7 @@ using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
 using System.Text;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {

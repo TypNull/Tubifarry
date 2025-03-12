@@ -3,6 +3,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using System.Net;
 using System.Text.Json;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.Deezer
 {
@@ -10,6 +11,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
     {
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
+        private readonly ICircuitBreaker _circuitBreaker;
 
         /// <summary>
         /// OAuth access token. When set, requests include access_token.
@@ -28,6 +30,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         {
             _httpClient = httpClient;
             _logger = NzbDroneLogger.GetLogger(this);
+            _circuitBreaker = CircuitBreakerFactory.GetBreaker(this);
         }
 
         /// <summary>
@@ -41,6 +44,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 builder.AddQueryParam("access_token", AuthToken);
             builder.AllowAutoRedirect = true;
             builder.SuppressHttpError = true;
+            builder.Headers.Add("User-Agent", "Test 1.0");
             builder.WithRateLimit(_rateLimit.TotalSeconds);
             _logger.Trace($"Building request for endpoint: {endpoint}");
             return builder;
@@ -53,6 +57,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         {
             try
             {
+                if (_circuitBreaker.IsOpen)
+                {
+                    _logger.Warn("Circuit breaker is open, skipping request to Deezer API");
+                    return default;
+                }
+
                 HttpRequest request = requestBuilder.Build();
                 HttpResponse response = await _httpClient.GetAsync(request);
 
@@ -61,6 +71,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                     if (retryCount >= MaxRetries)
                     {
                         _logger.Warn("Max retries reached due to rate limiting.");
+                        _circuitBreaker.RecordFailure();
                         return default;
                     }
                     int delayMs = InitialRetryDelayMs * (int)Math.Pow(2, retryCount);
@@ -71,14 +82,17 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     HandleErrorResponse(response);
+                    _circuitBreaker.RecordFailure();
                     return default;
                 }
                 using JsonDocument jsonDoc = JsonDocument.Parse(response.Content);
+                _circuitBreaker.RecordSuccess();
                 return jsonDoc.RootElement.Clone();
             }
             catch (HttpException ex)
             {
                 _logger.Warn($"API Error: {ex.Message}");
+                _circuitBreaker.RecordFailure();
                 return default;
             }
         }
