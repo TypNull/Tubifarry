@@ -33,7 +33,7 @@ namespace Tubifarry.Indexers.Soulseek
             int tarckCount = searchCriteria.Albums.FirstOrDefault()?.AlbumReleases.Value.Min(x => x.TrackCount) ?? 0;
             IndexerPageableRequestChain chain = new();
 
-            chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, searchCriteria.AlbumQuery, searchCriteria.InteractiveSearch, tarckCount));
+            chain.AddTier(DeferredGetRequests(searchCriteria.ArtistQuery, searchCriteria.ArtistQuery != searchCriteria.AlbumQuery ? searchCriteria.AlbumQuery : null, searchCriteria.InteractiveSearch, tarckCount));
 
             if (!Settings.UseFallbackSearch)
                 return chain;
