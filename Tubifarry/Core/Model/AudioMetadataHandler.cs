@@ -25,20 +25,76 @@ namespace Tubifarry.Core.Model
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
-        private static readonly Dictionary<AudioFormat, string[]> ConversionParameters = new()
+        /// <summary>
+        /// Base codec parameters that don't change with bitrate settings
+        /// </summary>
+        private static readonly Dictionary<AudioFormat, string[]> BaseConversionParameters = new()
         {
-            { AudioFormat.AAC,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
-            { AudioFormat.MP3,    new[] { "-codec:a libmp3lame", "-q:a 0", "-preset insane" } },
-            { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-compression_level 10", "-application audio" } },
-            { AudioFormat.Vorbis, new[] { "-codec:a libvorbis", "-q:a 7" } },
-            { AudioFormat.FLAC,   new[] { "-codec:a flac" } },
+            { AudioFormat.AAC,    new[] { "-codec:a aac", "-movflags +faststart", "-aac_coder twoloop" } },
+            { AudioFormat.MP3,    new[] { "-codec:a libmp3lame" } },
+            { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-application audio" } },
+            { AudioFormat.Vorbis, new[] { "-codec:a libvorbis" } },
+            { AudioFormat.FLAC,   new[] { "-codec:a flac", "-compression_level 8" } },
             { AudioFormat.ALAC,   new[] { "-codec:a alac" } },
-            { AudioFormat.WAV,    new[] { "-codec:a pcm_s16le" } },
-            { AudioFormat.MP4,    new[] { "-codec:a aac", "-q:a 0", "-movflags +faststart" } },
-            { AudioFormat.AIFF,   new[] { "-codec:a pcm_s16le" } },
-            { AudioFormat.OGG,    new[] { "-codec:a libvorbis", "-q:a 7" } },
-            { AudioFormat.AMR,    new[] { "-codec:a libopencore_amrnb", "-ar 8000", "-ab 12.2k" } },
-            { AudioFormat.WMA,    new[] { "-codec:a wmav2", "-b:a 192k" } }
+            { AudioFormat.WAV,    new[] { "-codec:a pcm_s16le", "-ar 44100" } },
+            { AudioFormat.MP4,    new[] { "-codec:a aac", "-movflags +faststart", "-aac_coder twoloop" } },
+            { AudioFormat.AIFF,   new[] { "-codec:a pcm_s16be" } },
+            { AudioFormat.OGG,    new[] { "-codec:a libvorbis" } },
+            { AudioFormat.AMR,    new[] { "-codec:a libopencore_amrnb", "-ar 8000" } },
+            { AudioFormat.WMA,    new[] { "-codec:a wmav2" } }
+        };
+
+        /// <summary>
+        /// Format-specific bitrate/quality parameter templates
+        /// </summary>
+        private static readonly Dictionary<AudioFormat, Func<int, string[]>> QualityParameters = new()
+        {
+            {
+                AudioFormat.AAC,
+                bitrate => bitrate < 256
+                    ? new[] { $"-b:a {bitrate}k" }
+                    : new[] { "-q:a 2" } // 2 is highest quality for AAC
+            },
+
+            {
+                AudioFormat.MP3,
+                bitrate => {
+                    int qualityLevel = bitrate switch {
+                        >= 220 => 0,   // V0 (~220-260kbps avg)
+                        >= 190 => 1,   // V1 (~190-250kbps)
+                        >= 170 => 2,   // V2 (~170-210kbps)
+                        >= 150 => 3,   // V3 (~150-195kbps)
+                        >= 130 => 4,   // V4 (~130-175kbps)
+                        >= 115 => 5,   // V5 (~115-155kbps)
+                        >= 100 => 6,   // V6 (~100-140kbps)
+                        >= 85 => 7,    // V7 (~85-125kbps)
+                        >= 65 => 8,    // V8 (~65-105kbps)
+                        _ => 9         // V9 (~45-85kbps)
+                    };
+                    return new[] { $"-q:a {qualityLevel}" };
+                }
+            },
+
+            {
+                AudioFormat.Opus,
+                bitrate => new[] {
+                    $"-b:a {bitrate}k",
+                    "-compression_level 10"
+                }
+            },
+
+            {
+                AudioFormat.Vorbis,
+                bitrate => new[] { $"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}" }
+            },
+
+            { AudioFormat.MP4, bitrate => new[] { $"-b:a {bitrate}k" } },
+            {
+                AudioFormat.OGG,
+                bitrate => new[] { $"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}" }
+            },
+            { AudioFormat.AMR, bitrate => new[] { $"-ab {bitrate}k" } },
+            { AudioFormat.WMA, bitrate => new[] { $"-b:a {bitrate}k" } }
         };
 
         private static readonly string[] ExtractionParameters = new[]
@@ -55,9 +111,16 @@ namespace Tubifarry.Core.Model
             { "MKV", new byte[] { 0x1A, 0x45, 0xDF, 0xA3 } }, // MKV (EBML)
         };
 
-        public async Task<bool> TryConvertToFormatAsync(AudioFormat audioFormat)
+        /// <summary>
+        /// Converts audio to the specified format with optional bitrate control.
+        /// </summary>
+        /// <param name="audioFormat">Target audio format</param>
+        /// <param name="targetBitrate">Optional target bitrate in kbps</param>
+        /// <returns>True if conversion succeeded, false otherwise</returns>
+        public async Task<bool> TryConvertToFormatAsync(AudioFormat audioFormat, int? targetBitrate = null)
         {
-            _logger?.Trace($"Converting {Path.GetFileName(TrackPath)} to {audioFormat}");
+            _logger?.Trace($"Converting {Path.GetFileName(TrackPath)} to {audioFormat}" +
+                          (targetBitrate.HasValue ? $" at {targetBitrate}kbps" : ""));
 
             if (!CheckFFmpegInstalled())
                 return false;
@@ -70,7 +133,7 @@ namespace Tubifarry.Core.Model
             if (audioFormat == AudioFormat.Unknown)
                 return true;
 
-            if (!ConversionParameters.ContainsKey(audioFormat))
+            if (!BaseConversionParameters.ContainsKey(audioFormat))
                 return false;
 
             string finalOutputPath = Path.ChangeExtension(TrackPath, AudioFormatHelper.GetFileExtensionForFormat(audioFormat));
@@ -82,10 +145,23 @@ namespace Tubifarry.Core.Model
                     File.Delete(tempOutputPath);
 
                 IConversion conversion = await FFmpeg.Conversions.FromSnippet.Convert(TrackPath, tempOutputPath);
-                foreach (string parameter in ConversionParameters[audioFormat])
+
+                foreach (string parameter in BaseConversionParameters[audioFormat])
                     conversion.AddParameter(parameter);
 
-                _logger?.Trace($"Starting FFmpeg conversion to {audioFormat}");
+                if (AudioFormatHelper.IsLossyFormat(audioFormat) && QualityParameters.ContainsKey(audioFormat))
+                {
+                    int bitrate = targetBitrate ?? AudioFormatHelper.GetDefaultBitrate(audioFormat);
+                    bitrate = AudioFormatHelper.ClampBitrate(audioFormat, bitrate);
+
+                    string[] qualityParams = QualityParameters[audioFormat](bitrate);
+                    foreach (string param in qualityParams)
+                        conversion.AddParameter(param);
+
+                    _logger?.Trace($"Applied quality parameters for {audioFormat}: {string.Join(", ", qualityParams)}");
+                }
+
+                _logger?.Trace($"Starting FFmpeg conversion");
                 await conversion.Start();
 
                 if (File.Exists(TrackPath))
@@ -355,13 +431,24 @@ namespace Tubifarry.Core.Model
                 byte[] magicNumber = new byte[4];
                 stream.Read(magicNumber, 0, 4);
 
+                // Windows PE
                 if (magicNumber[0] == 0x4D && magicNumber[1] == 0x5A)
                     return true;
-                if (magicNumber[0] == 0x7F && magicNumber[1] == 0x45 && magicNumber[2] == 0x4C && magicNumber[3] == 0x46)
+
+                // Linux ELF
+                if (magicNumber[0] == 0x7F && magicNumber[1] == 0x45 &&
+                    magicNumber[2] == 0x4C && magicNumber[3] == 0x46)
                     return true;
-                if (magicNumber[0] == 0xCF && magicNumber[1] == 0xFA && magicNumber[2] == 0xED && magicNumber[3] == 0xFE)
+
+                // macOS Mach-O (32-bit: 0xFEEDFACE, 64-bit: 0xFEEDFACF)
+                if (magicNumber[0] == 0xFE && magicNumber[1] == 0xED &&
+                    magicNumber[2] == 0xFA &&
+                    (magicNumber[3] == 0xCE || magicNumber[3] == 0xCF))
                     return true;
-                if (magicNumber[0] == 0xCE && magicNumber[1] == 0xFA && magicNumber[2] == 0xED && magicNumber[3] == 0xFE)
+
+                // Universal Binary (fat_header)
+                if (magicNumber[0] == 0xCA && magicNumber[1] == 0xFE &&
+                    magicNumber[2] == 0xBA && magicNumber[3] == 0xBE)
                     return true;
             }
             catch { }

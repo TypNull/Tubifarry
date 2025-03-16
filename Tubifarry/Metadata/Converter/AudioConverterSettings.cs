@@ -39,36 +39,26 @@ namespace Tubifarry.Metadata.Converter
             if (string.IsNullOrWhiteSpace(rule.Key) || string.IsNullOrWhiteSpace(rule.Value))
                 return false;
 
-            bool isValidSource = (string.Equals(rule.Key, "all", StringComparison.OrdinalIgnoreCase)) || (Enum.TryParse(rule.Key, true, out AudioFormat sourceFormat) && sourceFormat != AudioFormat.Unknown);
-            bool isValidTarget = Enum.TryParse(rule.Value, true, out AudioFormat targetFormat) && targetFormat != AudioFormat.Unknown;
-
-            return isValidSource && isValidTarget;
+            return RuleParser.TryParseRule(rule.Key, rule.Value, out _);
         }
 
         private bool IsValidLossyConversion(KeyValuePair<string, string> rule)
         {
-            if (rule.Key.Equals("all", StringComparison.OrdinalIgnoreCase))
+            if (!RuleParser.TryParseRule(rule.Key, rule.Value, out ConversionRule parsedRule))
+                return false;
+
+            if (parsedRule.IsGlobalRule)
                 return true;
 
-            if (!Enum.TryParse(rule.Key, true, out AudioFormat sourceFormat) || !Enum.TryParse(rule.Value, true, out AudioFormat targetFormat))
-                return false;
-
-            if (AudioFormatHelper.IsLossyFormat(sourceFormat) && !AudioFormatHelper.IsLossyFormat(targetFormat))
+            if (AudioFormatHelper.IsLossyFormat(parsedRule.SourceFormat) &&
+                !AudioFormatHelper.IsLossyFormat(parsedRule.TargetFormat))
                 return false;
 
             return true;
         }
 
-        private static bool IsValidStaticConversion(AudioConverterSettings settings)
-        {
-            AudioFormat targetFormat = (AudioFormat)settings.TargetFormat;
-
-            if (!AudioFormatHelper.IsLossyFormat(targetFormat))
-                if (settings.ConvertMP3 || settings.ConvertAAC || settings.ConvertOpus || settings.ConvertOther)
-                    return false;
-
-            return true;
-        }
+        private static bool IsValidStaticConversion(AudioConverterSettings settings) =>
+            AudioFormatHelper.IsLossyFormat((AudioFormat)settings.TargetFormat) || (!settings.ConvertMP3 && !settings.ConvertAAC && !settings.ConvertOpus && !settings.ConvertOther);
 
         private static async Task<bool> TestFFmpeg(string ffmpegPath)
         {
@@ -124,7 +114,7 @@ namespace Tubifarry.Metadata.Converter
         [FieldDefinition(8, Label = "Target Format", Type = FieldType.Select, SelectOptions = typeof(TargetAudioFormat), Section = MetadataSectionType.Metadata, HelpText = "Select the target format to convert audio files into.")]
         public int TargetFormat { get; set; } = (int)TargetAudioFormat.Opus;
 
-        [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Specify custom conversion rules in the format. These rules will override the default settings.")]
+        [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Specify custom conversion rules with format and bitrate conditions. Examples: 'mp3 -> opus:128' (MP3 to Opus 128kbps), 'mp3<=128 -> aac:128' (MP3 ≤128kbps to AAC 128kbps), 'flac -> mp3' (FLAC to MP3).")]
         public IEnumerable<KeyValuePair<string, string>> CustomConversion { get; set; } = Array.Empty<KeyValuePair<string, string>>();
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

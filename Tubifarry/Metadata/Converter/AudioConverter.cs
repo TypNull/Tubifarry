@@ -5,6 +5,7 @@ using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
+using Xabe.FFmpeg;
 
 namespace Tubifarry.Metadata.Converter
 {
@@ -17,86 +18,137 @@ namespace Tubifarry.Metadata.Converter
         public override string Name => "Codec Tinker";
 
         public override MetadataFile FindMetadataFile(Artist artist, string path) => default!;
-
         public override MetadataFileResult ArtistMetadata(Artist artist) => default!;
-
         public override MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
+        public override List<ImageFileResult> ArtistImages(Artist artist) => default!;
+        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => default!;
+        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => default!;
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile)
         {
-            if (ShouldConvertTrack(trackFile))
+            if (ShouldConvertTrack(trackFile).Result)
                 ConvertTrack(trackFile).Wait();
+            else
+                _logger.Trace($"No rule matched for {trackFile.OriginalFilePath}");
             return null!;
         }
 
-        public override List<ImageFileResult> ArtistImages(Artist artist) => default!;
-
-        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => default!;
-
-        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => default!;
-
         private async Task ConvertTrack(TrackFile trackFile)
         {
-            AudioFormat trackFormat = AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(trackFile.Path));
+            AudioFormat trackFormat = GetTrackAudioFormat(trackFile.Path);
             if (trackFormat == AudioFormat.Unknown)
-            {
-                _logger.Warn("Unknown audio format for track: {0}", trackFile.Path);
                 return;
-            }
 
-            AudioFormat targetFormat = GetTargetFormatForTrack(trackFormat);
+            int? currentBitrate = await GetTrackBitrateAsync(trackFile.Path);
+
+            (AudioFormat targetFormat, int? targetBitrate) = GetTargetConversionForTrack(trackFormat, currentBitrate);
             if (targetFormat == AudioFormat.Unknown)
                 return;
 
-            _logger.Debug("Converting track from {0} to {1}: {2}", trackFormat, targetFormat, trackFile.Path);
+            LogConversionPlan(trackFormat, currentBitrate, targetFormat, targetBitrate, trackFile.Path);
 
+            await PerformConversion(trackFile, targetFormat, targetBitrate);
+        }
+
+        private async Task PerformConversion(TrackFile trackFile, AudioFormat targetFormat, int? targetBitrate)
+        {
             AudioMetadataHandler audioHandler = new(trackFile.Path);
-            bool success = await audioHandler.TryConvertToFormatAsync(targetFormat);
+            bool success = await audioHandler.TryConvertToFormatAsync(targetFormat, targetBitrate);
             trackFile.Path = audioHandler.TrackPath;
 
             if (success)
-                _logger.Info("Successfully converted track: {0}", trackFile.Path);
+                _logger.Info($"Successfully converted track: {trackFile.Path}");
             else
-                _logger.Warn("Failed to convert track: {0}", trackFile.Path);
+                _logger.Warn($"Failed to convert track: {trackFile.Path}");
         }
 
-        private AudioFormat GetTargetFormatForTrack(AudioFormat trackFormat)
+        private async Task<int?> GetTrackBitrateAsync(string filePath)
         {
-            foreach (KeyValuePair<string, string> rule in Settings.CustomConversion)
+            try
             {
-                if (rule.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase) && Enum.TryParse(rule.Value, true, out AudioFormat customTargetFormat))
-                {
-                    _logger.Trace("Using custom target format {0} for track format {1}", customTargetFormat, trackFormat);
-                    return customTargetFormat;
-                }
+                IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(filePath);
+                IAudioStream? audioStream = mediaInfo.AudioStreams.FirstOrDefault();
+
+                if (audioStream == null)
+                    return null;
+
+                return AudioFormatHelper.RoundToStandardBitrate((int)(audioStream.Bitrate / 1000));
             }
-            if (Settings.CustomConversion.FirstOrDefault(x => x.Key.Equals("all", StringComparison.OrdinalIgnoreCase)) is KeyValuePair<string, string> all && Enum.TryParse(all.Value, true, out AudioFormat customAllTargetsFormat))
+            catch (Exception ex)
             {
-                _logger.Trace("Using custom target format {0} for track format {1}", customAllTargetsFormat, trackFormat);
-                if (AudioFormatHelper.IsLossyFormat(trackFormat) && !AudioFormatHelper.IsLossyFormat(customAllTargetsFormat))
-                {
-                    _logger.Warn("Blocked lossy ➔ lossless conversion via 'all' rule for: {0}", trackFormat);
-                    return AudioFormat.Unknown;
-                }
-                return customAllTargetsFormat;
+                _logger.Error(ex, "Failed to get bitrate: {0}", filePath);
+                return null;
             }
-            return (AudioFormat)Settings.TargetFormat;
         }
 
-        private bool ShouldConvertTrack(TrackFile trackFile)
+        private (AudioFormat TargetFormat, int? TargetBitrate) GetTargetConversionForTrack(AudioFormat trackFormat, int? currentBitrate)
         {
-            AudioFormat trackFormat = AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(trackFile.Path));
+            foreach (KeyValuePair<string, string> ruleEntry in Settings.CustomConversion)
+            {
+                if (!RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule))
+                    continue;
+
+                if (!IsRuleMatching(rule, trackFormat, currentBitrate))
+                    continue;
+
+                if (AudioFormatHelper.IsLossyFormat(trackFormat) && !AudioFormatHelper.IsLossyFormat(rule.TargetFormat))
+                {
+                    _logger.Warn($"Blocked lossy to lossless conversion from {trackFormat}");
+                    return (AudioFormat.Unknown, null);
+                }
+
+                return (rule.TargetFormat, rule.TargetBitrate);
+            }
+            return ((AudioFormat)Settings.TargetFormat, null);
+        }
+
+        private async Task<bool> ShouldConvertTrack(TrackFile trackFile)
+        {
+            AudioFormat trackFormat = GetTrackAudioFormat(trackFile.Path);
             if (trackFormat == AudioFormat.Unknown)
-            {
-                _logger.Warn("Unknown audio format for track: {0}", trackFile.Path);
                 return false;
-            }
 
-            bool hasDirectRule = Settings.CustomConversion.Any(r => r.Key.Equals(trackFormat.ToString(), StringComparison.OrdinalIgnoreCase));
-            bool hasGlobalRule = Settings.CustomConversion.Any(r => r.Key.Equals("all", StringComparison.OrdinalIgnoreCase));
-            bool defaultConversion = IsFormatEnabledForConversion(trackFormat);
-            return hasDirectRule || hasGlobalRule || defaultConversion;
+            int? currentBitrate = await GetTrackBitrateAsync(trackFile.Path);
+            _logger.Trace($"Track bitrate found for {trackFile.Path} at {currentBitrate ?? 0}kbps");
+
+            if (MatchesAnyCustomRule(trackFormat, currentBitrate))
+                return true;
+            return IsFormatEnabledForConversion(trackFormat);
         }
+
+        private bool MatchesAnyCustomRule(AudioFormat trackFormat, int? currentBitrate) =>
+            Settings.CustomConversion.Any(ruleEntry => RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule) && IsRuleMatching(rule, trackFormat, currentBitrate));
+
+        private bool IsRuleMatching(ConversionRule rule, AudioFormat trackFormat, int? currentBitrate)
+        {
+            bool formatMatches = rule.IsGlobalRule || rule.SourceFormat == trackFormat;
+            bool bitrateMatches = rule.MatchesBitrate(currentBitrate);
+            if (formatMatches && bitrateMatches)
+            {
+                _logger.Debug($"Matched conversion rule: {rule}");
+                return true;
+            }
+            return false;
+        }
+
+        private AudioFormat GetTrackAudioFormat(string trackPath)
+        {
+            AudioFormat trackFormat = AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(trackPath));
+            if (trackFormat == AudioFormat.Unknown)
+                _logger.Warn($"Unknown audio format for track: {trackPath}");
+            return trackFormat;
+        }
+
+        private void LogConversionPlan(AudioFormat sourceFormat, int? sourceBitrate, AudioFormat targetFormat, int? targetBitrate, string trackPath)
+        {
+            string sourceDescription = FormatDescriptionWithBitrate(sourceFormat, sourceBitrate);
+            string targetDescription = FormatDescriptionWithBitrate(targetFormat, targetBitrate);
+
+            _logger.Debug($"Converting {sourceDescription} to {targetDescription}: {trackPath}");
+        }
+
+        private static string FormatDescriptionWithBitrate(AudioFormat format, int? bitrate)
+            => format + (bitrate.HasValue ? $" ({bitrate}kbps)" : "");
 
         private bool IsFormatEnabledForConversion(AudioFormat format) => format switch
         {
