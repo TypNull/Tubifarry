@@ -20,7 +20,6 @@ namespace Tubifarry.Indexers.Soulseek
         public override TimeSpan RateLimit => new(3);
 
         private readonly IIndexerRequestGenerator _indexerRequestGenerator;
-
         private readonly IParseIndexerResponse _parseIndexerResponse;
 
         internal new SlskdSettings Settings => base.Settings;
@@ -28,7 +27,7 @@ namespace Tubifarry.Indexers.Soulseek
         public SlskdIndexer(IHttpClient httpClient, IIndexerStatusService indexerStatusService, IConfigService configService, IParsingService parsingService, Logger logger)
           : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
-            _parseIndexerResponse = new SlskdParser(this, httpClient);
+            _parseIndexerResponse = new SlskdIndexerParser(this, httpClient);
             _indexerRequestGenerator = new SlskdRequestGenerator(this, httpClient);
         }
 
