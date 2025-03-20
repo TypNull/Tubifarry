@@ -6,32 +6,37 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.Clients;
+using NzbDrone.Core.Download.History;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using System.Net;
 using System.Text.Json;
 using Tubifarry.Core.Model;
-using Tubifarry.Core.Records;
-using Tubifarry.Core.Utilities;
+using Tubifarry.Indexers.Soulseek;
 
 namespace Tubifarry.Download.Clients.Soulseek
 {
     public class SlskdClient : DownloadClientBase<SlskdProviderSettings>
     {
         private readonly IHttpClient _httpClient;
+        private readonly IDownloadHistoryService _downloadService;
 
-        private static readonly Dictionary<DownloadKey, SlskdDownloadItem> _downloadMappings = new();
+        private static readonly Dictionary<DownloadKey<int, string>, SlskdDownloadItem> _downloadMappings = new();
 
         public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
 
-        public SlskdClient(IHttpClient httpClient, IConfigService configService, IDiskProvider diskProvider, IRemotePathMappingService remotePathMappingService, Logger logger)
-            : base(configService, diskProvider, remotePathMappingService, logger) => _httpClient = httpClient;
+        public SlskdClient(IHttpClient httpClient, IDownloadHistoryService downloadService, IConfigService configService, IDiskProvider diskProvider, IRemotePathMappingService remotePathMappingService, Logger logger)
+            : base(configService, diskProvider, remotePathMappingService, logger)
+        {
+            _httpClient = httpClient;
+            _downloadService = downloadService;
+        }
 
         public override async Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer)
         {
-            SlskdDownloadItem item = new(remoteAlbum);
+            SlskdDownloadItem item = new(remoteAlbum.Release);
             try
             {
                 HttpRequest request = BuildHttpRequest(remoteAlbum.Release.DownloadUrl, HttpMethod.Post, remoteAlbum.Release.Source);
@@ -51,33 +56,23 @@ namespace Tubifarry.Download.Clients.Soulseek
                 catch { }
                 return null!;
             }
-            return item.ID.ToString();
+            return item.ID;
         }
 
         private void FileStateChanged(object? sender, SlskdFileState fileState)
         {
             fileState.UpdateMaxRetryCount(Settings.RetryAttempts);
-            string filename = fileState.File.Filename;
-            string extension = Path.GetExtension(filename);
-            AudioFormat format = AudioFormatHelper.GetAudioCodecFromExtension(extension.TrimStart('.'));
-            if (fileState.GetStatus() == DownloadItemStatus.Warning)
-            {
-                _logger.Trace($"Retrying download for file: {filename}. Attempt {fileState.RetryCount} of {fileState.MaxRetryCount}");
-                _ = RetryDownloadAsync(fileState, (SlskdDownloadItem)sender!);
+            if (fileState.GetStatus() != DownloadItemStatus.Warning)
                 return;
-            }
-
-            if (fileState.GetStatus() != DownloadItemStatus.Completed || format == AudioFormat.Unknown)
-                return;
-            if (Settings.UseLRCLIB)
-                PostProcess((SlskdDownloadItem)sender!, fileState.File);
+            _logger.Trace($"Retrying download for file: {fileState.File.Filename}. Attempt {fileState.RetryCount} of {fileState.MaxRetryCount}");
+            _ = RetryDownloadAsync(fileState, (SlskdDownloadItem)sender!);
         }
 
         private async Task RetryDownloadAsync(SlskdFileState fileState, SlskdDownloadItem item)
         {
             try
             {
-                using JsonDocument doc = JsonDocument.Parse(item.RemoteAlbum.Release.Source);
+                using JsonDocument doc = JsonDocument.Parse(item.ReleaseInfo.Source);
                 JsonElement root = doc.RootElement;
                 JsonElement matchingItem = root.EnumerateArray()
                     .FirstOrDefault(x => x.GetProperty("Filename").GetString() == fileState.File.Filename);
@@ -86,7 +81,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                     return;
                 string payload = JsonSerializer.Serialize(new[] { matchingItem });
 
-                HttpRequest request = BuildHttpRequest(item.RemoteAlbum.Release.DownloadUrl, HttpMethod.Post, payload);
+                HttpRequest request = BuildHttpRequest(item.ReleaseInfo.DownloadUrl, HttpMethod.Post, payload);
                 HttpResponse response = await _httpClient.ExecuteAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Created)
@@ -98,28 +93,6 @@ namespace Tubifarry.Download.Clients.Soulseek
             }
             fileState.IncrementAttempt();
         }
-
-        private void PostProcess(SlskdDownloadItem item, SlskdDownloadFile file) => item.PostProcessTasks.Add(Task.Run(async () =>
-        {
-            string filename = file.Filename.Replace('\\', '/').TrimEnd('/').Split('/').LastOrDefault() ?? "";
-            string filePath = Path.Combine(item.GetFullFolderPath(GetRemoteToLocal()).FullPath, filename);
-
-            _logger.Trace($"Starting post-processing for file: {filePath}");
-
-            if (!File.Exists(filePath))
-                return;
-
-            _logger.Trace($"File found for post-processing: {filePath}");
-
-            FileInfoParser parser = new(filename);
-            if (parser.Title == null)
-                return;
-
-            Lyric? lyric = await Lyric.FetchLyricsFromLRCLIBAsync(Settings.LRCLIBInstance, item.RemoteAlbum.Release, parser.Title);
-            AudioMetadataHandler metadataHandler = new(filePath) { Lyric = lyric };
-
-            _logger.Trace($"Lyrics successfully written: {await metadataHandler.TryCreateLrcFileAsync(default)}");
-        }));
 
         public override IEnumerable<DownloadClientItem> GetItems()
         {
@@ -144,31 +117,59 @@ namespace Tubifarry.Download.Clients.Soulseek
         private async Task UpdateDownloadItemsAsync()
         {
             HttpRequest request = BuildHttpRequest("/api/v0/transfers/downloads/");
-            HttpResponse response = await _httpClient.ExecuteAsync(request);
+            HttpResponse response = await ExecuteAsync(request);
 
             if (response.StatusCode != HttpStatusCode.OK)
                 throw new DownloadClientException($"Failed to fetch downloads. Status Code: {response.StatusCode}");
+
             List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content);
+            HashSet<string> currentDownloadIds = new();
+
             downloads?.ForEach(user =>
             {
                 user.TryGetProperty("directories", out JsonElement directoriesElement);
                 foreach (SlskdDownloadDirectory dir in SlskdDownloadDirectory.GetDirectories(directoriesElement))
                 {
-                    HashCode hash = new();
-                    List<string> sortedFilenames = dir.Files?
-                        .Select(file => file.Filename)
-                        .OrderBy(filename => filename)
-                        .ToList() ?? new List<string>();
+                    string hash = SlskdDownloadItem.GetStableMD5Id(dir.Files?.Select(file => file.Filename) ?? new List<string>());
+                    currentDownloadIds.Add(hash);
 
-                    foreach (string? filename in sortedFilenames)
-                        hash.Add(filename);
-                    SlskdDownloadItem? item = GetDownloadItem(hash.ToHashCode());
+                    SlskdDownloadItem? item = GetDownloadItem(hash);
                     if (item == null)
+                    {
+                        DownloadHistory download = _downloadService.GetLatestGrab(hash);
+                        if (download != null)
+                            AddDownloadItem(new SlskdDownloadItem(download.Release));
+                        else if (Settings.Inclusive)
+                            AddDownloadItem(new SlskdDownloadItem(CreateReleaseInfoFromDownloadDirectory(user.GetProperty("username").ToString(), dir)));
                         continue;
+                    }
                     item.Username ??= user.GetProperty("username").GetString()!;
                     item.SlskdDownloadDirectory = dir;
                 }
             });
+
+            if (Settings.Inclusive)
+            {
+                foreach (SlskdDownloadItem? item in GetDownloadItems().Where(item => !currentDownloadIds.Contains(item.ID) && item.ReleaseInfo.DownloadProtocol == null))
+                {
+                    _logger.Trace($"Removing download item {item.ID} as it's no longer found in Slskd downloads");
+                    RemoveDownloadItem(item.ID);
+                }
+            }
+        }
+
+        private ReleaseInfo CreateReleaseInfoFromDownloadDirectory(string username, SlskdDownloadDirectory dir)
+        {
+            SlskdFolderData folderData = dir.CreateFolderData(username);
+
+            SlskdSearchData searchData = new(null, null, false, 1);
+
+            IGrouping<string, SlskdFileData> directory = dir.ToSlskdFileDataList().GroupBy(_ => dir.Directory).First();
+
+            AlbumData albumData = SlskdItemsParser.CreateAlbumData(null!, directory, searchData, folderData);
+            ReleaseInfo release = albumData.ToReleaseInfo();
+            release.DownloadProtocol = null;
+            return release;
         }
 
         private async Task<string?> FetchDownloadPathAsync()
@@ -204,11 +205,10 @@ namespace Tubifarry.Download.Clients.Soulseek
             OutputRootFolders = new List<OsPath> { _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath)) }
         };
 
-        private SlskdDownloadItem? GetDownloadItem(string downloadId) => GetDownloadItem(int.Parse(downloadId));
-        private SlskdDownloadItem? GetDownloadItem(int downloadId) => _downloadMappings.TryGetValue(new DownloadKey(Definition.Id, downloadId), out SlskdDownloadItem? item) ? item : null;
+        private SlskdDownloadItem? GetDownloadItem(string downloadId) => _downloadMappings.TryGetValue(new DownloadKey<int, string>(Definition.Id, downloadId), out SlskdDownloadItem? item) ? item : null;
         private IEnumerable<SlskdDownloadItem> GetDownloadItems() => _downloadMappings.Where(kvp => kvp.Key.OuterKey == Definition.Id).Select(kvp => kvp.Value);
-        private void AddDownloadItem(SlskdDownloadItem item) => _downloadMappings[new DownloadKey(Definition.Id, item.ID)] = item;
-        private bool RemoveDownloadItem(string downloadId) => _downloadMappings.Remove(new DownloadKey(Definition.Id, int.Parse(downloadId)));
+        private void AddDownloadItem(SlskdDownloadItem item) => _downloadMappings[new DownloadKey<int, string>(Definition.Id, item.ID)] = item;
+        private bool RemoveDownloadItem(string downloadId) => _downloadMappings.Remove(new DownloadKey<int, string>(Definition.Id, downloadId));
         private OsPath GetRemoteToLocal() => _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath));
 
         protected override void Test(List<ValidationFailure> failures) => failures.AddIfNotNull(TestConnection().Result);
@@ -244,7 +244,6 @@ namespace Tubifarry.Download.Clients.Soulseek
                 if (!jsonResponse.TryGetProperty("server", out JsonElement serverElement) ||
                     !serverElement.TryGetProperty("state", out JsonElement stateElement))
                     return new ValidationFailure("BaseUrl", "Failed to parse Slskd response: missing 'server' or 'state'.");
-
 
                 string? serverState = stateElement.GetString();
                 if (string.IsNullOrEmpty(serverState) || !serverState.Contains("Connected"))
@@ -293,10 +292,10 @@ namespace Tubifarry.Download.Clients.Soulseek
             {
                 if (!file.State.Contains("Completed"))
                 {
-                    await _httpClient.ExecuteAsync(BuildHttpRequest($"/api/v0/transfers/downloads/{downloadItem.Username}/{file.Id}", HttpMethod.Delete));
+                    await ExecuteAsync(BuildHttpRequest($"/api/v0/transfers/downloads/{downloadItem.Username}/{file.Id}", HttpMethod.Delete));
                     await Task.Delay(1000);
                 }
-                await _httpClient.ExecuteAsync(BuildHttpRequest($"/api/v0/transfers/downloads/{downloadItem.Username}/{file.Id}?remove=true", HttpMethod.Delete));
+                await ExecuteAsync(BuildHttpRequest($"/api/v0/transfers/downloads/{downloadItem.Username}/{file.Id}?remove=true", HttpMethod.Delete));
                 _logger.Trace($"Removed download with ID {file.Id}.");
             }));
         }

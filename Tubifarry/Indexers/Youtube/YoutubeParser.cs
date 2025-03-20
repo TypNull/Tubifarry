@@ -214,7 +214,7 @@ namespace Tubifarry.Indexers.Youtube
             }
         }
 
-        private static AlbumData ExtractAlbumInfo(AlbumSearchResult album) => new("Youtube")
+        private static AlbumData ExtractAlbumInfo(AlbumSearchResult album) => new("Youtube", nameof(YoutubeDownloadProtocol))
         {
             AlbumId = album.Id,
             AlbumName = album.Name,

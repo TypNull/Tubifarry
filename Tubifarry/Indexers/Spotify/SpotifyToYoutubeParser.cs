@@ -122,7 +122,7 @@ namespace Tubifarry.Indexers.Spotify
             requestContainer.Task.Wait();
         }
 
-        private static AlbumData ExtractAlbumInfo(JsonElement album) => new("Tubifarry")
+        private static AlbumData ExtractAlbumInfo(JsonElement album) => new("Tubifarry", nameof(YoutubeDownloadProtocol))
         {
             AlbumId = album.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "UnknownAlbumId" : "UnknownAlbumId",
             AlbumName = album.TryGetProperty("name", out JsonElement nameProp) ? nameProp.GetString() ?? "UnknownAlbum" : "UnknownAlbum",

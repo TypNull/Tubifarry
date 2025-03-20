@@ -13,7 +13,6 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
         private readonly IHttpClient _httpClient;
-        private readonly SlskdItemsParser _itemsParser;
         private SlskdSettings Settings => _indexer.Settings;
 
         public SlskdIndexerParser(SlskdIndexer indexer, IHttpClient httpClient)
@@ -21,7 +20,6 @@ namespace Tubifarry.Indexers.Soulseek
             _indexer = indexer;
             _logger = NzbDroneLogger.GetLogger(this);
             _httpClient = httpClient;
-            _itemsParser = new SlskdItemsParser(_logger);
         }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
@@ -57,9 +55,9 @@ namespace Tubifarry.Indexers.Soulseek
                         if (string.IsNullOrEmpty(directory.Key))
                             continue;
 
-                        SlskdFolderData folderData = SlskdFolderData.ParseFolderName(directory.Key).FillWithSlskdData(responseElement);
+                        SlskdFolderData folderData = SlskdItemsParser.ParseFolderName(directory.Key).FillWithSlskdData(responseElement);
 
-                        AlbumData albumData = _itemsParser.CreateAlbumData(idElement.GetString()!, directory, searchTextData, folderData, Settings);
+                        AlbumData albumData = SlskdItemsParser.CreateAlbumData(idElement.GetString()!, directory, searchTextData, folderData, Settings);
 
                         albumDatas.Add(albumData);
                     }

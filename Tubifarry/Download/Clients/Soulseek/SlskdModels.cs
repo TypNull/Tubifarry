@@ -14,10 +14,10 @@ namespace Tubifarry.Download.Clients.Soulseek
         private DateTime _lastUpdateTime;
         private long _lastDownloadedSize;
 
-        public int ID { get; set; }
+        public string ID { get; set; }
         public List<SlskdFileData> FileData { get; set; } = new();
         public string? Username { get; set; }
-        public RemoteAlbum RemoteAlbum { get; set; }
+        public ReleaseInfo ReleaseInfo { get; set; }
 
         public event EventHandler<SlskdFileState>? FileStateChanged;
 
@@ -40,22 +40,23 @@ namespace Tubifarry.Download.Clients.Soulseek
             }
         }
 
-        public SlskdDownloadItem(RemoteAlbum remoteAlbum)
+        public SlskdDownloadItem(ReleaseInfo releaseInfo)
         {
             _logger = NzbDroneLogger.GetLogger(this);
-            RemoteAlbum = remoteAlbum;
-            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(RemoteAlbum.Release.Source) ?? new();
+            ReleaseInfo = releaseInfo;
+            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(ReleaseInfo.Source) ?? new();
             _lastUpdateTime = DateTime.UtcNow;
             _lastDownloadedSize = 0;
-            HashCode hash = new();
-            List<string?> sortedFilenames = FileData
-                .Select(file => file.Filename)
-                .OrderBy(filename => filename)
-                .ToList();
-            foreach (string? filename in sortedFilenames)
-                hash.Add(filename);
-            ID = hash.ToHashCode();
-            _downloadClientItem = new() { DownloadId = ID.ToString(), CanBeRemoved = true, CanMoveFiles = true };
+            ID = GetStableMD5Id(FileData.Select(file => file.Filename));
+            _downloadClientItem = new() { DownloadId = ID, CanBeRemoved = true, CanMoveFiles = true };
+        }
+
+        public static string GetStableMD5Id(IEnumerable<string?> filenames)
+        {
+            using System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+            string combined = string.Join("|", filenames.OrderBy(f => f));
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(combined);
+            return BitConverter.ToString(md5.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
         }
 
         private void CompareFileStates(SlskdDownloadDirectory? newDirectory)
@@ -87,7 +88,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         public DownloadClientItem GetDownloadClientItem(OsPath downloadPath, TimeSpan? timeout)
         {
             _downloadClientItem.OutputPath = GetFullFolderPath(downloadPath);
-            _downloadClientItem.Title = RemoteAlbum.Release.Title;
+            _downloadClientItem.Title = ReleaseInfo.Title;
 
             if (SlskdDownloadDirectory?.Files == null)
                 return _downloadClientItem;
@@ -220,6 +221,17 @@ namespace Tubifarry.Download.Clients.Soulseek
                 );
             }
         }
+
+        public List<SlskdFileData> ToSlskdFileDataList() => Files?.Select(f => f.ToSlskdFileData()).ToList() ?? new List<SlskdFileData>();
+
+        public SlskdFolderData CreateFolderData(string username) => SlskdItemsParser.ParseFolderName(Directory) with
+        {
+            Username = username,
+            HasFreeUploadSlot = true,
+            UploadSpeed = 0,
+            LockedFileCount = 0,
+            LockedFiles = new List<string>()
+        };
     }
 
     public record SlskdDownloadFile(
@@ -270,23 +282,50 @@ namespace Tubifarry.Download.Clients.Soulseek
                 );
             }
         }
+
+        public SlskdFileData ToSlskdFileData()
+        {
+            string? extension = Path.GetExtension(Filename);
+            if (!string.IsNullOrEmpty(extension))
+                extension = extension.TrimStart('.');
+
+            return new SlskdFileData(
+                Filename: Filename,
+                BitRate: null,
+                BitDepth: null,
+                Size: Size,
+                Length: null,
+                Extension: extension ?? "",
+                SampleRate: null,
+                Code: 1,
+                IsLocked: false
+            );
+        }
     }
 
-
-    public readonly struct DownloadKey
+    public readonly struct DownloadKey<TOuterKey, TInnerKey> where TOuterKey : notnull where TInnerKey : notnull
     {
-        public int OuterKey { get; }
-        public int InnerKey { get; }
+        public TOuterKey OuterKey { get; }
+        public TInnerKey InnerKey { get; }
 
-        public DownloadKey(int outerKey, int innerKey)
+        public DownloadKey(TOuterKey outerKey, TInnerKey innerKey)
         {
             OuterKey = outerKey;
             InnerKey = innerKey;
         }
 
-        public override readonly bool Equals(object? obj) => obj is DownloadKey other && OuterKey == other.OuterKey && InnerKey == other.InnerKey;
-        public override readonly int GetHashCode() => HashCode.Combine(OuterKey, InnerKey);
-        public static bool operator ==(DownloadKey left, DownloadKey right) => left.Equals(right);
-        public static bool operator !=(DownloadKey left, DownloadKey right) => !(left == right);
+        public override readonly bool Equals(object? obj) =>
+            obj is DownloadKey<TOuterKey, TInnerKey> other &&
+            EqualityComparer<TOuterKey>.Default.Equals(OuterKey, other.OuterKey) &&
+            EqualityComparer<TInnerKey>.Default.Equals(InnerKey, other.InnerKey);
+
+        public override readonly int GetHashCode() =>
+            HashCode.Combine(OuterKey, InnerKey);
+
+        public static bool operator ==(DownloadKey<TOuterKey, TInnerKey> left, DownloadKey<TOuterKey, TInnerKey> right) =>
+            left.Equals(right);
+
+        public static bool operator !=(DownloadKey<TOuterKey, TInnerKey> left, DownloadKey<TOuterKey, TInnerKey> right) =>
+            !(left == right);
     }
 }

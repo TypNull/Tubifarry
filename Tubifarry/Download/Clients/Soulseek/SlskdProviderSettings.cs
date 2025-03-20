@@ -21,11 +21,6 @@ namespace Tubifarry.Download.Clients.Soulseek
                 .NotEmpty()
                 .WithMessage("API Key is required.");
 
-            // Validate LRCLIBInstance URL
-            RuleFor(x => x.LRCLIBInstance)
-                .IsValidUrl()
-                .WithMessage("LRCLIB instance URL must be a valid URL.");
-
             // Timeout validation (only if it has a value)
             RuleFor(c => c.Timeout)
                 .GreaterThanOrEqualTo(0.1)
@@ -51,17 +46,14 @@ namespace Tubifarry.Download.Clients.Soulseek
         [FieldDefinition(1, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "The API key for your Slskd instance. You can find or set this in the Slskd's settings under 'Options'.", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
-        [FieldDefinition(2, Label = "Use LRCLIB for Lyrics", HelpText = "Enable this option to fetch lyrics from LRCLIB after the download is complete.", Type = FieldType.Checkbox)]
-        public bool UseLRCLIB { get; set; } = false;
-
-        [FieldDefinition(3, Label = "LRC Lib Instance", Type = FieldType.Url, HelpText = "The URL of a LRC Lib instance to connect to. Default is 'https://lrclib.net'.", Advanced = true)]
-        public string LRCLIBInstance { get; set; } = "https://lrclib.net";
-
-        [FieldDefinition(4, Label = "Timeout", Type = FieldType.Textbox, HelpText = "Specify the maximum time to wait for a response from the Slskd instance before timing out. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes). Set leave blank for no timeout.", Unit = "hours", Advanced = true, Placeholder = "Enter timeout in hours")]
+        [FieldDefinition(3, Label = "Timeout", Type = FieldType.Textbox, HelpText = "Specify the maximum time to wait for a response from the Slskd instance before timing out. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes). Set leave blank for no timeout.", Unit = "hours", Advanced = true, Placeholder = "Enter timeout in hours")]
         public double? Timeout { get; set; }
 
-        [FieldDefinition(8, Label = "Retry Attempts", Type = FieldType.Number, HelpText = "The number of times to retry downloading a file if it fails.", Advanced = true, Placeholder = "Enter retry attempts")]
+        [FieldDefinition(4, Label = "Retry Attempts", Type = FieldType.Number, HelpText = "The number of times to retry downloading a file if it fails.", Advanced = true, Placeholder = "Enter retry attempts")]
         public int RetryAttempts { get; set; } = 1;
+
+        [FieldDefinition(5, Label = "Inclusive", Type = FieldType.Checkbox, HelpText = "Include all downloads made in Slskd, or only the ones initialized by this Lidarr instance.", Advanced = true)]
+        public bool Inclusive { get; set; }
 
         [FieldDefinition(98, Label = "Is Fetched remote", Type = FieldType.Checkbox, Hidden = HiddenType.Hidden)]
         public bool IsRemotePath { get; set; }

@@ -1,5 +1,4 @@
-﻿using NzbDrone.Core.Indexers;
-using NzbDrone.Core.Parser.Model;
+﻿using NzbDrone.Core.Parser.Model;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Utilities;
 
@@ -38,10 +37,16 @@ namespace Tubifarry.Core.Model
         public int Priotity { get; set; }
         public string? ExtraInfo { get; set; }
 
+        public string DownloadProtocol { get; set; }
+
         // Not used
         public AudioFormat Codec { get; set; } = AudioFormat.AAC;
 
-        public AlbumData(string name) => IndexerName = name;
+        public AlbumData(string name, string downloadProtocol)
+        {
+            IndexerName = name;
+            DownloadProtocol = downloadProtocol;
+        }
 
         /// <summary>
         /// Converts AlbumData into a ReleaseInfo object.
@@ -54,7 +59,7 @@ namespace Tubifarry.Core.Model
             DownloadUrl = AlbumId,
             InfoUrl = InfoUrl,
             PublishDate = ReleaseDateTime == DateTime.MinValue ? DateTime.UtcNow : ReleaseDateTime,
-            DownloadProtocol = nameof(YoutubeDownloadProtocol),
+            DownloadProtocol = DownloadProtocol,
             Title = ConstructTitle(),
             Codec = Codec.ToString(),
             Resolution = CoverResolution,

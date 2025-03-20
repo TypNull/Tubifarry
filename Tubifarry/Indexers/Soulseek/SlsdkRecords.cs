@@ -1,6 +1,5 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
@@ -35,58 +34,8 @@ namespace Tubifarry.Indexers.Soulseek
         }
     }
 
-
     public record SlskdFolderData(string Path, string Artist, string Album, string Year, string Username, bool HasFreeUploadSlot, long UploadSpeed, int LockedFileCount, List<string> LockedFiles)
     {
-        private static readonly Regex ArtistAlbumYearPattern = new(
-            @"^(?<artist>.+?)\s*-\s*(?<album>.+?)\s*(\((?<year>\d{4})\))?\s*(\[.*\])?$",
-            RegexOptions.IgnoreCase); // Matches: Artist - Album (Year) [Metadata]
-
-        private static readonly Regex YearArtistAlbumPattern = new(
-            @"^(?<year>\d{4})\s*-\s*(?<artist>.+?)\s*-\s*(?<album>.+?)$",
-            RegexOptions.IgnoreCase); // Matches: Year - Artist - Album
-
-        private static readonly Regex AlbumYearPattern = new(
-            @"^(?<album>.+?)\s*(\((?<year>\d{4})\))?\s*(\[.*\])?$",
-            RegexOptions.IgnoreCase); // Matches: Album (Year) [Metadata]
-
-        public static SlskdFolderData ParseFolderName(string folderName)
-        {
-            string folder = System.IO.Path.GetFileName(folderName);
-
-            Match? match = TryMatchRegex(folder, ArtistAlbumYearPattern) ?? TryMatchRegex(folder, YearArtistAlbumPattern) ?? TryMatchRegex(folder, AlbumYearPattern);
-
-            string artist = match?.Groups["artist"].Value.Trim() ?? GetFallbackArtist(folderName, folder);
-            string album = match?.Groups["album"].Value.Trim() ?? folder.Replace("_", " ").Trim();
-            string year = match?.Groups["year"].Value.Trim() ?? string.Empty;
-
-            return new SlskdFolderData(
-                Path: folderName,
-                Artist: artist,
-                Album: album,
-                Year: year,
-                Username: string.Empty,
-                HasFreeUploadSlot: false,
-                UploadSpeed: 0,
-                LockedFileCount: 0,
-                LockedFiles: new List<string>()
-            );
-        }
-
-        private static Match? TryMatchRegex(string input, Regex regex)
-        {
-            Match match = regex.Match(input);
-            return match.Success ? match : null;
-        }
-
-        private static string GetFallbackArtist(string folderName, string folder)
-        {
-            string[] folders = folderName.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            if (folders.Length >= 2)
-                return folders[^2].Replace("_", " ").Trim();
-            return folder;
-        }
-
         public SlskdFolderData FillWithSlskdData(JsonElement jsonElement) => this with
         {
             Username = jsonElement.GetProperty("username").GetString() ?? string.Empty,
