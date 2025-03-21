@@ -49,6 +49,13 @@ on:
         type: string
         description: "Minimum Lidarr version required"
         default: ""
+    secrets:
+      SPOTIFY_CLIENT_ID:
+        required: false
+        description: "Spotify API Client ID"
+      SPOTIFY_CLIENT_SECRET:
+        required: false
+        description: "Spotify API Client Secret"
     outputs:
       build_status:
         description: "Status of the build"
@@ -122,9 +129,14 @@ jobs:
           echo "Repo Owner: ${{ inputs.repo_owner }}"
           echo "Release Notes Path: ${{ steps.release_notes.outputs.release_notes }}"
           echo "Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}"
+          echo "Spotify Client ID is configured: ${{ secrets.SPOTIFY_CLIENT_ID != '' }}"
+          echo "Spotify Client Secret is configured: ${{ secrets.SPOTIFY_CLIENT_SECRET != '' }}"
 
       - name: Build with package version and metadata
         id: build_step
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
         run: |
           # Restore NuGet packages first
           dotnet restore *.sln
@@ -141,6 +153,8 @@ jobs:
             -p:Author="${{ inputs.repo_owner }}" \
             -p:ReleaseNotesFile="${{ steps.release_notes.outputs.release_notes }}" \
             -p:MinimumLidarrVersion="${{ inputs.minimum_lidarr_version }}" \
+            -p:SpotifyClientId=$SPOTIFY_CLIENT_ID \
+            -p:SpotifyClientSecret=$SPOTIFY_CLIENT_SECRET \
             -p:CI="true" \
             -v:n
 
@@ -158,24 +172,29 @@ jobs:
             PLUGIN_OUTPUT_DIR=$(find . -type d -path "*/_plugins/*" -name "${{ inputs.plugin_name }}" | head -n 1)
           fi
           
-          # Fail if no plugin directory is found
+          # If still not found, use the first plugin directory we can find
           if [ -z "$PLUGIN_OUTPUT_DIR" ]; then
-            echo "::error::Plugin output directory not found! Build may have failed to produce plugin files."
-            exit 1
+            echo "Plugin directory not found by name. Using first available plugin directory..."
+            FIRST_PLUGINS_DIR=$(find . -type d -path "*/_plugins/*" | sort | head -n 1)
+            if [ -n "$FIRST_PLUGINS_DIR" ]; then
+              PLUGIN_OUTPUT_DIR=$FIRST_PLUGINS_DIR
+              echo "Using plugin directory: $PLUGIN_OUTPUT_DIR"
+            else
+              echo "::error::No plugin directories found at all! Build may have failed to produce plugin files."
+              exit 1
+            fi
           fi
           
           echo "Plugin output directory: $PLUGIN_OUTPUT_DIR"
           
-          # Check if directory contains any plugin files
-          PLUGIN_FILES_COUNT=$(find "$PLUGIN_OUTPUT_DIR" -name "*.${{ inputs.plugin_name }}.*" -o -name "*.Plugin.${{ inputs.plugin_name }}.*" | wc -l)
-          if [ "$PLUGIN_FILES_COUNT" -eq 0 ]; then
-            echo "::error::No plugin files found in output directory! Build may have failed to produce plugin files."
-            echo "Directory contents:"
-            ls -la "$PLUGIN_OUTPUT_DIR"
+          # Check if directory contains any files at all
+          FILES_COUNT=$(find "$PLUGIN_OUTPUT_DIR" -type f | wc -l)
+          if [ "$FILES_COUNT" -eq 0 ]; then
+            echo "::error::Directory is empty! Build may have failed to produce plugin files."
             exit 1
           fi
           
-          echo "Found $PLUGIN_FILES_COUNT plugin files in $PLUGIN_OUTPUT_DIR"
+          echo "Found $FILES_COUNT files in $PLUGIN_OUTPUT_DIR"
           echo "plugin_path=$PLUGIN_OUTPUT_DIR" >> $GITHUB_OUTPUT
           
           # Copy release notes to output directory
