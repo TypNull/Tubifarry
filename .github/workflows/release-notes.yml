@@ -31,6 +31,10 @@ on:
         required: true
         type: string
         description: "Repository URL with branch path"
+      git_branch:
+        required: true
+        type: string
+        description: "Current git branch"
     outputs:
       release_notes_id:
         description: "ID of the generated release notes"
@@ -52,6 +56,13 @@ jobs:
           # Print the commit messages for debugging
           echo "Commit messages:"
           echo "${{ inputs.commit_messages }}"
+          
+          # Use the git_branch input directly
+          BRANCH_NAME="${{ inputs.git_branch }}"
+          echo "Using branch from git-info: $BRANCH_NAME"
+          
+          # Set default branch
+          DEFAULT_BRANCH="master"
           
           # Generate release notes in markdown
           cat > release_notes.md << EOL
@@ -83,6 +94,11 @@ jobs:
           **Minimum Lidarr Version:** ${{ inputs.minimum_lidarr_version }}
           **Commit:** ${{ inputs.git_commit }}
           EOL
+          
+          # Add extra line for branch detection if branch is not the default branch
+          if [ ! -z "$BRANCH_NAME" ] && [ "$BRANCH_NAME" != "$DEFAULT_BRANCH" ]; then
+            echo "Minimum Lidarr Version: 1000.${{ inputs.minimum_lidarr_version }} (This line is auto-generated for plugin parsing system - please disregard)" >> release_notes.md
+          fi
           
           # Debug: Show what was generated
           echo "Generated release notes:"

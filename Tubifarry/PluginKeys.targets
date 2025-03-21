@@ -1,0 +1,23 @@
+﻿<Project>
+	<!-- Generate PluginKeys file -->
+	<Target Name="GeneratePluginKeysFile" BeforeTargets="CoreCompile">
+		<PropertyGroup>
+			<PluginKeysFile>$(IntermediateOutputPath)PluginKeys.cs</PluginKeysFile>
+		</PropertyGroup>
+		<ItemGroup>
+			<Compile Include="$(PluginKeysFile)" />
+		</ItemGroup>
+		<WriteLinesToFile
+			File="$(PluginKeysFile)"
+			Lines="namespace $(RootNamespace)
+{
+    public static class PluginKeys
+    {
+        public const string SpotifyClientId = &quot;$(SpotifyClientId)&quot;%3B
+        public const string SpotifyClientSecret = &quot;$(SpotifyClientSecret)&quot;%3B
+    }
+}"
+			Encoding="UTF-8"
+			Overwrite="true" />
+	</Target>
+</Project>
