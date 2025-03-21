@@ -6,15 +6,12 @@
 		<AssemblyName>Lidarr.Plugin.$(MSBuildProjectName)</AssemblyName>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-		<Author></Author>
 		<Branch></Branch>
-		<GitCommit></GitCommit>
-		<GitTag></GitTag>
-		<RepoUrl></RepoUrl>
-		<ReleaseNotesFile></ReleaseNotesFile>
-		<MinimumLidarrVersion></MinimumLidarrVersion>
+		<Author>TypNull</Author>
+		<RepoUrl>https://github.com/TypNull/Tubifarry</RepoUrl>
 		<CI>false</CI>
 		<InformationalVersion>$(AssemblyVersion)-$(Branch)</InformationalVersion>
+		<DefineConstants Condition="'$(CI)' == true">$(DefineConstants);CI</DefineConstants>
 		<DefineConstants Condition="'$(Branch)' == 'master'">$(DefineConstants);MASTER_BRANCH</DefineConstants>
 		<DefineConstants Condition="'$(Branch)' == 'develop'">$(DefineConstants);DEV_BRANCH</DefineConstants>
 		<DefineConstants Condition="'$(Branch)' != 'master' AND '$(Branch)' != 'develop'">$(DefineConstants);FEATURE_BRANCH</DefineConstants>
@@ -45,4 +42,6 @@
 	<Import Project="$(MSBuildProjectDirectory)\Debug.targets" />
 	<!-- Import the PluginInfo generation target -->
 	<Import Project="$(MSBuildProjectDirectory)\PluginInfo.targets" />
+	<!-- Import the PluginKeys generation target -->
+	<Import Project="$(MSBuildProjectDirectory)\PluginKeys.targets" />
 </Project>
