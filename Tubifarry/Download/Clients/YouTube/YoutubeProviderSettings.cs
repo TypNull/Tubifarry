@@ -23,20 +23,10 @@ namespace Tubifarry.Download.Clients.YouTube
                 .Must(path => string.IsNullOrEmpty(path) || CookieManager.ParseCookieFile(path).Any())
                 .WithMessage("Cookie file is invalid or contains no valid cookies.");
 
-            // Validate LRCLIBInstance URL
-            RuleFor(x => x.LRCLIBInstance)
-                .IsValidUrl()
-                .WithMessage("LRCLIB instance URL must be a valid URL.");
-
             // Validate Chunks
             RuleFor(x => x.Chunks)
                 .Must(chunks => chunks > 0 && chunks < 5)
                 .WithMessage("Chunks must be greater than 0 and smaller than 5.");
-
-            // Validate SaveSyncedLyrics dependency
-            RuleFor(x => x.SaveSyncedLyrics)
-                .Must((settings, saveSyncedLyrics) => !saveSyncedLyrics || settings.UseLRCLIB)
-                .WithMessage("Saving synced lyrics requires 'Use LRCLIB Lyric Provider' to be enabled.");
 
             // Validate FFmpegPath (if re-encoding is enabled)
             RuleFor(x => x.FFmpegPath)
@@ -92,40 +82,31 @@ namespace Tubifarry.Download.Clients.YouTube
         [FieldDefinition(2, Label = "Use ID3v2.3 Tags", HelpText = "Enable this option to use ID3v2.3 tags for better compatibility with older media players like Windows Media Player.", Type = FieldType.Checkbox, Advanced = true)]
         public bool UseID3v2_3 { get; set; }
 
-        [FieldDefinition(3, Label = "Use LRCLIB Lyric Provider", HelpText = "Enable this option to fetch lyrics from LRCLIB.", Type = FieldType.Checkbox)]
-        public bool UseLRCLIB { get; set; } = false;
-
-        [FieldDefinition(4, Label = "Save Synced Lyrics", HelpText = "Enable this option to save synced lyrics to a separate .lrc file, if available. Requires '.lrc' to be allowed under Import Extra Files.", Type = FieldType.Checkbox)]
-        public bool SaveSyncedLyrics { get; set; } = false;
-
-        [FieldDefinition(5, Label = "LRC Lib Instance", Type = FieldType.Url, HelpText = "The URL of a LRC Lib instance to connect to. Default is 'https://lrclib.net'.", Advanced = true)]
-        public string LRCLIBInstance { get; set; } = "https://lrclib.net";
-
-        [FieldDefinition(6, Label = "ReEncode", Type = FieldType.Select, SelectOptions = typeof(ReEncodeOptions), HelpText = "Specify whether to re-encode audio files and how to handle FFmpeg.", Advanced = true)]
+        [FieldDefinition(3, Label = "ReEncode", Type = FieldType.Select, SelectOptions = typeof(ReEncodeOptions), HelpText = "Specify whether to re-encode audio files and how to handle FFmpeg.", Advanced = true)]
         public int ReEncode { get; set; } = (int)ReEncodeOptions.Disabled;
 
-        [FieldDefinition(7, Label = "FFmpeg Path", Type = FieldType.Path, Placeholder = "/downloads/FFmpeg", HelpText = "Specify the path to the FFmpeg binary. Not required if 'Disabled' is selected.", Advanced = true)]
+        [FieldDefinition(4, Label = "FFmpeg Path", Type = FieldType.Path, Placeholder = "/downloads/FFmpeg", HelpText = "Specify the path to the FFmpeg binary. Not required if 'Disabled' is selected.", Advanced = true)]
         public string FFmpegPath { get; set; } = string.Empty;
 
-        [FieldDefinition(8, Label = "File Chunk Count", Type = FieldType.Number, HelpText = "Number of chunks to split the download into. Each chunk is its own download. Note: Non-chunked downloads from YouTube are typically much slower.", Advanced = true)]
+        [FieldDefinition(5, Label = "File Chunk Count", Type = FieldType.Number, HelpText = "Number of chunks to split the download into. Each chunk is its own download. Note: Non-chunked downloads from YouTube are typically much slower.", Advanced = true)]
         public int Chunks { get; set; } = 2;
 
-        [FieldDefinition(9, Label = "Delay Min", Type = FieldType.Number, HelpText = "Minimum random delay between requests to avoid bot notifications.", Unit = "ms", Advanced = true)]
+        [FieldDefinition(6, Label = "Delay Min", Type = FieldType.Number, HelpText = "Minimum random delay between requests to avoid bot notifications.", Unit = "ms", Advanced = true)]
         public int RandomDelayMin { get; set; } = 100;
 
-        [FieldDefinition(10, Label = "Delay Max", Type = FieldType.Number, HelpText = "Maximum random delay between requests to avoid bot notifications.", Unit = "ms", Advanced = true)]
+        [FieldDefinition(7, Label = "Delay Max", Type = FieldType.Number, HelpText = "Maximum random delay between requests to avoid bot notifications.", Unit = "ms", Advanced = true)]
         public int RandomDelayMax { get; set; } = 2000;
 
-        [FieldDefinition(11, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits the download speed per download.", Unit = "KB/s", Advanced = true)]
+        [FieldDefinition(8, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits the download speed per download.", Unit = "KB/s", Advanced = true)]
         public int MaxDownloadSpeed { get; set; }
 
-        [FieldDefinition(12, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
+        [FieldDefinition(9, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
         public string PoToken { get; set; } = string.Empty;
 
-        [FieldDefinition(13, Label = "Visitor Data", Type = FieldType.Textbox, HelpText = "YouTube session data.", Advanced = true)]
+        [FieldDefinition(10, Label = "Visitor Data", Type = FieldType.Textbox, HelpText = "YouTube session data.", Advanced = true)]
         public string VisitorData { get; set; } = string.Empty;
 
-        [FieldDefinition(14, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
+        [FieldDefinition(11, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
         public string TrustedSessionGeneratorUrl { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

@@ -65,8 +65,6 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 YouTubeMusicClient = _ytClient,
                 Handler = RequestHandler.MainRequestHandlers[1],
-                TryIncludeSycLrc = provider.Settings.SaveSyncedLyrics,
-                TryIncludeLrc = provider.Settings.UseLRCLIB,
                 DownloadPath = provider.Settings.DownloadPath,
                 Chunks = provider.Settings.Chunks,
                 DelayBetweenAttemps = TimeSpan.FromSeconds(5),
@@ -75,7 +73,6 @@ namespace Tubifarry.Download.Clients.YouTube
                 RandomDelayMax = provider.Settings.RandomDelayMax,
                 MaxDownloadSpeed = provider.Settings.MaxDownloadSpeed * 1024,
                 NameingConfig = namingConfig,
-                LRCLIBInstance = provider.Settings.LRCLIBInstance,
                 UseID3v2_3 = provider.Settings.UseID3v2_3,
                 ReEncodeOptions = (ReEncodeOptions)provider.Settings.ReEncode,
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false)
