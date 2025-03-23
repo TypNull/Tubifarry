@@ -101,16 +101,25 @@ namespace Tubifarry.Indexers.Spotify
             {
                 try
                 {
-                    _logger.Trace("Attempting to create a new Spotify token.");
-                    HttpGet getter = new(new(HttpMethod.Get, "https://open.spotify.com/get_access_token?reason=transport&productType=web_player"));
-                    _token = await (await getter.LoadResponseAsync()).Content.ReadAsStringAsync(token);
-                    JsonElement dynamicObject = JsonSerializer.Deserialize<JsonElement>(_token)!;
-                    _token = dynamicObject.GetProperty("accessToken").ToString();
-                    if (_token == null)
+                    _logger.Trace("Attempting to create a new Spotify token using official endpoint.");
+                    HttpRequestMessage request = new(HttpMethod.Post, "https://accounts.spotify.com/api/token");
+                    string credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{PluginKeys.SpotifyClientId}:{PluginKeys.SpotifyClientSecret}"));
+                    request.Headers.Add("Authorization", $"Basic {credentials}");
+                    request.Content = (FormUrlEncodedContent)new(new Dictionary<string, string> { { "grant_type", "client_credentials" } });
+                    System.Net.Http.HttpClient httpClient = HttpGet.HttpClient;
+                    HttpResponseMessage response = await httpClient.SendAsync(request, token);
+                    response.EnsureSuccessStatusCode();
+                    string responseContent = await response.Content.ReadAsStringAsync(token);
+                    _logger.Info($"Spotify token response: {responseContent}");
+                    JsonElement dynamicObject = JsonSerializer.Deserialize<JsonElement>(responseContent)!;
+                    _token = dynamicObject.GetProperty("access_token").GetString() ?? "";
+                    if (string.IsNullOrEmpty(_token))
                         return false;
-                    _tokenExpiry = DateTime.Now.AddMinutes(59);
-                    _logger.Trace("Successfully created a new Spotify token.");
-
+                    int expiresIn = 3600;
+                    if (dynamicObject.TryGetProperty("expires_in", out JsonElement expiresElement))
+                        expiresIn = expiresElement.GetInt32();
+                    _tokenExpiry = DateTime.Now.AddSeconds(expiresIn - 60);
+                    _logger.Trace($"Successfully created a new Spotify token. Expires at {_tokenExpiry}");
                 }
                 catch (Exception ex)
                 {

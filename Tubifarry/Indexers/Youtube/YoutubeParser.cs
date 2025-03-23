@@ -2,7 +2,6 @@
 using NLog;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
-using System.Net;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
@@ -19,15 +18,12 @@ namespace Tubifarry.Indexers.Youtube
     }
 
     /// <summary>
-    /// Parses Spotify responses and converts them to YouTube Music releases.
+    /// Parses responses and converts them to YouTube Music releases.
     /// </summary>
     public class YoutubeParser : IYoutubeParser
     {
         private YouTubeMusicClient _ytClient;
-
         private readonly Logger _logger;
-        private string? _cookiePath;
-        private string? _poToken;
 
         public YoutubeParser(Logger logger)
         {
@@ -36,27 +32,40 @@ namespace Tubifarry.Indexers.Youtube
         }
 
         /// <summary>
-        /// Sets cookies and poToken for the YouTube Music client.
+        /// Sets authentication for the YouTube Music client.
         /// </summary>
-        /// <param name="settings">The settings containing cookie path and poToken.</param>
+        /// <param name="settings">The settings containing authentication information.</param>
         public void SetAuth(YoutubeIndexerSettings settings)
         {
-            if (settings.CookiePath == _cookiePath && settings.PoToken == _poToken)
-                return;
-            if (string.IsNullOrEmpty(settings.CookiePath) && string.IsNullOrEmpty(settings.PoToken))
+            if (settings.CookiePath == null && settings.PoToken == null &&
+                  settings.VisitorData == null && settings.TrustedSessionGeneratorUrl == null)
                 return;
 
-            _cookiePath = settings.CookiePath;
-            _poToken = settings.PoToken;
-            Cookie[]? cookies = !string.IsNullOrEmpty(settings.CookiePath) ? CookieManager.ParseCookieFile(settings.CookiePath) : null;
-            _ytClient = new YouTubeMusicClient(cookies: cookies, poToken: settings.PoToken);
+            _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(
+                      settings.TrustedSessionGeneratorUrl,
+                      settings.PoToken,
+                      settings.VisitorData,
+                      settings.CookiePath,
+                      logger: _logger).Result;
+        }
+
+        /// <summary>
+        /// Compare if two settings objects have the same auth-related properties
+        /// </summary>
+        private static bool SettingsEqual(YoutubeIndexerSettings settings1, YoutubeIndexerSettings? settings2)
+        {
+            if (settings1 == null || settings2 == null)
+                return false;
+
+            return settings1.CookiePath == settings2.CookiePath &&
+                   settings1.PoToken == settings2.PoToken &&
+                   settings1.VisitorData == settings2.VisitorData &&
+                   settings1.TrustedSessionGeneratorUrl == settings2.TrustedSessionGeneratorUrl;
         }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
             List<ReleaseInfo> releases = new();
-            _logger.Trace("Starting to parse Spotify response.");
-
             try
             {
                 IEnumerable<AlbumSearchResult> albums = ParseSearchResponse(JObject.Parse(indexerResponse.Content)).Where(searchResult => searchResult.Kind == YouTubeMusicItemKind.Albums).SelectMany(x => x.Items.Cast<AlbumSearchResult>());
@@ -66,10 +75,11 @@ namespace Tubifarry.Indexers.Youtube
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"An error occurred while parsing the Spotify response. Response content: {indexerResponse.Content}");
+                _logger.Error(ex, $"An error occurred while parsing the response. Response content: {indexerResponse.Content}");
             }
             return releases.DistinctBy(x => x.DownloadUrl).OrderByDescending(o => o.PublishDate).ToArray();
         }
+
         IEnumerable<Shelf> ParseSearchResponse(JObject requestResponse)
         {
             List<Shelf> results = new();

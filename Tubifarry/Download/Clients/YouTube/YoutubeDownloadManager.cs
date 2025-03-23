@@ -9,7 +9,6 @@ using YouTubeMusicAPI.Client;
 
 namespace Tubifarry.Download.Clients.YouTube
 {
-
     /// <summary>
     /// Represents an interface for a YouTube proxy.
     /// This interface defines the contract for any class that acts as a proxy for handling YouTube requests.
@@ -28,11 +27,8 @@ namespace Tubifarry.Download.Clients.YouTube
         private readonly Logger _logger;
         private YouTubeMusicClient _ytClient;
         private Task? _testTask;
-        private string? _cookiePath;
-        private string? _poToken;
 
         /// <summary>
-        /// Private constructor to prevent external instantiation.
         /// Initializes a new instance of the <see cref="YoutubeDownloadManager"/> class.
         /// </summary>
         public YoutubeDownloadManager(Logger logger)
@@ -43,19 +39,23 @@ namespace Tubifarry.Download.Clients.YouTube
         }
 
         /// <summary>
-        /// Sets cookies and poToken for the YouTube Music client.
+        /// Sets authentication for the YouTube Music client.
         /// </summary>
         public void SetAuth(YoutubeProviderSettings settings)
         {
-            if (settings.CookiePath == _cookiePath && settings.PoToken == _poToken)
+            if (settings.CookiePath == null && settings.PoToken == null &&
+                settings.VisitorData == null && settings.TrustedSessionGeneratorUrl == null)
                 return;
-            if (string.IsNullOrEmpty(settings.CookiePath) && string.IsNullOrEmpty(settings.PoToken))
-                return;
-            _cookiePath = settings.CookiePath;
-            _poToken = settings.PoToken;
-            System.Net.Cookie[]? cookies = !string.IsNullOrEmpty(settings.CookiePath) ? CookieManager.ParseCookieFile(settings.CookiePath) : null;
-            _ytClient = new YouTubeMusicClient(poToken: settings.PoToken, cookies: cookies);
+
+            _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(
+                    settings.TrustedSessionGeneratorUrl,
+                    settings.PoToken,
+                    settings.VisitorData,
+                    settings.CookiePath,
+                    logger: _logger
+                ).Result;
         }
+
 
         public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider)
         {

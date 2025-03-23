@@ -6,6 +6,7 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
 using Requests;
+using Tubifarry.Core.Utilities;
 using Tubifarry.Indexers.Spotify;
 
 namespace Tubifarry.Indexers.Youtube
@@ -20,7 +21,6 @@ namespace Tubifarry.Indexers.Youtube
         public override TimeSpan RateLimit => new(30);
 
         private readonly IYoutubeRequestGenerator _indexerRequestGenerator;
-
         private readonly IYoutubeParser _parseIndexerResponse;
 
         public override ProviderMessage Message => new(
@@ -40,11 +40,37 @@ namespace Tubifarry.Indexers.Youtube
             RequestHandler.MainRequestHandlers[0].MaxParallelism = 1;
         }
 
-        protected override Task Test(List<ValidationFailure> failures)
+        protected override async Task Test(List<ValidationFailure> failures)
         {
-            _parseIndexerResponse.SetAuth(Settings);
+            if (!string.IsNullOrEmpty(Settings.TrustedSessionGeneratorUrl))
+            {
+                try
+                {
+                    (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
+
+                    if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
+                    {
+                        _indexerRequestGenerator.SetTrustedSessionData(poToken, visitorData);
+                        Settings.PoToken = poToken;
+                        Settings.VisitorData = visitorData;
+                    }
+                    else
+                        failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
+
+                }
+                catch (Exception ex)
+                {
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
+                }
+            }
+            else if (!string.IsNullOrEmpty(Settings.PoToken) && !string.IsNullOrEmpty(Settings.VisitorData))
+            {
+                _indexerRequestGenerator.SetTrustedSessionData(Settings.PoToken, Settings.VisitorData);
+                _logger.Debug("Using manually provided tokens");
+            }
+
             _indexerRequestGenerator.SetCookies(Settings.CookiePath);
-            return Task.CompletedTask;
+            _parseIndexerResponse.SetAuth(Settings);
         }
 
         public override IIndexerRequestGenerator GetRequestGenerator() => _indexerRequestGenerator;

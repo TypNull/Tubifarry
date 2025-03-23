@@ -29,7 +29,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
         protected override void Test(List<ValidationFailure> failures)
         {
-            failures.AddIfNotNull(TestConnection());
+            failures!.AddIfNotNull(TestConnection());
         }
 
         protected override ValidationFailure? TestConnection()

@@ -52,6 +52,25 @@ namespace Tubifarry.Download.Clients.YouTube
 
         protected override void Test(List<ValidationFailure> failures)
         {
+            if (!string.IsNullOrEmpty(Settings.TrustedSessionGeneratorUrl))
+            {
+                try
+                {
+                    TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.PoToken, Settings.VisitorData, Settings.CookiePath).Wait();
+                    (string? poToken, string? visitorData) = TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, forceRefresh: true).Result;
+
+                    if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
+                    {
+                        Settings.PoToken = poToken;
+                        Settings.VisitorData = visitorData;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Error connecting to the trusted session generator: {ex.Message}"));
+                }
+            }
+
             _dlManager.SetAuth(Settings);
             if (string.IsNullOrEmpty(Settings.DownloadPath))
                 failures.AddRange(PermissionTester.TestAllPermissions(Settings.FFmpegPath, _logger));

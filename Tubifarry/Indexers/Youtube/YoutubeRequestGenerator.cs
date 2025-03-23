@@ -12,6 +12,7 @@ namespace Tubifarry.Indexers.Youtube
     public interface IYoutubeRequestGenerator : IIndexerRequestGenerator
     {
         public void SetCookies(string path);
+        public void SetTrustedSessionData(string poToken, string visitorData);
     }
 
     internal class YoutubeRequestGenerator : IYoutubeRequestGenerator
@@ -20,6 +21,8 @@ namespace Tubifarry.Indexers.Youtube
 
         private readonly Logger _logger;
         private string? _cookiePath;
+        private string? _poToken;
+        private string? _visitorData;
 
         public YoutubeRequestGenerator(Logger logger) => _logger = logger;
 
@@ -33,11 +36,14 @@ namespace Tubifarry.Indexers.Youtube
         private IEnumerable<IndexerRequest> GetRecentReleaseRequests()
         {
             Dictionary<string, object> payload = Payload.WebRemix(
-                geographicalLocation: "US", null, null, null,
+                geographicalLocation: "US",
+                visitorData: _visitorData,
+                poToken: _poToken,
+                null,
                 items: new (string key, object? value)[]
                 {
-            ("browseId", "FEmusic_new_releases"),
-            ("params", Extensions.ToParams(YouTubeMusicItemKind.Albums))
+                    ("browseId", "FEmusic_new_releases"),
+                    ("params", Extensions.ToParams(YouTubeMusicItemKind.Albums))
                 }
             );
 
@@ -58,6 +64,13 @@ namespace Tubifarry.Indexers.Youtube
             if (string.IsNullOrEmpty(path) || path == _cookiePath)
                 return;
             _cookiePath = path;
+        }
+
+        public void SetTrustedSessionData(string poToken, string visitorData)
+        {
+            _poToken = poToken;
+            _visitorData = visitorData;
+            _logger.Debug($"Trusted session data set: poToken={!string.IsNullOrEmpty(poToken)}, visitorData={!string.IsNullOrEmpty(visitorData)}");
         }
 
         public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
@@ -84,7 +97,18 @@ namespace Tubifarry.Indexers.Youtube
 
         private IEnumerable<IndexerRequest> GetRequests(string searchQuery, YouTubeMusicItemKind kind)
         {
-            Dictionary<string, object> payload = Payload.WebRemix("US", null, null, null, new (string key, object? value)[] { ("query", searchQuery), ("params", Extensions.ToParams(kind)), ("continuation", null) });
+            Dictionary<string, object> payload = Payload.WebRemix(
+                geographicalLocation: "US",
+                visitorData: _visitorData,
+                poToken: _poToken,
+                null,
+                items: new (string key, object? value)[]
+                {
+                    ("query", searchQuery),
+                    ("params", Extensions.ToParams(kind)),
+                    ("continuation", null)
+                }
+            );
 
             string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
 

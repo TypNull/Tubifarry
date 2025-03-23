@@ -18,7 +18,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
             // Validate CookiePath (if provided)
             RuleFor(x => x.CookiePath)
-                .Must(path => string.IsNullOrEmpty(path) || File.Exists(path))
+                .Must(path => string.IsNullOrEmpty(path) || System.IO.File.Exists(path))
                 .WithMessage("Cookie file does not exist. Please provide a valid path to the cookies file.")
                 .Must(path => string.IsNullOrEmpty(path) || CookieManager.ParseCookieFile(path).Any())
                 .WithMessage("Cookie file is invalid or contains no valid cookies.");
@@ -69,8 +69,13 @@ namespace Tubifarry.Download.Clients.YouTube
 
             // Validate poToken
             RuleFor(x => x.PoToken)
-               .Length(32, 64).When(x => !string.IsNullOrEmpty(x.PoToken))
-               .WithMessage("Proof of Origin (poToken) must be between 32 and 64 characters if provided.");
+               .Length(32, 256).When(x => !string.IsNullOrEmpty(x.PoToken))
+               .WithMessage("Proof of Origin (poToken) must be between 32 and 128 characters if provided.");
+
+            // Validate TrustedSessionGeneratorUrl (optional)
+            RuleFor(x => x.TrustedSessionGeneratorUrl)
+                .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute))
+                .WithMessage("Trusted Session Generator URL must be a valid URL if provided.");
         }
     }
 
@@ -116,6 +121,12 @@ namespace Tubifarry.Download.Clients.YouTube
 
         [FieldDefinition(12, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
         public string PoToken { get; set; } = string.Empty;
+
+        [FieldDefinition(13, Label = "Visitor Data", Type = FieldType.Textbox, HelpText = "YouTube session data.", Advanced = true)]
+        public string VisitorData { get; set; } = string.Empty;
+
+        [FieldDefinition(14, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
+        public string TrustedSessionGeneratorUrl { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
