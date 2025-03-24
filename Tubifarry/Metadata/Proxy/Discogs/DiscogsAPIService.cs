@@ -24,11 +24,13 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         private int _rateLimitUsed = 0;
         private int _rateLimitRemaining = 60;
         private DateTime _lastRequestTime = DateTime.MinValue;
-        private TimeSpan _rateLimit = TimeSpan.FromSeconds(0.5);
+        private readonly TimeSpan _rateLimit = TimeSpan.FromSeconds(0.7);
+        private readonly string _userAgent;
 
-        public DiscogsApiService(IHttpClient httpClient)
+        public DiscogsApiService(IHttpClient httpClient, string userAgent)
         {
             _httpClient = httpClient;
+            _userAgent = userAgent;
             _logger = NzbDroneLogger.GetLogger(this);
             _circuitBreaker = CircuitBreakerFactory.GetBreaker(this);
         }
@@ -38,13 +40,15 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             HttpRequestBuilder request = BuildRequest($"releases/{releaseId}");
             AddQueryParamIfNotNull(request, "curr_abbr", currency);
             JsonElement response = await ExecuteRequestWithRetryAsync(request);
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsRelease>(response.GetRawText());
+            DiscogsRelease? release = response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsRelease>(response.GetRawText());
+            return MappingAgent.MapAgent(release, _userAgent);
         }
 
         public async Task<DiscogsMasterRelease?> GetMasterReleaseAsync(int masterId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"masters/{masterId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsMasterRelease>(response.GetRawText());
+            DiscogsMasterRelease? master = response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsMasterRelease>(response.GetRawText());
+            return MappingAgent.MapAgent(master, _userAgent);
         }
 
         public async Task<List<DiscogsMasterReleaseVersion>> GetMasterVersionsAsync(int masterId, int? maxPages = null, string? format = null, string? label = null, string? released = null, string? country = null, string? sort = null, string? sortOrder = null)
@@ -56,13 +60,14 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             AddQueryParamIfNotNull(request, "country", country);
             AddQueryParamIfNotNull(request, "sort", sort);
             AddQueryParamIfNotNull(request, "sort_order", sortOrder);
-            return await FetchPaginatedResultsAsync<DiscogsMasterReleaseVersion>(request, maxPages ?? MaxPageLimit, PageSize) ?? new();
+            List<DiscogsMasterReleaseVersion> masterReleaseVersions = await FetchPaginatedResultsAsync<DiscogsMasterReleaseVersion>(request, maxPages ?? MaxPageLimit, PageSize) ?? new();
+            return MappingAgent.MapAgent(masterReleaseVersions, _userAgent)!;
         }
 
         public async Task<DiscogsArtist?> GetArtistAsync(int artistId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"artists/{artistId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsArtist>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsArtist>(response.GetRawText()), _userAgent);
         }
 
         public async Task<List<DiscogsArtistRelease>> GetArtistReleasesAsync(int artistId, int? maxPages = null, int? itemsPerPage = null, string? sort = null, string? sortOrder = null)
@@ -70,25 +75,25 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             HttpRequestBuilder request = BuildRequest($"artists/{artistId}/releases");
             AddQueryParamIfNotNull(request, "sort", sort);
             AddQueryParamIfNotNull(request, "sort_order", sortOrder);
-            return await FetchPaginatedResultsAsync<DiscogsArtistRelease>(request, maxPages ?? MaxPageLimit, itemsPerPage ?? PageSize) ?? new();
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsArtistRelease>(request, maxPages ?? MaxPageLimit, itemsPerPage ?? PageSize) ?? new(), _userAgent)!;
         }
 
         public async Task<DiscogsLabel?> GetLabelAsync(int labelId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"labels/{labelId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsLabel>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DiscogsLabel>(response.GetRawText()), _userAgent);
         }
 
         public async Task<List<DiscogsLabelRelease>> GetLabelReleasesAsync(int labelId, int? maxPages = null)
         {
-            return await FetchPaginatedResultsAsync<DiscogsLabelRelease>(BuildRequest($"labels/{labelId}/releases"), maxPages ?? MaxPageLimit, PageSize) ?? new();
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsLabelRelease>(BuildRequest($"labels/{labelId}/releases"), maxPages ?? MaxPageLimit, PageSize) ?? new(), _userAgent)!;
         }
 
         public async Task<List<DiscogsSearchItem>> SearchAsync(DiscogsSearchParameter searchRequest, int? maxPages = null)
         {
             HttpRequestBuilder request = BuildRequest("database/search");
             AddSearchParams(request, searchRequest);
-            return await FetchPaginatedResultsAsync<DiscogsSearchItem>(request, maxPages ?? MaxPageLimit, PageSize) ?? new();
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsSearchItem>(request, maxPages ?? MaxPageLimit, PageSize) ?? new(), _userAgent)!;
         }
 
         public async Task<DiscogsStats?> GetReleaseStatsAsync(int releaseId)
@@ -109,6 +114,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 .Resource(endpoint);
             if (!string.IsNullOrWhiteSpace(AuthToken))
                 req.SetHeader("Authorization", $"Discogs token={AuthToken}");
+            req.Headers.Add("User-Agent", _userAgent);
             req.AllowAutoRedirect = true;
             req.SuppressHttpError = true;
             _logger.Trace($"Building request for endpoint: {endpoint}");
@@ -255,7 +261,6 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             }
         }
 
-        private HttpRequestBuilder AddQueryParamIfNotNull(HttpRequestBuilder request, string key, string? value) => value != null ? request.AddQueryParam(key, value) : request;
-
+        private static HttpRequestBuilder AddQueryParamIfNotNull(HttpRequestBuilder request, string key, string? value) => value != null ? request.AddQueryParam(key, value) : request;
     }
 }

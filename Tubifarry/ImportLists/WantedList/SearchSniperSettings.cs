@@ -2,6 +2,7 @@
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.Validation;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.ImportLists.WantedList
 {
@@ -19,7 +20,7 @@ namespace Tubifarry.ImportLists.WantedList
             RuleFor(c => c.CacheDirectory)
                 .Must((settings, path) =>
                 {
-                    if (settings.CacheType == (int)CacheType.Permanent)
+                    if (settings.SniperCacheType == (int)CacheType.Permanent)
                         return !string.IsNullOrEmpty(path) && Directory.Exists(path);
                     return true;
                 })
@@ -54,27 +55,9 @@ namespace Tubifarry.ImportLists.WantedList
         public int RandomPicksPerInterval { get; set; } = 5;
 
         [FieldDefinition(5, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "The type of cache to use for storing search results. Memory cache is faster but does not persist after restart. Permanent cache persists on disk but requires a valid directory.")]
-        public int CacheType { get; set; } = (int)WantedList.CacheType.Memory;
+        public int SniperCacheType { get; set; } = (int)CacheType.Memory;
 
         public string BaseUrl { get; set; } = string.Empty;
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
-    }
-
-    /// <summary>
-    /// Defines the type of cache used by the Search Sniper feature.
-    /// </summary>
-    public enum CacheType
-    {
-        /// <summary>
-        /// Cache is stored in memory. This is faster but does not persist after the application restarts.
-        /// </summary>
-        [FieldOption(Label = "Memory", Hint = "Cache is stored in memory and cleared on application restart. No directory is required.")]
-        Memory = 0,
-
-        /// <summary>
-        /// Cache is stored permanently on disk. This persists across application restarts but requires a valid directory.
-        /// </summary>
-        [FieldOption(Label = "Permanent", Hint = "Cache is stored on disk and persists across application restarts. A valid directory is required.")]
-        Permanent = 1
     }
 }

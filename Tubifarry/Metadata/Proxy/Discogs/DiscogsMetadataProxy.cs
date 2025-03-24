@@ -54,12 +54,12 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
-            if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
-                return MetadataSupportLevel.Supported;
-            Regex regex = new(@"^\s*\w+:");
+            //if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
+            //    return MetadataSupportLevel.Supported;
 
-            if ((albumTitle != null && regex.IsMatch(albumTitle)) || (artistName != null && regex.IsMatch(artistName)))
+            if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
+
             return MetadataSupportLevel.ImplicitSupported;
         }
 
@@ -84,18 +84,20 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             if (links == null || links.Count == 0)
                 return null;
-            Regex discogsRegex = new(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase);
 
             foreach (Links link in links)
             {
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = discogsRegex.Match(link.Url);
+                Match match = _discogsRegex.Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
             return null;
         }
+
+        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
+        private static readonly Regex _discogsRegex = new(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 }

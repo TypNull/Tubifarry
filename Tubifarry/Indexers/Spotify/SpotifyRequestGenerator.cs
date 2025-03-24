@@ -97,6 +97,8 @@ namespace Tubifarry.Indexers.Spotify
 
         public void StartTokenRequest()
         {
+            if (string.IsNullOrEmpty(PluginKeys.SpotifyClientId) || string.IsNullOrEmpty(PluginKeys.SpotifyClientSecret))
+                return;
             _tokenRequest = new(async (token) =>
             {
                 try

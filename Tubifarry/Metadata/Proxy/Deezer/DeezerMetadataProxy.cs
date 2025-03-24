@@ -1,6 +1,5 @@
 ﻿using FluentValidation.Results;
 using NLog;
-using NzbDrone.Common.Http;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
@@ -17,18 +16,13 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         public override string Name => "Deezer";
         private DeezerMetadataProxySettings ActiveSettings => Settings ?? DeezerMetadataProxySettings.Instance!;
 
-        public DeezerMetadataProxy(Lazy<IProxyService> proxyService, IHttpClient client, IDeezerProxy deezerProxy, Logger logger) : base(proxyService)
+        public DeezerMetadataProxy(Lazy<IProxyService> proxyService, IDeezerProxy deezerProxy, Logger logger) : base(proxyService)
         {
             _deezerProxy = deezerProxy;
             _logger = logger;
-            _httpClient = client;
         }
 
-        private readonly IHttpClient _httpClient;
-        public override ValidationResult Test()
-        {
-            return new();
-        }
+        public override ValidationResult Test() => new();
 
         public override List<Album> SearchForNewAlbum(string title, string artist) => _deezerProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
@@ -63,9 +57,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             if (DeezerProxy.IsDeezerIdQuery(albumTitle) || DeezerProxy.IsDeezerIdQuery(artistName))
                 return MetadataSupportLevel.Supported;
 
-            Regex regex = new(@"^\s*\w+:");
-
-            if ((albumTitle != null && regex.IsMatch(albumTitle)) || (artistName != null && regex.IsMatch(artistName)))
+            if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.ImplicitSupported;
@@ -94,19 +86,20 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             if (links == null || links.Count == 0)
                 return null;
 
-            Regex deezerRegex = new(@"deezer\.com\/(?:album|artist|track)\/(\d+)", RegexOptions.IgnoreCase);
-
             foreach (Links link in links)
             {
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = deezerRegex.Match(link.Url);
+                Match match = _deezerRegex.Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
 
             return null;
         }
+
+        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
+        private static readonly Regex _deezerRegex = new(@"deezer\.com\/(?:album|artist|track)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 }

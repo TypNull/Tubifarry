@@ -1,5 +1,6 @@
 ﻿using DryIoc;
 using NLog;
+using NzbDrone.Common.Messaging;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Lifecycle;
@@ -11,6 +12,24 @@ using Tubifarry.Metadata.Proxy.SkyHook;
 
 namespace Tubifarry.Metadata.Proxy
 {
+    public enum ProxyStatusAction
+    {
+        Enabled,
+        Disabled
+    }
+
+    public class ProxyStatusChangedEvent : IEvent
+    {
+        public IProxy Proxy { get; }
+        public ProxyStatusAction Action { get; }
+
+        public ProxyStatusChangedEvent(IProxy proxy, ProxyStatusAction action)
+        {
+            Proxy = proxy;
+            Action = action;
+        }
+    }
+
     public class ProxyServiceStarter : IHandle<ApplicationStartedEvent>
     {
         public static IProxyService? ProxyService { get; private set; }
@@ -21,6 +40,7 @@ namespace Tubifarry.Metadata.Proxy
     public interface IProxyService
     {
         IList<IProxy> Proxys { get; }
+        IList<IProxy> ActiveProxys { get; }
         void CheckProxy();
     }
 
@@ -31,9 +51,11 @@ namespace Tubifarry.Metadata.Proxy
         private readonly IContainer _container;
         private readonly IProxy[] _proxys;
         private readonly List<IProxy> _activeProxys;
+        private readonly IEventAggregator _eventAggregator;
         private IProxy? _activeProxy;
 
         public IList<IProxy> Proxys => _proxys;
+        public IList<IProxy> ActiveProxys => _activeProxys;
 
         private readonly Type[] _interfaces = new Type[]
         {
@@ -44,11 +66,12 @@ namespace Tubifarry.Metadata.Proxy
             typeof(IProxySearchForNewArtist)
         };
 
-        public MetadataProxyService(IMetadataFactory metadataFactory, IContainer container, Logger logger)
+        public MetadataProxyService(IMetadataFactory metadataFactory, IContainer container, Logger logger, IEventAggregator eventAggregator)
         {
             _logger = logger;
             _metadataFactory = metadataFactory;
             _container = container;
+            _eventAggregator = eventAggregator;
             _proxys = _metadataFactory.GetAvailableProviders().OfType<IProxy>().ToArray();
             _activeProxys = _proxys.Where(x => x.Definition.Enable).ToList();
 
@@ -72,6 +95,8 @@ namespace Tubifarry.Metadata.Proxy
             else if (_activeProxys.Count > 1)
             {
                 _logger.Trace("Multiple active proxies found. Prioritizing IMixedProxy if available.");
+                foreach (IProxy proxy in _activeProxys)
+                    _logger.Trace($"Active Proxy {proxy.Definition.Name}");
                 EnableProxy(_activeProxys.FirstOrDefault(x => x is IMixedProxy) ?? _proxys.First(x => x is IMixedProxy));
             }
             else if (_activeProxys[0] is IMixedProxy)
@@ -95,6 +120,7 @@ namespace Tubifarry.Metadata.Proxy
 
             foreach (Type interfaceType in _interfaces)
                 _container.Register(interfaceType, proxy.GetType(), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
+
             _activeProxy = proxy;
         }
 
@@ -107,11 +133,15 @@ namespace Tubifarry.Metadata.Proxy
             if (message.Definition.Enable)
             {
                 if (!_activeProxys.Contains(updatedProxy))
+                {
                     _activeProxys.Add(updatedProxy);
+                    _eventAggregator.PublishEvent(new ProxyStatusChangedEvent(updatedProxy, ProxyStatusAction.Enabled));
+                }
             }
             else if (_activeProxys.Contains(updatedProxy))
             {
                 _activeProxys.Remove(updatedProxy);
+                _eventAggregator.PublishEvent(new ProxyStatusChangedEvent(updatedProxy, ProxyStatusAction.Disabled));
             }
             CheckProxy();
         }

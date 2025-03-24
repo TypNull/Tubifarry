@@ -3,7 +3,6 @@ using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
-using Tubifarry.Core.Utilities;
 using Tubifarry.Metadata.Proxy.Core;
 using Tubifarry.Metadata.Proxy.SkyHook;
 
@@ -23,12 +22,6 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 .GreaterThan(0)
                 .WithMessage("Artist Query Timeout must be greater than 0 seconds.");
 
-            // Validate the User-Agent
-            RuleFor(x => x.UserAgent)
-                .Must(x => UserAgentValidator.Instance?.IsAllowed(x) ?? false)
-                .WithMessage("The provided User-Agent is not allowed." +
-                "Ensure it follows the format 'Name/Version' and avoids terms like: lidarr, bot, crawler or proxy.");
-
             // Validate MaxThreshold (must not exceed 25).
             RuleFor(x => x.MaxThreshold)
                 .InclusiveBetween(1, 25)
@@ -45,7 +38,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
 
         public MixedMetadataProxySettings()
         {
-            _priotities = ProxyServiceStarter.ProxyService?.Proxys?
+            _priotities = ProxyServiceStarter.ProxyService?.ActiveProxys?
                 .Where(x => x is ISupportMetadataMixing)
                 .Where(x => x.ProxyMode != ProxyMode.Internal)
                 .Select(x => new KeyValuePair<string, string>(x.Definition.Name, x is SkyHookMetadataProxy ? "0" : "50"))
@@ -74,9 +67,6 @@ namespace Tubifarry.Metadata.Proxy.Mixed
         }
 
         private IEnumerable<KeyValuePair<string, string>> _customConversion;
-
-        [FieldDefinition(2, Label = "User Agent", Section = MetadataSectionType.Metadata, Type = FieldType.Textbox, HelpText = "Specify a custom User-Agent to identify yourself. A User-Agent helps servers understand the software making the request. Use a unique identifier that includes a name and version. Avoid generic or suspicious-looking User-Agents to prevent blocking.", Placeholder = "Lidarr/1.0.0")]
-        public string UserAgent { get; set; }
 
         [FieldDefinition(2, Label = "Maximal usable threshold", Section = MetadataSectionType.Metadata, Type = FieldType.Number, HelpText = "The maximum threshold added to a lower priority proxy to still use for populating data.", Placeholder = "15")]
         public int MaxThreshold { get; set; }

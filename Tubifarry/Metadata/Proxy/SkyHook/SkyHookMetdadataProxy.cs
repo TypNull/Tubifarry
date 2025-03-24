@@ -39,10 +39,7 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
 
         public override string ToString() => GetType().Name;
 
-        public ValidationResult Test()
-        {
-            return new();
-        }
+        public ValidationResult Test() => new();
 
         public string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
         {
@@ -69,8 +66,15 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
+            if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true)
+                return MetadataSupportLevel.Supported;
+
+            if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
+                return MetadataSupportLevel.Unsupported;
+
             return MetadataSupportLevel.Supported;
         }
+
         public MetadataSupportLevel CanHandleIRecordingIds(params string[] recordingIds)
         {
             return MetadataSupportLevel.Supported;
@@ -92,16 +96,13 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
         {
             if (links == null || links.Count == 0)
                 return null;
-            Regex musicBrainzRegex = new(
-                @"musicbrainz\.org\/(?:artist|release|recording)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
-                RegexOptions.IgnoreCase);
 
             foreach (Links link in links)
             {
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = musicBrainzRegex.Match(link.Url);
+                Match match = _musicBrainzRegex.Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
@@ -117,12 +118,17 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
             if (string.IsNullOrWhiteSpace(id) || id.Contains('@'))
                 return MetadataSupportLevel.Unsupported;
 
-            Regex guidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", RegexOptions.IgnoreCase);
-
-            if (guidRegex.IsMatch(id))
+            if (_guidRegex.IsMatch(id))
                 return MetadataSupportLevel.Supported;
 
             return MetadataSupportLevel.Unsupported;
         }
+
+        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
+        private static readonly Regex _musicBrainzRegex = new(
+            @"musicbrainz\.org\/(?:artist|release|recording)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex _guidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 }

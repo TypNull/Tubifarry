@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.Deezer
 {
@@ -44,12 +45,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("fallback")] DeezerFallbackAlbum? Fallback,
         [property: JsonPropertyName("artist")] DeezerArtist Artist,
         [property: JsonPropertyName("tracks")] DeezerTrackWrapper Tracks
-    );
+    ) : MappingAgent;
 
     public record DeezerFallbackAlbum(
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("status")] string Status
-    );
+    ) : MappingAgent;
 
     public record DeezerArtist(
         [property: JsonPropertyName("id")] long Id,
@@ -66,7 +67,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("radio")] bool Radio,
         [property: JsonPropertyName("tracklist")] string Tracklist,
         [property: JsonPropertyName("position")] int? Position
-    );
+    ) : MappingAgent;
 
     public record DeezerChart(
         [property: JsonPropertyName("id")] long Id,
@@ -76,7 +77,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("playlists")] List<DeezerPlaylist>? Playlists,
         [property: JsonPropertyName("podcasts")] List<DeezerPodcast>? Podcasts,
         [property: JsonPropertyName("position")] int? Position
-    );
+    ) : MappingAgent;
 
     public record DeezerEditorial(
         [property: JsonPropertyName("id")] long Id,
@@ -86,7 +87,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("picture_medium")] string PictureMedium,
         [property: JsonPropertyName("picture_big")] string PictureBig,
         [property: JsonPropertyName("picture_xl")] string PictureXL
-    );
+    ) : MappingAgent;
 
     public record DeezerEpisode(
         [property: JsonPropertyName("id")] long Id,
@@ -104,18 +105,18 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("picture_xl")] string PictureXL,
         [property: JsonPropertyName("podcast")] DeezerPodcast Podcast,
         [property: JsonPropertyName("track_token")] string TrackToken
-    );
+    ) : MappingAgent;
 
     public record DeezerGenresWrapper(
-    [property: JsonPropertyName("data")] List<DeezerGenre>? Data
-    );
+        [property: JsonPropertyName("data")] List<DeezerGenre>? Data
+    ) : MappingAgent;
 
     public record DeezerGenre(
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("picture")] string Picture,
         [property: JsonPropertyName("type")] string Type
-    );
+    ) : MappingAgent;
 
     public record DeezerPlaylist(
         [property: JsonPropertyName("id")] long Id,
@@ -138,7 +139,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("checksum")] string Checksum,
         [property: JsonPropertyName("creator")] DeezerUser Creator,
         [property: JsonPropertyName("tracks")] List<DeezerTrack>? Tracks
-    );
+    ) : MappingAgent;
 
     public record DeezerOptions(
         [property: JsonPropertyName("streaming")] bool Streaming,
@@ -153,7 +154,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("lossless")] bool Lossless,
         [property: JsonPropertyName("preview")] bool Preview,
         [property: JsonPropertyName("radio")] bool Radio
-    );
+    ) : MappingAgent;
 
     public record DeezerPodcast(
         [property: JsonPropertyName("id")] long Id,
@@ -168,7 +169,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("picture_medium")] string PictureMedium,
         [property: JsonPropertyName("picture_big")] string PictureBig,
         [property: JsonPropertyName("picture_xl")] string PictureXL
-    );
+    ) : MappingAgent;
 
     public record DeezerRadio(
         [property: JsonPropertyName("id")] long Id,
@@ -182,11 +183,11 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("picture_xl")] string PictureXL,
         [property: JsonPropertyName("tracklist")] string Tracklist,
         [property: JsonPropertyName("md5_image")] string Md5Image
-    );
+    ) : MappingAgent;
 
     public record DeezerTrackWrapper(
-    [property: JsonPropertyName("data")] List<DeezerTrack>? Data
-    );
+        [property: JsonPropertyName("data")] List<DeezerTrack>? Data
+    ) : MappingAgent;
 
     public record DeezerTrack(
         [property: JsonPropertyName("id")] long Id,
@@ -217,7 +218,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("artist")] DeezerArtist Artist,
         [property: JsonPropertyName("album")] DeezerAlbum Album,
         [property: JsonPropertyName("time_add")] long? TimeAddedInPlaylist
-    );
+    ) : MappingAgent;
 
     public record DeezerUser(
         [property: JsonPropertyName("id")] long Id,
@@ -242,7 +243,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("explicit_content_levels_available")] List<string>? ExplicitContentLevelsAvailable,
         [property: JsonPropertyName("tracklist")] string Tracklist,
         [property: JsonPropertyName("role")] string? Role
-    );
+    ) : MappingAgent;
 
     /// <summary>
     /// Represents the advanced search parameters for the Deezer API.
@@ -297,5 +298,5 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         [property: JsonPropertyName("artist")] DeezerArtist Artist,
         [property: JsonPropertyName("album")] DeezerAlbum Album,
         [property: JsonPropertyName("type")] string Type
-    );
+    ) : MappingAgent;
 }

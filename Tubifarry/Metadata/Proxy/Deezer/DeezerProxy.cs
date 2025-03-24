@@ -17,7 +17,6 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         private readonly IAlbumService _albumService;
         private readonly IHttpClient _httpClient;
         private readonly IMetadataProfileService _metadataProfileService;
-        private readonly DeezerApiService _apiService;
 
         public DeezerProxy(Logger logger, IHttpClient httpClient, IArtistService artistService, IAlbumService albumService, IMetadataProfileService metadataProfileService)
         {
@@ -27,13 +26,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             _albumService = albumService;
             _metadataProfileService = metadataProfileService;
             _cache = new CacheService();
-            _apiService = new DeezerApiService(_httpClient);
         }
 
         private void UpdateCache(DeezerMetadataProxySettings settings)
         {
             _cache.CacheDirectory = settings.CacheDirectory;
-            _cache.CacheType = settings.CacheType;
+            _cache.CacheType = (CacheType)settings.RequestCacheType;
         }
 
         private async Task<List<TReturn>> CachedSearchAsync<TReturn, TSearch>(DeezerMetadataProxySettings settings, string query, Func<TSearch, TReturn?> mapper, string? artist = null)
@@ -42,7 +40,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             string key = $"{typeof(TSearch).Name}:{query}:{artist ?? ""}" + _identifier;
             List<TSearch> results = await _cache.FetchAndCacheAsync<List<TSearch>>(key, () =>
             {
-                DeezerApiService apiService = new(_httpClient)
+                DeezerApiService apiService = new(_httpClient, settings.UserAgent)
                 {
                     PageSize = settings.PageSize,
                     MaxPageLimit = settings.PageNumber
@@ -55,10 +53,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         public async Task<List<Album>> GetArtistAlbumsAsync(DeezerMetadataProxySettings settings, Artist artist)
         {
             UpdateCache(settings);
+            DeezerApiService apiService = new(_httpClient, settings.UserAgent);
+
             string artistAlbumsCacheKey = $"artist-albums:{artist.ForeignArtistId}" + _identifier;
             List<DeezerAlbum> albumResults = await _cache.FetchAndCacheAsync<List<DeezerAlbum>>(
                 artistAlbumsCacheKey,
-                () => _apiService.GetArtistDataAsync<DeezerAlbum>(int.Parse(RemoveIdentifier(artist.ForeignArtistId)))!);
+                () => apiService.GetArtistDataAsync<DeezerAlbum>(int.Parse(RemoveIdentifier(artist.ForeignArtistId)))!);
 
             List<Album> albums = new();
             foreach (DeezerAlbum albumD in albumResults)
@@ -80,7 +80,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             {
                 return CachedSearchAsync<Album, DeezerAlbum>(settings, title, item =>
                 {
-                    DeezerApiService apiService = new(_httpClient)
+                    DeezerApiService apiService = new(_httpClient, settings.UserAgent)
                     {
                         PageSize = settings.PageSize,
                         MaxPageLimit = settings.PageNumber
@@ -113,7 +113,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             UpdateCache(settings);
             query = SanitizeToUnicode(query);
 
-            DeezerApiService apiService = new(_httpClient)
+            DeezerApiService apiService = new(_httpClient, settings.UserAgent)
             {
                 PageSize = settings.PageSize,
                 MaxPageLimit = settings.PageNumber
@@ -168,11 +168,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         {
             _logger.Debug("Fetching album details for AlbumId: {0}", foreignAlbumId);
             UpdateCache(settings);
+            DeezerApiService apiService = new(_httpClient, settings.UserAgent);
 
             string albumCacheKey = $"album:{foreignAlbumId}" + _identifier;
             Album? existingAlbum = _albumService.FindById(foreignAlbumId);
             DeezerAlbum albumDetails = await _cache.FetchAndCacheAsync<DeezerAlbum>(albumCacheKey,
-                () => _apiService.GetAlbumAsync(int.Parse(RemoveIdentifier(foreignAlbumId)))!)
+                () => apiService.GetAlbumAsync(int.Parse(RemoveIdentifier(foreignAlbumId)))!)
                 ?? throw new Exception("Album not found from Deezer API.");
 
             Artist? existingArtist = _artistService.FindById(albumDetails.Artist.Id + _identifier);
@@ -198,8 +199,9 @@ namespace Tubifarry.Metadata.Proxy.Deezer
 
             if (existingArtist == null)
             {
+                DeezerApiService apiService = new(_httpClient, settings.UserAgent);
                 DeezerArtist? artistDetails = await _cache.FetchAndCacheAsync<DeezerArtist>(artistCacheKey,
-                    () => _apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)))!) ?? throw new KeyNotFoundException();
+                    () => apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)))!) ?? throw new KeyNotFoundException();
                 existingArtist = DeezerMappingHelper.MapArtistFromDeezerArtist(artistDetails);
             }
 
@@ -210,7 +212,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
             return existingArtist;
         }
 
-        public static bool IsDeezerIdQuery(string? query) => query?.StartsWith("deezer:") == true || query?.StartsWith("deezerid:") == true;
+        public static bool IsDeezerIdQuery(string? query) => query?.StartsWith("deezer:", StringComparison.OrdinalIgnoreCase) == true || query?.StartsWith("deezerid:", StringComparison.OrdinalIgnoreCase) == true;
         private static string SanitizeToUnicode(string input) => string.IsNullOrEmpty(input) ? input : new string(input.Where(c => c <= 0xFFFF).ToArray());
         private static string RemoveIdentifier(string input) => input.EndsWith(_identifier, StringComparison.OrdinalIgnoreCase) ? input.Remove(input.Length - _identifier.Length) : input;
     }

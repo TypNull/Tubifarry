@@ -53,7 +53,7 @@ namespace Tubifarry.Core.Utilities
         readonly HashSet<string> _blackExact = new(StringComparer.OrdinalIgnoreCase);
         readonly List<Regex> _blackRegex = new();
 
-        public static UserAgentValidator? Instance { get; private set; }
+        public static UserAgentValidator Instance { get; private set; } = new();
 
         /// <summary>
         /// Creates validator with optional initial patterns

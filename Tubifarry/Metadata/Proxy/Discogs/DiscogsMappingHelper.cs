@@ -76,7 +76,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         /// <summary>
         /// Maps a Discogs image to a MediaCover object.
         /// </summary>
-        public static MediaCover? MapImage(DiscogsImage img, bool isArtist) => new()
+        public static MediaCover? MapImage(DiscogsImage img, bool isArtist, string userAgent) => new()
         {
             Url = img.Uri,
             RemoteUrl = img.Uri,
@@ -130,7 +130,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Genres = masterRelease.Genres != null || masterRelease.Styles != null ? new List<string>(masterRelease.Genres ?? Enumerable.Empty<string>()).Concat(masterRelease.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
                 CleanTitle = Parser.NormalizeTitle(masterRelease.Title ?? string.Empty),
                 Overview = "Found on Discogs",
-                Images = masterRelease.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Images = masterRelease.Images?.Take(2).Select(img => MapImage(img, false, masterRelease.UserAgent)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
                 Links = new List<Links> { new() { Url = masterRelease.ResourceUrl, Name = "Discogs" } },
                 AlbumType = "Album",
                 Ratings = new Ratings(),
@@ -175,7 +175,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Genres = release.Genres != null || release.Styles != null ? new List<string>(release.Genres ?? Enumerable.Empty<string>()).Concat(release.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
                 CleanTitle = Parser.NormalizeTitle(release.Title ?? string.Empty),
                 Overview = release.Notes?.Trim(),
-                Images = release.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Images = release.Images?.Take(2).Select(img => MapImage(img, false, release.UserAgent)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
                 Links = new List<Links> { new() { Url = release.ResourceUrl, Name = "Discogs" } },
                 Ratings = ComputeCommunityRating(release.Community),
                 SecondaryTypes = new(),
@@ -282,7 +282,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 CleanTitle = Parser.NormalizeTitle(release.Title ?? string.Empty),
                 Ratings = new Ratings(),
                 Genres = new List<string> { release.Label ?? string.Empty },
-                Images = new List<MediaCover> { new() { Url = release.Thumb } },
+                Images = new List<MediaCover> { new() { Url = release.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={release.UserAgent}" } },
             };
 
             album.AlbumReleases = new List<AlbumRelease>()
@@ -316,7 +316,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Name = discogsArtist.Name ?? string.Empty,
                 ForeignArtistId = discogsArtist.Id + _identifier,
                 Aliases = discogsArtist.NameVariations ?? new List<string>(),
-                Images = discogsArtist.Images?.Select(img => MapImage(img, true)).ToList() ?? new List<MediaCover>()!,
+                Images = discogsArtist.Images?.Select(img => MapImage(img, true, discogsArtist.UserAgent)).ToList() ?? new List<MediaCover>()!,
                 Ratings = new Ratings(),
                 Links = discogsArtist.Urls?.Select(url => new Links { Url = url, Name = AlbumMapper.GetLinkNameFromUrl(url) }).ToList() ?? new List<Links>(),
                 Type = discogsArtist.Role ?? string.Empty,
@@ -383,7 +383,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Name = searchItem.Title ?? string.Empty,
                 ForeignArtistId = searchItem.Id + _identifier,
                 Overview = "Found on Discogs",
-                Images = new List<MediaCover> { new() { Url = searchItem.Thumb, CoverType = MapCoverType("primary", true) } },
+                Images = new List<MediaCover> { new() { Url = searchItem.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={searchItem.UserAgent}", CoverType = MapCoverType("primary", true) } },
                 Links = new List<Links> { new() { Url = searchItem.ResourceUrl, Name = "Discogs" } },
                 Ratings = ComputeCommunityRating(searchItem.Community),
                 Genres = searchItem.Genre,
