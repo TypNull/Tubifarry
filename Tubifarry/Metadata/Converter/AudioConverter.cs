@@ -3,6 +3,7 @@ using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
+using NzbDrone.Core.Tags;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
@@ -12,8 +13,13 @@ namespace Tubifarry.Metadata.Converter
     public class AudioConverter : MetadataBase<AudioConverterSettings>
     {
         private readonly Logger _logger;
+        private readonly Lazy<ITagService> _tagService;
 
-        public AudioConverter(Logger logger) => _logger = logger;
+        public AudioConverter(Logger logger, Lazy<ITagService> tagService)
+        {
+            _logger = logger;
+            _tagService = tagService;
+        }
 
         public override string Name => "Codec Tinker";
 
@@ -41,7 +47,7 @@ namespace Tubifarry.Metadata.Converter
 
             int? currentBitrate = await GetTrackBitrateAsync(trackFile.Path);
 
-            (AudioFormat targetFormat, int? targetBitrate) = GetTargetConversionForTrack(trackFormat, currentBitrate);
+            (AudioFormat targetFormat, int? targetBitrate) = GetTargetConversionForTrack(trackFormat, currentBitrate, trackFile);
             if (targetFormat == AudioFormat.Unknown)
                 return;
 
@@ -81,8 +87,25 @@ namespace Tubifarry.Metadata.Converter
             }
         }
 
-        private (AudioFormat TargetFormat, int? TargetBitrate) GetTargetConversionForTrack(AudioFormat trackFormat, int? currentBitrate)
+        private (AudioFormat TargetFormat, int? TargetBitrate) GetTargetConversionForTrack(AudioFormat trackFormat, int? currentBitrate, TrackFile trackFile)
         {
+            ConversionRule? artistRule = GetArtistTagRule(trackFile);
+            if (artistRule != null)
+            {
+                if (artistRule.TargetFormat == AudioFormat.Unknown)
+                    return (AudioFormat.Unknown, null);
+
+                if (AudioFormatHelper.IsLossyFormat(trackFormat) && !AudioFormatHelper.IsLossyFormat(artistRule.TargetFormat))
+                {
+                    _logger.Warn($"Blocked lossy to lossless conversion from {trackFormat} to {artistRule.TargetFormat}");
+                    return (AudioFormat.Unknown, null);
+                }
+
+                _logger.Debug($"Using artist tag rule for {trackFile.Artist?.Value?.Name}: {artistRule.TargetFormat}" +
+                             (artistRule.TargetBitrate.HasValue ? $":{artistRule.TargetBitrate}kbps" : ""));
+                return (artistRule.TargetFormat, artistRule.TargetBitrate);
+            }
+
             foreach (KeyValuePair<string, string> ruleEntry in Settings.CustomConversion)
             {
                 if (!RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule))
@@ -104,6 +127,13 @@ namespace Tubifarry.Metadata.Converter
 
         private async Task<bool> ShouldConvertTrack(TrackFile trackFile)
         {
+            ConversionRule? artistRule = GetArtistTagRule(trackFile);
+            if (artistRule != null && artistRule.TargetFormat == AudioFormat.Unknown)
+            {
+                _logger.Debug($"Skipping conversion due to no-conversion artist tag for {trackFile.Artist?.Value?.Name}");
+                return false;
+            }
+
             AudioFormat trackFormat = GetTrackAudioFormat(trackFile.Path);
             if (trackFormat == AudioFormat.Unknown)
                 return false;
@@ -111,9 +141,27 @@ namespace Tubifarry.Metadata.Converter
             int? currentBitrate = await GetTrackBitrateAsync(trackFile.Path);
             _logger.Trace($"Track bitrate found for {trackFile.Path} at {currentBitrate ?? 0}kbps");
 
+            if (artistRule != null)
+                return true;
             if (MatchesAnyCustomRule(trackFormat, currentBitrate))
                 return true;
             return IsFormatEnabledForConversion(trackFormat);
+        }
+
+        private ConversionRule? GetArtistTagRule(TrackFile trackFile)
+        {
+            if (trackFile.Artist?.Value?.Tags == null || !trackFile.Artist.Value.Tags.Any())
+                return null;
+
+            foreach (Tag? tag in trackFile.Artist.Value.Tags.Select(x => _tagService.Value.GetTag(x)))
+            {
+                if (RuleParser.TryParseArtistTag(tag.Label, out ConversionRule rule))
+                {
+                    _logger.Debug($"Found artist tag rule: {tag.Label} for {trackFile.Artist.Value.Name}");
+                    return rule;
+                }
+            }
+            return null;
         }
 
         private bool MatchesAnyCustomRule(AudioFormat trackFormat, int? currentBitrate) =>

@@ -12,6 +12,7 @@ namespace Tubifarry.Metadata.Converter
         public int? SourceBitrateValue { get; set; }
         public AudioFormat TargetFormat { get; set; }
         public int? TargetBitrate { get; set; }
+        public bool IsArtistRule { get; set; }
 
         public bool IsGlobalRule => SourceFormat.ToString().Equals(RuleParser.GlobalRuleIdentifier, StringComparison.OrdinalIgnoreCase);
 
@@ -60,7 +61,7 @@ namespace Tubifarry.Metadata.Converter
         {
             string target = TargetFormat.ToString();
             if (TargetBitrate.HasValue)
-                target += TargetBitrate.Value.ToString();
+                target += ":" + TargetBitrate.Value.ToString();
             return target;
         }
     }
@@ -116,8 +117,10 @@ namespace Tubifarry.Metadata.Converter
     public static class RuleParser
     {
         public const string GlobalRuleIdentifier = "all";
+        public const string NoConversionTag = "no-conversion";
         private static readonly Regex SourceFormatPattern = new(@"^([a-zA-Z0-9]+)(?:([!<>=]{1,2})(\d+))?$", RegexOptions.Compiled);
         private static readonly Regex TargetFormatPattern = new(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?$", RegexOptions.Compiled);
+        private static readonly Regex ArtistTagPattern = new(@"^([a-zA-Z]+)(?:-(\d+)k?)?$", RegexOptions.Compiled);
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(RuleParser));
 
         public static bool TryParseRule(string sourceKey, string targetValue, out ConversionRule rule)
@@ -132,6 +135,48 @@ namespace Tubifarry.Metadata.Converter
             }
 
             return ParseSourcePart(sourceKey.Trim(), rule) && ParseTargetPart(targetValue.Trim(), rule);
+        }
+
+        public static bool TryParseArtistTag(string tagLabel, out ConversionRule rule)
+        {
+            _logger.Debug("Parsing artist tag: {0}", tagLabel);
+            rule = new ConversionRule { IsArtistRule = true };
+
+            if (string.IsNullOrWhiteSpace(tagLabel))
+                return false;
+
+            // Handle no-conversion tag
+            if (string.Equals(tagLabel, NoConversionTag, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.TargetFormat = AudioFormat.Unknown;
+                return true;
+            }
+
+            // Match format like "opus" or format+bitrate like "opus192"
+            Match match = ArtistTagPattern.Match(tagLabel.Trim());
+            if (!match.Success)
+            {
+                _logger.Debug("Invalid artist tag format: {0}", tagLabel);
+                return false;
+            }
+
+            string formatName = match.Groups[1].Value;
+            if (!Enum.TryParse(formatName, true, out AudioFormat targetFormat))
+            {
+                _logger.Debug("Invalid format in artist tag: {0}", formatName);
+                return false;
+            }
+
+            rule.TargetFormat = targetFormat;
+
+            // Parse bitrate if present
+            if (match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out int bitrate))
+            {
+                int clampedBitrate = AudioFormatHelper.ClampBitrate(targetFormat, bitrate);
+                rule.TargetBitrate = AudioFormatHelper.RoundToStandardBitrate(clampedBitrate);
+            }
+
+            return true;
         }
 
         private static bool ParseSourcePart(string sourceKey, ConversionRule rule)
