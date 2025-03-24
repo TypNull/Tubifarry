@@ -5,6 +5,7 @@ using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Metadata;
 using Tubifarry.Core.Utilities;
+using Tubifarry.ImportLists.WantedList;
 using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
@@ -18,21 +19,23 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         private readonly IAlbumService _albumService;
         private readonly IHttpClient _httpClient;
         private readonly IMetadataProfileService _metadataProfileService;
+        private readonly IPluginSettings _pluginSettings;
 
-        public DiscogsProxy(Logger logger, IHttpClient httpClient, IArtistService artistService, IAlbumService albumService, IMetadataProfileService metadataProfileService)
+        public DiscogsProxy(Logger logger, IPluginSettings pluginSettings, IHttpClient httpClient, IArtistService artistService, IAlbumService albumService, IMetadataProfileService metadataProfileService)
         {
             _logger = logger;
             _httpClient = httpClient;
             _artistService = artistService;
             _albumService = albumService;
             _metadataProfileService = metadataProfileService;
+            _pluginSettings = pluginSettings;
             _cache = new CacheService();
         }
 
         private async Task<List<T>> CachedSearchAsync<T>(DiscogsMetadataProxySettings settings, string query, Func<DiscogsSearchItem, T?> mapper, string kind = "all", string? artist = null)
         {
             string key = $"{kind}:{query}:{artist ?? ""}" + _identifier;
-            DiscogsApiService apiService = new(_httpClient)
+            DiscogsApiService apiService = new(_httpClient, settings.UserAgent)
             {
                 AuthToken = settings.AuthToken,
                 PageSize = settings.PageSize,
@@ -48,7 +51,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         private void UpdateCache(DiscogsMetadataProxySettings settings)
         {
             _cache.CacheDirectory = settings.CacheDirectory;
-            _cache.CacheType = settings.CacheType;
+            _cache.CacheType = (CacheType)settings.RequestCacheType;
         }
 
         public List<Album> SearchNewAlbum(DiscogsMetadataProxySettings settings, string title, string artist)
@@ -60,7 +63,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             {
                 List<Album> albums = CachedSearchAsync(settings, title, r =>
                 {
-                    DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken, PageSize = settings.PageSize };
+                    DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken, PageSize = settings.PageSize };
                     DiscogsRelease? release = apiService.GetReleaseAsync(r.Id).GetAwaiter().GetResult();
                     return DiscogsMappingHelper.MapAlbumFromRelease(release!);
                 }, "release", artist).GetAwaiter().GetResult();
@@ -87,7 +90,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             UpdateCache(settings);
             query = SanitizeToUnicode(query);
 
-            DiscogsApiService apiService = new(_httpClient)
+            DiscogsApiService apiService = new(_httpClient, settings.UserAgent)
             {
                 AuthToken = settings.AuthToken,
                 PageSize = settings.PageSize,
@@ -135,7 +138,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             bool useMaster = existingAlbum?.SecondaryTypes.Any(st => st.Id == 36) ?? false;
             _logger.Trace($"Using {(useMaster ? "master" : "release")} details for AlbumId: {foreignAlbumId}");
 
-            DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken };
+            DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
 
             (Album mappedAlbum, object releaseForTracks) = useMaster
                 ? await GetMasterReleaseDetailsAsync(foreignAlbumId, apiService)
@@ -201,7 +204,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             string artistCacheKey = $"artist:{foreignArtistId}" + _identifier;
             DiscogsArtist? artist = await _cache.FetchAndCacheAsync<DiscogsArtist>(artistCacheKey, () =>
             {
-                DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken };
+                DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
                 return apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)))!;
             });
 
@@ -221,7 +224,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             string key = $"artist-albums:{foreignArtistId}" + _identifier;
             List<DiscogsArtistRelease> artistReleases = await _cache.FetchAndCacheAsync<List<DiscogsArtistRelease>>(key, () =>
             {
-                DiscogsApiService apiService = new(_httpClient) { AuthToken = settings.AuthToken };
+                DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
                 return apiService.GetArtistReleasesAsync(foreignArtistId, null, 70);
             });
 

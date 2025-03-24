@@ -40,7 +40,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
 
             album.Images = new List<MediaCover>();
             foreach (string? url in new[] { dAlbum.CoverMedium, dAlbum.CoverBig })
-                if (!string.IsNullOrEmpty(url)) album.Images.Add(new MediaCover(MediaCoverTypes.Cover, url));
+                if (!string.IsNullOrEmpty(url)) album.Images.Add(new MediaCover(MediaCoverTypes.Cover, url + $"?{FlexibleHttpDispatcher.UA_PARAM}={dAlbum.UserAgent}"));
 
             album.Links.Add(new Links { Url = dAlbum.Link, Name = "Deezer" });
             album.Links.Add(new Links { Url = dAlbum.Share, Name = "Deezer Share" });
@@ -78,7 +78,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 album.ArtistMetadataId = artist.ArtistMetadataId;
             }
             tracks = tracks.Select((x, index) => x with { TrackPosition = index + 1 }).ToList();
-            albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist)) ?? new();
+            albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist!)) ?? new();
 
 
             if (dAlbum.Contributors?.Count > 1)
@@ -130,7 +130,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         {
             List<MediaCover> images = new();
             foreach (string? url in new[] { artist.PictureMedium, artist.PictureBig })
-                if (!string.IsNullOrEmpty(url)) images.Add(new MediaCover(MediaCoverTypes.Poster, url));
+                if (!string.IsNullOrEmpty(url)) images.Add(new MediaCover(MediaCoverTypes.Poster, url + $"?{FlexibleHttpDispatcher.UA_PARAM}={artist.UserAgent}"));
             return images;
         }
 

@@ -107,7 +107,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 _logger.Trace($"Base artist has {baseArtist.Albums.Value.Count} albums, checking proxy support...");
                 foreach (Album album in baseArtist.Albums.Value)
                 {
-                    IProxy? candidate = _proxyService.Value.Proxys
+                    IProxy? candidate = _proxyService.Value.ActiveProxys
                         .Where(p => p is ISupportMetadataMixing)
                         .FirstOrDefault(p => ((ISupportMetadataMixing)p).CanHandleId(album.ForeignAlbumId) == MetadataSupportLevel.Supported);
 
@@ -241,7 +241,7 @@ namespace Tubifarry.Metadata.Proxy.Mixed
 
         internal List<ProxyCandidate> GetCandidateProxies(Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector)
         {
-            List<ProxyCandidate> candidates = _proxyService.Value.Proxys
+            List<ProxyCandidate> candidates = _proxyService.Value.ActiveProxys
                 .Where(p => p != this && p is ISupportMetadataMixing)
                 .Select(p => new ProxyCandidate
                 {

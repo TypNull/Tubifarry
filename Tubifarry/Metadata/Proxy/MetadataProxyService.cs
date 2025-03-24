@@ -21,6 +21,7 @@ namespace Tubifarry.Metadata.Proxy
     public interface IProxyService
     {
         IList<IProxy> Proxys { get; }
+        IList<IProxy> ActiveProxys { get; }
         void CheckProxy();
     }
 
@@ -34,6 +35,7 @@ namespace Tubifarry.Metadata.Proxy
         private IProxy? _activeProxy;
 
         public IList<IProxy> Proxys => _proxys;
+        public IList<IProxy> ActiveProxys => _activeProxys;
 
         private readonly Type[] _interfaces = new Type[]
         {
@@ -72,6 +74,8 @@ namespace Tubifarry.Metadata.Proxy
             else if (_activeProxys.Count > 1)
             {
                 _logger.Trace("Multiple active proxies found. Prioritizing IMixedProxy if available.");
+                foreach (IProxy proxy in _activeProxys)
+                    _logger.Trace($"Active Proxy {proxy.Definition.Name}");
                 EnableProxy(_activeProxys.FirstOrDefault(x => x is IMixedProxy) ?? _proxys.First(x => x is IMixedProxy));
             }
             else if (_activeProxys[0] is IMixedProxy)

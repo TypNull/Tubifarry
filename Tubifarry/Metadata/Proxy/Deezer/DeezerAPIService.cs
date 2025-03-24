@@ -12,6 +12,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
         private readonly ICircuitBreaker _circuitBreaker;
+        private readonly string _userAgent;
 
         /// <summary>
         /// OAuth access token. When set, requests include access_token.
@@ -26,11 +27,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
 
         private readonly TimeSpan _rateLimit = TimeSpan.FromSeconds(0.5);
 
-        public DeezerApiService(IHttpClient httpClient)
+        public DeezerApiService(IHttpClient httpClient, string userAgent)
         {
             _httpClient = httpClient;
             _logger = NzbDroneLogger.GetLogger(this);
             _circuitBreaker = CircuitBreakerFactory.GetBreaker(this);
+            _userAgent = userAgent;
         }
 
         /// <summary>
@@ -44,7 +46,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 builder.AddQueryParam("access_token", AuthToken);
             builder.AllowAutoRedirect = true;
             builder.SuppressHttpError = true;
-            builder.Headers.Add("User-Agent", "Test 1.0");
+            builder.Headers.Add("User-Agent", _userAgent);
             builder.WithRateLimit(_rateLimit.TotalSeconds);
             _logger.Trace($"Building request for endpoint: {endpoint}");
             return builder;
@@ -155,83 +157,84 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         }
 
         // Generic helper for endpoints that return paginated lists.
-        private async Task<List<T>?> GetPaginatedDataAsync<T>(string endpoint, int? maxPages = null)
+        private async Task<List<T>?> GetPaginatedDataAsync<T>(string endpoint, int? maxPages = null) where T : MappingAgent
         {
-            return await FetchPaginatedResultsAsync<T>(BuildRequest(endpoint), maxPages ?? MaxPageLimit, PageSize);
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<T>(BuildRequest(endpoint), maxPages ?? MaxPageLimit, PageSize), _userAgent);
         }
 
         // Single-object fetch methods remain unchanged.
         public async Task<DeezerAlbum?> GetAlbumAsync(long albumId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"album/{albumId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerAlbum>(response.GetRawText());
+            DeezerAlbum? album = response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerAlbum>(response.GetRawText());
+            return MappingAgent.MapAgent(album, _userAgent);
         }
 
         public async Task<DeezerArtist?> GetArtistAsync(long artistId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"artist/{artistId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerArtist>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerArtist>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerChart?> GetChartAsync(int chartId = 0)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"chart/{chartId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerChart>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerChart>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerEditorial?> GetEditorialAsync(long editorialId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"editorial/{editorialId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerEditorial>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerEditorial>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerGenre?> GetGenreAsync(long genreId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"genre/{genreId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerGenre>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerGenre>(response.GetRawText()), _userAgent);
         }
 
         public async Task<List<DeezerGenre>?> ListGenresAsync()
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest("genre"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<List<DeezerGenre>>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<List<DeezerGenre>>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerPlaylist?> GetPlaylistAsync(long playlistId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"playlist/{playlistId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerPlaylist>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerPlaylist>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerPodcast?> GetPodcastAsync(long podcastId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"podcast/{podcastId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerPodcast>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerPodcast>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerRadio?> GetRadioAsync(long radioId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"radio/{radioId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerRadio>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerRadio>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerTrack?> GetTrackAsync(long trackId)
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"track/{trackId}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerTrack>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerTrack>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerUser?> GetUserAsync(long? userId = null)
         {
             string userSegment = userId.HasValue ? userId.Value.ToString() : "me";
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest($"user/{userSegment}"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerUser>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerUser>(response.GetRawText()), _userAgent);
         }
 
         public async Task<DeezerOptions?> GetOptionsAsync()
         {
             JsonElement response = await ExecuteRequestWithRetryAsync(BuildRequest("options"));
-            return response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerOptions>(response.GetRawText());
+            return MappingAgent.MapAgent(response.ValueKind == JsonValueKind.Undefined ? null : JsonSerializer.Deserialize<DeezerOptions>(response.GetRawText()), _userAgent);
         }
 
         // --- Generic Search Methods ---
@@ -298,7 +301,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         { typeof(DeezerTrack), "chart/0/tracks" }
     };
 
-        public async Task<List<T>?> GetChartDataAsync<T>(int? maxPages = null)
+        public async Task<List<T>?> GetChartDataAsync<T>(int? maxPages = null) where T : MappingAgent
         {
             if (!ChartEndpointMapping.TryGetValue(typeof(T), out string? endpoint))
                 throw new InvalidOperationException($"No chart endpoint defined for type {typeof(T).Name}.");
@@ -315,7 +318,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         { typeof(DeezerTrack), "top" }
     };
 
-        public async Task<List<T>?> GetArtistDataAsync<T>(long artistId, int? maxPages = null)
+        public async Task<List<T>?> GetArtistDataAsync<T>(long artistId, int? maxPages = null) where T : MappingAgent
         {
             if (!ArtistSubEndpointMapping.TryGetValue(typeof(T), out string? subEndpoint))
                 throw new InvalidOperationException($"No artist sub endpoint defined for type {typeof(T).Name}.");
@@ -327,7 +330,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         // --- Generic Album Sub-Endpoints using static type mappings ---
         private static readonly Dictionary<Type, string> AlbumSubEndpointMapping = new() { { typeof(DeezerTrack), "tracks" } };
 
-        public async Task<List<T>?> GetAlbumDataAsync<T>(long albumId, int? maxPages = null)
+        public async Task<List<T>?> GetAlbumDataAsync<T>(long albumId, int? maxPages = null) where T : MappingAgent
         {
             if (!AlbumSubEndpointMapping.TryGetValue(typeof(T), out string? subEndpoint))
                 throw new InvalidOperationException($"No album sub endpoint defined for type {typeof(T).Name}.");

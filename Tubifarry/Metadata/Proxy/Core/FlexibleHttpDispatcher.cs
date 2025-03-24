@@ -4,7 +4,6 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Http.Dispatchers;
 using NzbDrone.Common.Http.Proxy;
-using NzbDrone.Common.Instrumentation;
 using System.Net;
 using Tubifarry.Core.Utilities;
 
@@ -12,7 +11,7 @@ namespace Tubifarry.Metadata.Proxy.Core
 {
     public class FlexibleHttpDispatcher : ManagedHttpDispatcher, IHttpDispatcher
     {
-        private const string UA_PARAM = "x-user-agent";
+        public const string UA_PARAM = "x-user-agent";
 
         public FlexibleHttpDispatcher(IHttpProxySettingsProvider proxySettingsProvider,
             IUserAgentValidator userAgentValidator,
@@ -66,7 +65,6 @@ namespace Tubifarry.Metadata.Proxy.Core
 
         protected override void AddRequestHeaders(HttpRequestMessage webRequest, HttpHeader headers)
         {
-            NzbDroneLogger.GetLogger(this).Info("This is clased");
             string userAgent = headers.GetSingleValue("User-Agent");
 
             HttpHeader filtered = new();

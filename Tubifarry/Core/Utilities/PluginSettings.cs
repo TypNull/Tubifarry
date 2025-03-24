@@ -1,4 +1,5 @@
-﻿using NzbDrone.Common.EnvironmentInfo;
+﻿using NLog;
+using NzbDrone.Common.EnvironmentInfo;
 using NzbDrone.Common.Extensions;
 using System.Collections.Concurrent;
 using System.Text;
@@ -35,17 +36,18 @@ namespace Tubifarry.Core.Utilities
     {
         private readonly string _settingsPath;
         private readonly ConcurrentDictionary<string, string> _settings;
-        private readonly ReaderWriterLockSlim _lock;
+        private readonly object _syncLock = new(); // Using a simple lock instead of ReaderWriterLockSlim
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly bool _autoSave;
+        private readonly Logger _logger;
 
         public event EventHandler<SettingChangedEventArgs>? SettingChanged;
 
-        public PluginSettings(IAppFolderInfo appFolderInfo, bool autoSave = true)
+        public PluginSettings(IAppFolderInfo appFolderInfo, Logger logger, bool autoSave = true)
         {
+            _logger = logger;
             _settingsPath = Path.Combine(appFolderInfo.GetPluginPath(), PluginInfo.Author, PluginInfo.Name, "settings.resx");
             _settings = new ConcurrentDictionary<string, string>();
-            _lock = new ReaderWriterLockSlim();
             _autoSave = autoSave;
 
             _jsonOptions = new JsonSerializerOptions
@@ -60,14 +62,9 @@ namespace Tubifarry.Core.Utilities
 
         public T GetValue<T>(string key, T? defaultValue = default)
         {
-            _lock.EnterReadLock();
-            try
+            lock (_syncLock)
             {
                 return _settings.TryGetValue(key, out string? json) ? TryDeserialize(json, defaultValue)! : defaultValue!;
-            }
-            finally
-            {
-                _lock.ExitReadLock();
             }
         }
 
@@ -85,8 +82,7 @@ namespace Tubifarry.Core.Utilities
 
         public void SetValue<T>(string key, T value)
         {
-            _lock.EnterWriteLock();
-            try
+            lock (_syncLock)
             {
                 string json = JsonSerializer.Serialize(value, _jsonOptions);
                 T? oldValue = _settings.TryGetValue(key, out string? oldJson) && oldJson != null
@@ -98,31 +94,21 @@ namespace Tubifarry.Core.Utilities
                 OnSettingChanged(key, oldValue, value);
 
                 if (_autoSave)
-                    Save();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
+                    SaveInternal(); // Call internal method that doesn't re-acquire the lock
             }
         }
 
         public bool HasKey(string key)
         {
-            _lock.EnterReadLock();
-            try
+            lock (_syncLock)
             {
                 return _settings.ContainsKey(key);
-            }
-            finally
-            {
-                _lock.ExitReadLock();
             }
         }
 
         public void RemoveKey(string key)
         {
-            _lock.EnterWriteLock();
-            try
+            lock (_syncLock)
             {
                 if (_settings.TryRemove(key, out string? oldJson) && oldJson != null)
                 {
@@ -131,19 +117,23 @@ namespace Tubifarry.Core.Utilities
 
                     if (_autoSave)
                     {
-                        Save();
+                        SaveInternal(); // Call internal method that doesn't re-acquire the lock
                     }
                 }
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
             }
         }
 
         public void Save()
         {
-            _lock.EnterReadLock();
+            lock (_syncLock)
+            {
+                SaveInternal();
+            }
+        }
+
+        // Internal method that assumes the lock is already held
+        private void SaveInternal()
+        {
             try
             {
                 string? directory = Path.GetDirectoryName(_settingsPath);
@@ -156,42 +146,41 @@ namespace Tubifarry.Core.Utilities
                 string obfuscated = ObfuscateString(json);
                 File.WriteAllText(_settingsPath, obfuscated);
             }
-            finally
+            catch (Exception ex)
             {
-                _lock.ExitReadLock();
+                _logger.Error(ex, "Error saving plugin settings");
             }
         }
 
         public void Load()
         {
-            if (!File.Exists(_settingsPath))
+            lock (_syncLock)
             {
-                return;
-            }
-
-            _lock.EnterWriteLock();
-            try
-            {
-                string obfuscated = File.ReadAllText(_settingsPath);
-                string json = DeobfuscateString(obfuscated);
-                Dictionary<string, string>? loadedSettings = JsonSerializer.Deserialize<Dictionary<string, string>>(json, _jsonOptions);
-
-                _settings.Clear();
-                if (loadedSettings != null)
+                if (!File.Exists(_settingsPath))
                 {
-                    foreach (KeyValuePair<string, string> pair in loadedSettings)
+                    return;
+                }
+
+                try
+                {
+                    string obfuscated = File.ReadAllText(_settingsPath);
+                    string json = DeobfuscateString(obfuscated);
+                    Dictionary<string, string>? loadedSettings = JsonSerializer.Deserialize<Dictionary<string, string>>(json, _jsonOptions);
+
+                    _settings.Clear();
+                    if (loadedSettings != null)
                     {
-                        _settings[pair.Key] = pair.Value;
+                        foreach (KeyValuePair<string, string> pair in loadedSettings)
+                        {
+                            _settings[pair.Key] = pair.Value;
+                        }
                     }
                 }
-            }
-            catch
-            {
-                _settings.Clear();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Error loading plugin settings");
+                    _settings.Clear();
+                }
             }
         }
 
@@ -202,8 +191,7 @@ namespace Tubifarry.Core.Utilities
 
         public void SetValues<T>(Dictionary<string, T> values)
         {
-            _lock.EnterWriteLock();
-            try
+            lock (_syncLock)
             {
                 values.ToList().ForEach(pair =>
                 {
@@ -216,27 +204,18 @@ namespace Tubifarry.Core.Utilities
                 });
 
                 if (_autoSave)
-                    Save();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
+                    SaveInternal();
             }
         }
 
         public void Clear()
         {
-            _lock.EnterWriteLock();
-            try
+            lock (_syncLock)
             {
                 _settings.Clear();
 
                 if (_autoSave)
-                    Save();
-            }
-            finally
-            {
-                _lock.ExitWriteLock();
+                    SaveInternal();
             }
         }
 

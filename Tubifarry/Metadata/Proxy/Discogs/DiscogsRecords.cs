@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using Tubifarry.Metadata.Proxy.Core;
 
 namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 {
@@ -17,7 +18,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
       [property: JsonPropertyName("join")] string? Join,
       [property: JsonPropertyName("role")] string? Role,
       [property: JsonPropertyName("tracks")] string? Tracks
-  );
+  ) : MappingAgent;
 
     public record DiscogsArtistRelease(
         [property: JsonPropertyName("artist")] string? Artist,
@@ -32,7 +33,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("format")] string? Format,
         [property: JsonPropertyName("label")] string? Label,
         [property: JsonPropertyName("status")] string? Status
-    );
+    ) : MappingAgent;
 
     public record DiscogsCommunityInfo(
         [property: JsonPropertyName("contributors")] List<DiscogsContributor>? Contributors,
@@ -92,7 +93,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("urls")] List<string>? Urls,
         [property: JsonPropertyName("images")] List<DiscogsImage>? Images,
         [property: JsonPropertyName("data_quality")] string? DataQuality
-    );
+    ) : MappingAgent;
 
     public record DiscogsLabelRelease(
         [property: JsonPropertyName("id")] int Id,
@@ -104,7 +105,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("thumb")] string? Thumb,
         [property: JsonPropertyName("title")] string? Title,
         [property: JsonPropertyName("year")] string? Year
-    );
+    ) : MappingAgent;
 
     public record DiscogsMasterRelease(
         [property: JsonPropertyName("styles")] List<string>? Styles,
@@ -124,7 +125,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("num_for_sale")] int NumForSale,
         [property: JsonPropertyName("lowest_price")] decimal? LowestPrice,
         [property: JsonPropertyName("data_quality")] string? DataQuality
-    );
+    ) : MappingAgent;
 
     public record DiscogsMasterReleaseVersion(
         [property: JsonPropertyName("status")] string? Status,
@@ -139,7 +140,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("catno")] string? Catno,
         [property: JsonPropertyName("resource_url")] string? ResourceUrl,
         [property: JsonPropertyName("id")] int Id
-    );
+    ) : MappingAgent;
 
     public record DiscogsMember(
         [property: JsonPropertyName("id")] int Id,
@@ -187,7 +188,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("uri")] string? Uri,
         [property: JsonPropertyName("videos")] List<DiscogsVideo>? Videos,
         [property: JsonPropertyName("year")] int? Year
-    );
+    ) : MappingAgent;
 
     public record DiscogsSearchItem(
         [property: JsonPropertyName("id")] int Id,
@@ -204,7 +205,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("year")] string? Year,
         [property: JsonPropertyName("thumb")] string? Thumb,
         [property: JsonPropertyName("community")] DiscogsCommunityInfo? Community
-    );
+    ) : MappingAgent;
 
     public record DiscogsSeries(
         [property: JsonPropertyName("name")] string? Name,
@@ -214,7 +215,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         [property: JsonPropertyName("id")] int Id,
         [property: JsonPropertyName("resource_url")] string? ResourceUrl,
         [property: JsonPropertyName("thumbnail_url")] string? ThumbnailUrl
-    );
+    ) : MappingAgent;
 
     public record DiscogsStats(
         [property: JsonPropertyName("user")] DiscogsUserStats? User,

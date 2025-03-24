@@ -11,6 +11,7 @@ using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Queue;
 using NzbDrone.Core.ThingiProvider;
 using Tubifarry.Core.Model;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.ImportLists.WantedList
 {
@@ -63,7 +64,7 @@ namespace Tubifarry.ImportLists.WantedList
             List<int> cachedAlbumIds = new();
             DateTime now = DateTime.UtcNow;
 
-            if (Settings.CacheType == (int)CacheType.Memory)
+            if (Settings.SniperCacheType == (int)CacheType.Memory)
             {
                 lock (_cacheLock)
                 {
@@ -72,7 +73,7 @@ namespace Tubifarry.ImportLists.WantedList
                 }
                 _logger.Trace("Memory cache contains {0} album(s).", cachedAlbumIds.Count);
             }
-            else if (Settings.CacheType == (int)CacheType.Permanent)
+            else if (Settings.SniperCacheType == (int)CacheType.Permanent)
             {
                 _fileCache ??= new FileCache(Settings.CacheDirectory);
 
@@ -103,12 +104,12 @@ namespace Tubifarry.ImportLists.WantedList
             foreach (Album album in selectedAlbums)
                 _logger.Debug("Search Sniper picked album: {0} by {1}", album.Title, album.Artist?.Value.Name ?? "Unknown Artist");
 
-            if (Settings.CacheType == (int)CacheType.Memory)
+            if (Settings.SniperCacheType == (int)CacheType.Memory)
             {
                 lock (_cacheLock)
                     selectedAlbums.ForEach(album => _memoryCache[album.Id] = now);
             }
-            else if (Settings.CacheType == (int)CacheType.Permanent)
+            else if (Settings.SniperCacheType == (int)CacheType.Permanent)
             {
                 IEnumerable<IGrouping<string, Album>> selectedAlbumsByArtist = selectedAlbums.GroupBy(a => a.Artist?.Value.Name ?? "UnknownArtist");
                 foreach (IGrouping<string, Album> artistGroup in selectedAlbumsByArtist)
@@ -131,7 +132,7 @@ namespace Tubifarry.ImportLists.WantedList
 
         protected override void Test(List<ValidationFailure> failures)
         {
-            if (Settings.CacheType == (int)CacheType.Permanent)
+            if (Settings.SniperCacheType == (int)CacheType.Permanent)
             {
                 if (string.IsNullOrEmpty(Settings.CacheDirectory))
                 {

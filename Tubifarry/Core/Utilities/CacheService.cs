@@ -1,8 +1,8 @@
 ﻿using NLog;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Annotations;
 using System.Collections.Concurrent;
 using Tubifarry.Core.Model;
-using Tubifarry.ImportLists.WantedList;
 
 namespace Tubifarry.Core.Utilities
 {
@@ -97,5 +97,23 @@ namespace Tubifarry.Core.Utilities
 
         private bool IsExpired(CachedData<object> entry) =>
             (DateTime.Now - entry.CreatedAt) > CacheDuration;
+    }
+
+    /// <summary>
+    /// Defines the type of cache used by the Search Sniper feature.
+    /// </summary>
+    public enum CacheType
+    {
+        /// <summary>
+        /// Cache is stored in memory. This is faster but does not persist after the application restarts.
+        /// </summary>
+        [FieldOption(Label = "Memory", Hint = "Cache is stored in memory and cleared on application restart. No directory is required.")]
+        Memory = 0,
+
+        /// <summary>
+        /// Cache is stored permanently on disk. This persists across application restarts but requires a valid directory.
+        /// </summary>
+        [FieldOption(Label = "Permanent", Hint = "Cache is stored on disk and persists across application restarts. A valid directory is required.")]
+        Permanent = 1
     }
 }
