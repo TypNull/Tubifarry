@@ -23,9 +23,12 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
+		<PackageReference Include="Python.Included" Version="3.11.6" />
+		<PackageReference Include="pythonnet" Version="3.0.5" />
 		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.0" />
 		<PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
 		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
+		<PackageReference Include="YamlDotNet" Version="16.3.0" />
 		<PackageReference Include="YouTubeMusicAPI" Version="3.0.0" />
 	</ItemGroup>
 

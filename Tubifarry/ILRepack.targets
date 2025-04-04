@@ -11,9 +11,14 @@
 			<InputAssemblies Include="$(OutputPath)Xabe.FFmpeg.Downloader.dll" />
 			<InputAssemblies Include="$(OutputPath)FuzzySharp.dll" />
 			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
-			<InputAssemblies Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" />
+			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.DependencyInjection.Abstractions.dll" />
+		    <InputAssemblies Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" />
 			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
+			<InputAssemblies Include="$(OutputPath)Python.Runtime.dll" />
+			<InputAssemblies Include="$(OutputPath)Python.Included.dll" />
+			<InputAssemblies Include="$(OutputPath)Python.Deployment.dll" />
+			<InputAssemblies Include="$(OutputPath)YamlDotNet.dll" />
 		</ItemGroup>
 
 		<ILRepack

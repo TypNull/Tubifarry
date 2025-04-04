@@ -52,6 +52,7 @@ namespace Tubifarry.Metadata.Proxy
         private readonly IEventAggregator _eventAggregator;
         private IProxy[] _proxys;
         private IProxy? _activeProxy;
+        private IProxy[] _proxys;
 
         public IList<IProxy> Proxys => _proxys;
         public IList<IProxy> ActiveProxys => _activeProxys;
