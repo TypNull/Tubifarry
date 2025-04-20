@@ -55,6 +55,11 @@ namespace Tubifarry.Indexers.Soulseek
                 .GreaterThanOrEqualTo(2.0)
                 .WithMessage("Timeout must be at least 2 seconds.");
 
+            // Results validation
+            RuleFor(c => c.MinimumResults)
+              .GreaterThanOrEqualTo(0)
+              .WithMessage("Minimum Results must be at least 0.");
+
             // Include File Extensions validation
             RuleFor(c => c.IncludeFileExtensions)
                 .Must(extensions => extensions == null || extensions.All(ext => !ext.Contains('.')))
@@ -80,9 +85,6 @@ namespace Tubifarry.Indexers.Soulseek
 
         [FieldDefinition(4, Type = FieldType.Tag, Label = "Include File Extensions", HelpText = "Specify file extensions to include when 'Include Only Audio Files' is enabled. This setting has no effect if 'Include Only Audio Files' is disabled.", Advanced = true)]
         public IEnumerable<string> IncludeFileExtensions { get; set; } = Array.Empty<string>();
-
-        [FieldDefinition(5, Label = "Enable Fallback Search", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a secondary search using additional metadata.", Advanced = true)]
-        public bool UseFallbackSearch { get; set; }
 
         [FieldDefinition(6, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;
@@ -113,6 +115,25 @@ namespace Tubifarry.Indexers.Soulseek
 
         [FieldDefinition(13, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Timeout for search requests in seconds.", Advanced = true)]
         public double TimeoutInSeconds { get; set; } = 5;
+
+
+        [FieldDefinition(14, Type = FieldType.Checkbox, Label = "Strip Punctuation", HelpText = "Remove punctuation from search terms to improve matching", Advanced = true)]
+        public bool StripPunctuation { get; set; }
+
+        [FieldDefinition(15, Type = FieldType.Checkbox, Label = "Various Artists", HelpText = "Improve searches for compilation albums by trying without 'Various Artists'", Advanced = true)]
+        public bool HandleVariousArtists { get; set; }
+
+        [FieldDefinition(16, Type = FieldType.Checkbox, Label = "Volume Variations", HelpText = "Account for different volume formats (Vol., Volume, etc.)", Advanced = true)]
+        public bool HandleVolumeVariations { get; set; }
+
+        [FieldDefinition(17, Type = FieldType.Checkbox, Label = "Special Characters", HelpText = "Convert special characters to standard (ä→a, é→e, etc.). Does not decompose ligatures (æ, ß etc.)", Advanced = true)]
+        public bool NormalizeSpecialCharacters { get; set; }
+
+        [FieldDefinition(18, Label = "Enable Fallback Search", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a secondary search using additional metadata.", Advanced = true)]
+        public bool UseFallbackSearch { get; set; }
+
+        [FieldDefinition(19, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Minimum number of results required before stopping the search. If a Slskd finds fewer results than this, additional search strategies will be tried.", Advanced = true)]
+        public int MinimumResults { get; set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

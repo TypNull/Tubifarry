@@ -55,6 +55,9 @@ namespace Tubifarry.Download.Clients.Soulseek
         [FieldDefinition(5, Label = "Inclusive", Type = FieldType.Checkbox, HelpText = "Include all downloads made in Slskd, or only the ones initialized by this Lidarr instance.", Advanced = true)]
         public bool Inclusive { get; set; }
 
+        [FieldDefinition(6, Label = "Clean Directories", Type = FieldType.Checkbox, HelpText = "After importing, remove stale directories.", Advanced = true)]
+        public bool CleanStaleDirectories { get; set; }
+
         [FieldDefinition(98, Label = "Is Fetched remote", Type = FieldType.Checkbox, Hidden = HiddenType.Hidden)]
         public bool IsRemotePath { get; set; }
 

@@ -7,10 +7,11 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using System.Net;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    public class SlskdIndexer : HttpIndexerBase<SlskdSettings>
+    public class SlskdIndexer : ExtendedHttpIndexerBase<SlskdSettings, ExtendedIndexerPageableRequest>
     {
         public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
@@ -19,7 +20,7 @@ namespace Tubifarry.Indexers.Soulseek
         public override int PageSize => 50;
         public override TimeSpan RateLimit => new(3);
 
-        private readonly IIndexerRequestGenerator _indexerRequestGenerator;
+        private readonly SlskdRequestGenerator _indexerRequestGenerator;
         private readonly IParseIndexerResponse _parseIndexerResponse;
 
         internal new SlskdSettings Settings => base.Settings;
@@ -33,7 +34,7 @@ namespace Tubifarry.Indexers.Soulseek
 
         protected override async Task Test(List<ValidationFailure> failures) => failures.AddIfNotNull(await TestConnection());
 
-        public override IIndexerRequestGenerator GetRequestGenerator() => _indexerRequestGenerator;
+        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator() => _indexerRequestGenerator;
 
         public override IParseIndexerResponse GetParser() => _parseIndexerResponse;
 
@@ -45,7 +46,6 @@ namespace Tubifarry.Indexers.Soulseek
                     .SetHeader("X-API-KEY", Settings.ApiKey).Build();
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
-
                 HttpResponse response = await _httpClient.ExecuteAsync(request);
                 _logger.Debug($"TestConnection Response: {response.Content}");
 

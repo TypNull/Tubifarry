@@ -110,8 +110,67 @@ namespace Tubifarry.Download.Clients.Soulseek
             if (!deleteData) return;
             SlskdDownloadItem? slskdItem = GetDownloadItem(clientItem.DownloadId);
             if (slskdItem == null) return;
+
+            string? itemDirectory = slskdItem.SlskdDownloadDirectory?.Directory;
+
             _ = RemoveItemAsync(slskdItem);
             RemoveDownloadItem(clientItem.DownloadId);
+
+            if (Settings.CleanStaleDirectories && !string.IsNullOrEmpty(itemDirectory))
+                _ = CleanStaleDirectoriesAsync(itemDirectory);
+        }
+
+        private async Task CleanStaleDirectoriesAsync(string directoryPath)
+        {
+            try
+            {
+                string localPath = _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(directoryPath)).FullPath;
+                await Task.Delay(1000);
+                HttpRequest request = BuildHttpRequest($"/api/v0/transfers/downloads/");
+                HttpResponse response = await ExecuteAsync(request);
+
+                if (response.StatusCode != HttpStatusCode.OK)
+                {
+                    _logger.Warn($"Failed to check for remaining downloads. Status Code: {response.StatusCode}");
+                    return;
+                }
+
+                List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content);
+                bool hasRemainingDownloads = false;
+                downloads?.ForEach(user =>
+                {
+                    user.TryGetProperty("directories", out JsonElement directoriesElement);
+                    foreach (SlskdDownloadDirectory dir in SlskdDownloadDirectory.GetDirectories(directoriesElement))
+                    {
+                        if (dir.Directory.Equals(directoryPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasRemainingDownloads = true;
+                            return;
+                        }
+                    }
+                });
+
+                if (hasRemainingDownloads)
+                {
+                    _logger.Trace($"Directory {directoryPath} still has active downloads, skipping cleanup");
+                    return;
+                }
+                if (_diskProvider.FolderExists(localPath))
+                {
+                    _logger.Debug($"Removing stale directory: {localPath}");
+                    _diskProvider.DeleteFolder(localPath, true);
+                    string? parentPath = Path.GetDirectoryName(localPath);
+                    if (!string.IsNullOrEmpty(parentPath) && _diskProvider.FolderExists(parentPath) && _diskProvider.FolderEmpty(parentPath))
+                    {
+                        _logger.Info($"Removing empty parent directory: {parentPath}");
+                        _diskProvider.DeleteFolder(parentPath, true);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error cleaning stale directories for path: {directoryPath}");
+            }
         }
 
         private async Task UpdateDownloadItemsAsync()
