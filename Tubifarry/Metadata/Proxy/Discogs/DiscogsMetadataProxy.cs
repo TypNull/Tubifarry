@@ -54,8 +54,8 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
-            //if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
-            //    return MetadataSupportLevel.Supported;
+            if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
+                return MetadataSupportLevel.Supported;
 
             if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;

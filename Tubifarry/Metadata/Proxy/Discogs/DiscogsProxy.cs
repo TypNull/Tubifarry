@@ -99,18 +99,37 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             if (IsDiscogsidQuery(query))
             {
                 query = query.Replace("discogs:", "").Replace("discogsid:", "");
+                string? typeSpecifier = null;
+                if (query.Length > 2 && query[1] == ':')
+                {
+                    typeSpecifier = query[0].ToString().ToLowerInvariant();
+                    query = query.Substring(2);
+                }
+
                 if (int.TryParse(query, out int discogsId))
                 {
-                    return new List<object> {
-                        _cache.FetchAndCacheAsync<DiscogsArtist>($"artist:{discogsId}", () => apiService.GetArtistAsync(discogsId)!)
-                            .ContinueWith(t => (object)DiscogsMappingHelper.MapArtistFromDiscogsArtist(t.GetAwaiter().GetResult()!)),
-                        _cache.FetchAndCacheAsync<DiscogsRelease>($"release:{discogsId}", () => apiService.GetReleaseAsync(discogsId)!)
-                            .ContinueWith(t => (object)DiscogsMappingHelper.MapAlbumFromRelease(t.GetAwaiter().GetResult()!)),
-                        _cache.FetchAndCacheAsync<DiscogsMasterRelease>($"master:{discogsId}", () => apiService.GetMasterReleaseAsync(discogsId)!)
-                            .ContinueWith(t => (object)DiscogsMappingHelper.MapAlbumFromMasterRelease(t.GetAwaiter().GetResult()!))
-                    }.Where(x => x != null).ToList();
+                    List<object?> results = new();
+                    if (typeSpecifier == "a")
+                    {
+                        results.Add(_cache.FetchAndCacheAsync<DiscogsArtist>($"artist:{discogsId}", () => apiService.GetArtistAsync(discogsId)!)
+                            .ContinueWith(t => t.GetAwaiter().GetResult() == null ? null : (object)DiscogsMappingHelper.MapArtistFromDiscogsArtist(t.GetAwaiter().GetResult())).GetAwaiter().GetResult());
+                    }
+                    else if (typeSpecifier == "r")
+                    {
+                        results.Add(_cache.FetchAndCacheAsync<DiscogsRelease>($"release:{discogsId}", () => apiService.GetReleaseAsync(discogsId)!)
+                            .ContinueWith(t => t.GetAwaiter().GetResult() == null ? null : (object)DiscogsMappingHelper.MapAlbumFromRelease(t.GetAwaiter().GetResult()))
+                            .GetAwaiter().GetResult());
+                    }
+                    else if (typeSpecifier == "m")
+                    {
+                        results.Add(_cache.FetchAndCacheAsync<DiscogsMasterRelease>($"master:{discogsId}", () => apiService.GetMasterReleaseAsync(discogsId)!)
+                            .ContinueWith(t => t.GetAwaiter().GetResult() == null ? null : (object)DiscogsMappingHelper.MapAlbumFromMasterRelease(t.GetAwaiter().GetResult()))
+                            .GetAwaiter().GetResult());
+                    }
+                    return results.Where(x => x != null).ToList()!;
                 }
             }
+
 
             return CachedSearchAsync(settings, query, item =>
             {
@@ -119,9 +138,19 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                     "artist" => _cache.FetchAndCacheAsync<DiscogsArtist>($"artist:{item.Id}", () => apiService.GetArtistAsync(item.Id)!)
                         .ContinueWith(t => (object)DiscogsMappingHelper.MapArtistFromDiscogsArtist(t.GetAwaiter().GetResult())).GetAwaiter().GetResult(),
                     "release" => _cache.FetchAndCacheAsync<DiscogsRelease>($"release:{item.Id}", () => apiService.GetReleaseAsync(item.Id)!)
-                        .ContinueWith(t => (object)DiscogsMappingHelper.MapAlbumFromRelease(t.GetAwaiter().GetResult())).GetAwaiter().GetResult(),
+                        .ContinueWith(t =>
+                        {
+                            Album album = DiscogsMappingHelper.MapAlbumFromRelease(t.GetAwaiter().GetResult());
+                            album.Artist = DiscogsMappingHelper.MapArtistFromSearchItem(item);
+                            return album;
+                        }).GetAwaiter().GetResult(),
                     "master" => _cache.FetchAndCacheAsync<DiscogsMasterRelease>($"master:{item.Id}", () => apiService.GetMasterReleaseAsync(item.Id)!)
-                        .ContinueWith(t => (object)DiscogsMappingHelper.MapAlbumFromMasterRelease(t.GetAwaiter().GetResult())).GetAwaiter().GetResult(),
+                        .ContinueWith(t =>
+                        {
+                            Album album = DiscogsMappingHelper.MapAlbumFromMasterRelease(t.GetAwaiter().GetResult());
+                            album.Artist = DiscogsMappingHelper.MapArtistFromSearchItem(item);
+                            return album;
+                        }).GetAwaiter().GetResult(),
                     _ => null
                 };
             }).GetAwaiter().GetResult();
@@ -134,7 +163,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             Album? existingAlbum = _albumService.FindById(foreignAlbumId);
 
-            bool useMaster = existingAlbum?.SecondaryTypes.Any(st => st.Id == 36) ?? false;
+            bool useMaster = foreignAlbumId.StartsWith("m");
             _logger.Trace($"Using {(useMaster ? "master" : "release")} details for AlbumId: {foreignAlbumId}");
 
             DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
@@ -143,7 +172,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 ? await GetMasterReleaseDetailsAsync(foreignAlbumId, apiService)
                 : await GetReleaseDetailsAsync(foreignAlbumId, apiService);
 
-            DiscogsArtist? discogsArtist = await GetPrimaryArtistAsync(foreignAlbumId, useMaster, existingAlbum!);
+            DiscogsArtist? discogsArtist = await GetPrimaryArtistAsync(foreignAlbumId, useMaster, existingAlbum);
 
             Artist existingArtist = (existingAlbum?.Artist?.Value ?? (discogsArtist != null ? DiscogsMappingHelper.MapArtistFromDiscogsArtist(discogsArtist) : null))
                 ?? throw new ModelNotFoundException(typeof(Artist), 0);
@@ -172,7 +201,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             string masterKey = $"master:{id}" + _identifier;
             DiscogsMasterRelease? master = await _cache.FetchAndCacheAsync<DiscogsMasterRelease>(masterKey,
-                () => apiService.GetMasterReleaseAsync(int.Parse(RemoveIdentifier(id)))!);
+                () => apiService.GetMasterReleaseAsync(int.Parse(RemoveIdentifier(id[1..])))!);
             return (DiscogsMappingHelper.MapAlbumFromMasterRelease(master!), master)!;
         }
 
@@ -180,11 +209,11 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         {
             string releaseKey = $"release:{id}" + _identifier;
             DiscogsRelease? release = await _cache.FetchAndCacheAsync<DiscogsRelease>(releaseKey,
-                () => apiService.GetReleaseAsync(int.Parse(RemoveIdentifier(id)))!);
+                () => apiService.GetReleaseAsync(int.Parse(RemoveIdentifier(id[1..])))!);
             return (DiscogsMappingHelper.MapAlbumFromRelease(release!), release)!;
         }
 
-        private async Task<DiscogsArtist?> GetPrimaryArtistAsync(string id, bool useMaster, Album existingAlbum)
+        private async Task<DiscogsArtist?> GetPrimaryArtistAsync(string id, bool useMaster, Album? existingAlbum)
         {
             string key = (useMaster ? $"master:{id}" : $"release:{id}") + _identifier;
             object? release = useMaster
@@ -192,7 +221,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 : await _cache.FetchAndCacheAsync<DiscogsRelease>(key, () => Task.FromResult<DiscogsRelease>(null!));
 
             IEnumerable<DiscogsArtist> artists = ((IEnumerable<DiscogsArtist>)(release as dynamic)?.Artists!) ?? Enumerable.Empty<DiscogsArtist>();
-            return artists.FirstOrDefault(x => Fuzz.Ratio(x.Name, existingAlbum.Artist.Value.Name) > 80);
+            return artists.FirstOrDefault(x => existingAlbum == null || Fuzz.Ratio(x.Name, existingAlbum.Artist?.Value.Name) > 80);
         }
 
         public async Task<Artist> GetArtistInfoAsync(DiscogsMetadataProxySettings settings, string foreignArtistId, int metadataProfileId)
@@ -204,7 +233,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             DiscogsArtist? artist = await _cache.FetchAndCacheAsync<DiscogsArtist>(artistCacheKey, () =>
             {
                 DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
-                return apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)))!;
+                return apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)[1..]))!;
             });
 
             Artist? existingArtist = _artistService.FindById(foreignArtistId);
@@ -221,7 +250,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             _logger.Debug($"Fetching albums for artist ID: {foreignArtistId}.");
 
             string key = $"artist-albums:{foreignArtistId}" + _identifier;
-            List<DiscogsArtistRelease> artistReleases = await _cache.FetchAndCacheAsync<List<DiscogsArtistRelease>>(key, () =>
+            List<DiscogsArtistRelease> artistReleases = await _cache.FetchAndCacheAsync(key, () =>
             {
                 DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
                 return apiService.GetArtistReleasesAsync(foreignArtistId, null, 70);

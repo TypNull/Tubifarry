@@ -21,6 +21,7 @@
 
             return mappingAgent;
         }
+
         public static List<T>? MapAgent<T>(List<T>? mappingAgent, string userAgent) where T : MappingAgent
         {
             if (mappingAgent != null)
