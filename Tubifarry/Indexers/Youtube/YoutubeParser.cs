@@ -7,6 +7,7 @@ using System.Reflection;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Download.Clients.YouTube;
 using YouTubeMusicAPI.Client;
 using YouTubeMusicAPI.Models.Info;
 using YouTubeMusicAPI.Models.Search;

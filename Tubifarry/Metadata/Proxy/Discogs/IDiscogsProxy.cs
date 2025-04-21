@@ -1,6 +1,6 @@
 ﻿using NzbDrone.Core.Music;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public interface IDiscogsProxy
     {

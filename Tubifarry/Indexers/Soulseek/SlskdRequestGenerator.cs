@@ -10,7 +10,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
-using Tubifarry.Core.Utilities;
+using Tubifarry.Core.Replacements;
 
 namespace Tubifarry.Indexers.Soulseek
 {

@@ -5,7 +5,7 @@ using NzbDrone.Core.Parser;
 using System.Text;
 using Tubifarry.Metadata.Proxy.Core;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public static class DiscogsMappingHelper
     {
@@ -68,7 +68,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             string[] parts = duration.Split(':');
             if (parts.Length == 2 && int.TryParse(parts[0], out int m) && int.TryParse(parts[1], out int s))
-                return (m * 60) + s;
+                return m * 60 + s;
 
             return 0;
         }
@@ -324,7 +324,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 Genres = new List<string>(),
                 Overview = BuildArtistOverview(discogsArtist),
                 Members = discogsArtist.Members?.Select(member => MapDiscogsMember(member)).ToList() ?? new List<Member>(),
-                Status = (discogsArtist.Members?.Any(x => x.Active) == false ? ArtistStatusType.Ended : ArtistStatusType.Continuing),
+                Status = discogsArtist.Members?.Any(x => x.Active) == false ? ArtistStatusType.Ended : ArtistStatusType.Continuing,
             },
             Name = discogsArtist.Name,
             CleanName = discogsArtist.Name.CleanArtistName()
@@ -411,9 +411,9 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             decimal normalizedRatio = ratio / (ratio + 1);
             decimal proportion = smoothWant / (smoothWant + smoothHave);
 
-            decimal computedValue = (0.7m * normalizedRatio) + (0.3m * proportion);
-
-            return new Ratings { Value = computedValue * 100m, Votes = want + have };
+            decimal computedValue = 0.7m * normalizedRatio + 0.3m * proportion;
+            decimal roundedValue = Math.Round(computedValue * 100m, 2);
+            return new Ratings { Value = roundedValue, Votes = want + have };
         }
     }
 }

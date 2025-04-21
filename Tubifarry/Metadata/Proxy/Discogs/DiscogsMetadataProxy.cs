@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.Core;
 using Tubifarry.Metadata.Proxy.Mixed;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public class DiscogsMetadataProxy : ConsumerProxyPlaceholder<DiscogsMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
@@ -57,7 +57,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
             if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
                 return MetadataSupportLevel.Supported;
 
-            if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
+            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.ImplicitSupported;

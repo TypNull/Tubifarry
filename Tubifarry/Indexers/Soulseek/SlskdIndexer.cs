@@ -7,7 +7,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using System.Net;
-using Tubifarry.Core.Utilities;
+using Tubifarry.Core.Replacements;
 
 namespace Tubifarry.Indexers.Soulseek
 {

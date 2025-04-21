@@ -10,7 +10,7 @@ using YouTubeMusicAPI.Client;
 using YouTubeSessionGenerator;
 using YouTubeSessionGenerator.Js.Environments;
 
-namespace Tubifarry.Core.Utilities
+namespace Tubifarry.Download.Clients.YouTube
 {
     /// <summary>
     /// A centralized helper for managing YouTube trusted session authentication
@@ -217,10 +217,7 @@ namespace Tubifarry.Core.Utilities
             string responseContent = await response.Content.ReadAsStringAsync(token);
             _logger.Info(responseContent);
 
-            // Check if we got a "token updating" message
-            if (responseContent.Contains("Update request accepted") ||
-                responseContent.Contains("new token will be generated") ||
-                !responseContent.Contains("potoken"))
+            if (responseContent.Contains("Update request accepted") || responseContent.Contains("new token will be generated") || !responseContent.Contains("potoken"))
             {
                 _logger.Trace("Token update initiated, waiting for completion...");
 

@@ -1,7 +1,7 @@
 ﻿using System.Text.Json.Serialization;
 using Tubifarry.Metadata.Proxy.Core;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public record DiscogsArtist(
       [property: JsonPropertyName("id")] int Id,

@@ -5,7 +5,7 @@ using System.Net;
 using System.Text.Json;
 using Tubifarry.Metadata.Proxy.Core;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public class DiscogsApiService
     {
@@ -21,10 +21,10 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
         public int PageSize { get; set; } = 30;
 
         private int _rateLimitTotal = 60;
-        private int _rateLimitUsed = 0;
+        private int _rateLimitUsed;
         private int _rateLimitRemaining = 60;
         private DateTime _lastRequestTime = DateTime.MinValue;
-        private readonly TimeSpan _rateLimit = TimeSpan.FromSeconds(0.7);
+        private readonly TimeSpan _rateLimit = TimeSpan.FromSeconds(0.75);
         private readonly string _userAgent;
 
         public DiscogsApiService(IHttpClient httpClient, string userAgent)

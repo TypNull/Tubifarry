@@ -7,7 +7,7 @@ using NzbDrone.Core.Profiles.Metadata;
 using Tubifarry.Core.Utilities;
 using Tubifarry.Metadata.Proxy.Core;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public class DiscogsProxy : IDiscogsProxy
     {
@@ -220,7 +220,7 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
                 ? await _cache.FetchAndCacheAsync<DiscogsMasterRelease>(key, () => Task.FromResult<DiscogsMasterRelease>(null!))
                 : await _cache.FetchAndCacheAsync<DiscogsRelease>(key, () => Task.FromResult<DiscogsRelease>(null!));
 
-            IEnumerable<DiscogsArtist> artists = ((IEnumerable<DiscogsArtist>)(release as dynamic)?.Artists!) ?? Enumerable.Empty<DiscogsArtist>();
+            IEnumerable<DiscogsArtist> artists = (IEnumerable<DiscogsArtist>)(release as dynamic)?.Artists! ?? Enumerable.Empty<DiscogsArtist>();
             return artists.FirstOrDefault(x => existingAlbum == null || Fuzz.Ratio(x.Name, existingAlbum.Artist?.Value.Name) > 80);
         }
 

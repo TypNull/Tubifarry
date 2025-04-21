@@ -4,9 +4,8 @@ using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
 using Tubifarry.Core.Utilities;
-using Tubifarry.ImportLists.WantedList;
 
-namespace Tubifarry.Metadata.Proxy.DiscogsProxy
+namespace Tubifarry.Metadata.Proxy.Discogs
 {
     public class DiscogsMetadataProxySettingsValidator : AbstractValidator<DiscogsMetadataProxySettings>
     {
@@ -26,13 +25,13 @@ namespace Tubifarry.Metadata.Proxy.DiscogsProxy
 
             // When using Permanent cache, require a valid CacheDirectory.
             RuleFor(x => x.CacheDirectory)
-                .Must((settings, path) => (settings.RequestCacheType != (int)CacheType.Permanent) || (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path)))
+                .Must((settings, path) => settings.RequestCacheType != (int)CacheType.Permanent || !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
                 .WithMessage("A valid Cache Directory is required for Permanent caching.");
 
             // Validate the system stability for Memory cache
             RuleFor(x => x.RequestCacheType)
-                .Must((type) => (type == (int)CacheType.Permanent) || Tubifarry.AverageRuntime > TimeSpan.FromDays(4) ||
-                           (DateTime.UtcNow - Tubifarry.LastStarted) > TimeSpan.FromDays(5))
+                .Must((type) => type == (int)CacheType.Permanent || Tubifarry.AverageRuntime > TimeSpan.FromDays(4) ||
+                           DateTime.UtcNow - Tubifarry.LastStarted > TimeSpan.FromDays(5))
                 .When(x => x.RequestCacheType == (int)CacheType.Memory)
                 .WithMessage("The system is not detected as stable. Please wait for the system to stabilize or use permanent cache.");
 

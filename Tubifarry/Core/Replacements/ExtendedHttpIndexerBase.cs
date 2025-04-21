@@ -10,7 +10,7 @@ using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using System.Net;
 
-namespace Tubifarry.Core.Utilities
+namespace Tubifarry.Core.Replacements
 {
     /// <summary>
     /// Enhanced generic base class for HTTP indexers with advanced search and result handling
