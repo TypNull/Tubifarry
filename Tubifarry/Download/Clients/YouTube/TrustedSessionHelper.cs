@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
+using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
 using YouTubeSessionGenerator;
 using YouTubeSessionGenerator.Js.Environments;

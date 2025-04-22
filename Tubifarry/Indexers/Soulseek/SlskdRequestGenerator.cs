@@ -11,6 +11,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Replacements;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {

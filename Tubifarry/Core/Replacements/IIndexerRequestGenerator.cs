@@ -1,5 +1,6 @@
 ﻿using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Core.Replacements
 {

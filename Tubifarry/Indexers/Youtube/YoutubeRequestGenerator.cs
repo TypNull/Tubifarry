@@ -6,7 +6,9 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using System.Net;
 using Tubifarry.Core.Records;
+using Tubifarry.Core.Replacements;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Download.Clients.YouTube;
 using YouTubeMusicAPI.Internal;
 using YouTubeMusicAPI.Models.Search;
 

@@ -1,7 +1,6 @@
 ﻿using NLog;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
-using NzbDrone.Core.IndexerSearch.Definitions;
 using System.Collections;
 
 namespace Tubifarry.Core.Utilities
@@ -184,27 +183,5 @@ namespace Tubifarry.Core.Utilities
         /// Creates a simple tier that always executes
         /// </summary>
         public static Func<IEnumerable<IndexerRequest>> CreateTier(Func<IEnumerable<IndexerRequest>> requestGenerator) => requestGenerator;
-    }
-
-    /// <summary>
-    /// Generic indexer request generator interface that supports different request chain types
-    /// </summary>
-    public interface IIndexerRequestGenerator<TIndexerPageableRequest>
-            where TIndexerPageableRequest : IndexerPageableRequest
-    {
-        /// <summary>
-        /// Gets requests for recent releases
-        /// </summary>
-        IndexerPageableRequestChain<TIndexerPageableRequest> GetRecentRequests();
-
-        /// <summary>
-        /// Gets search requests for an album
-        /// </summary>
-        IndexerPageableRequestChain<TIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria);
-
-        /// <summary>
-        /// Gets search requests for an artist
-        /// </summary>
-        IndexerPageableRequestChain<TIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria);
     }
 }

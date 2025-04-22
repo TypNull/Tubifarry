@@ -6,7 +6,9 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
 using Tubifarry.Core.Records;
+using Tubifarry.Core.Replacements;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Download.Clients.YouTube;
 
 namespace Tubifarry.Indexers.Spotify
 {

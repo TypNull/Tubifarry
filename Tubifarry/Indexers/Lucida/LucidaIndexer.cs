@@ -58,16 +58,13 @@ namespace Tubifarry.Indexers.Lucida
                 HttpResponse response = await _httpClient.ExecuteAsync(req);
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
-                    failures.Add(new ValidationFailure("BaseUrl",
-                        $"Cannot connect to Lucida instance: HTTP {(int)response.StatusCode}"));
+                    failures.Add(new ValidationFailure("BaseUrl", $"Cannot connect to Lucida instance: HTTP {(int)response.StatusCode}"));
                     return;
                 }
 
-                if (!response.Content.Contains("Lucida")
-                    && !Regex.IsMatch(response.Content, "<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase))
+                if (!response.Content.Contains("Lucida") && !Regex.IsMatch(response.Content, "<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase))
                 {
-                    failures.Add(new ValidationFailure("BaseUrl",
-                        "The provided URL does not appear to be a Lucida instance"));
+                    failures.Add(new ValidationFailure("BaseUrl", "The provided URL does not appear to be a Lucida instance"));
                     return;
                 }
             }
@@ -108,18 +105,17 @@ namespace Tubifarry.Indexers.Lucida
             {
                 foreach (string? code in codes)
                 {
-                    bool valid = services.Values.SelectMany(x => x)
-                        .Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase));
-                    if (!valid)
-                    {
-                        failures.Add(new ValidationFailure("CountryCode",
-                            $"Country code '{code}' is not valid for any service"));
-                    }
+                    if (!services.Values.SelectMany(x => x).Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
+                        failures.Add(new ValidationFailure("CountryCode", $"Country code '{code}' is not valid for any service"));
                 }
             }
         }
 
-        public override IIndexerRequestGenerator GetRequestGenerator() => _requestGenerator;
+        public override IIndexerRequestGenerator GetRequestGenerator()
+        {
+            _requestGenerator.SetSetting(Settings);
+            return _requestGenerator;
+        }
         public override IParseIndexerResponse GetParser() => _parser;
     }
 }

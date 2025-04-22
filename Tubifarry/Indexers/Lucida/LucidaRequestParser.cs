@@ -1,9 +1,8 @@
 ﻿using Jint;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
@@ -18,10 +17,8 @@ namespace Tubifarry.Indexers.Lucida
 
         private static readonly Regex[] SearchDataPatterns =
         {
-            new(@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);",
-                RegexOptions.Compiled | RegexOptions.Singleline),
-            new(@"__INITIAL_DATA__\s*=\s*({.+?});",
-                RegexOptions.Compiled | RegexOptions.Singleline)
+            new(@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);", RegexOptions.Compiled | RegexOptions.Singleline),
+            new(@"__INITIAL_DATA__\s*=\s*({.+?});", RegexOptions.Compiled | RegexOptions.Singleline)
         };
 
         public LucidaParser(Logger logger) => _logger = logger;
@@ -30,14 +27,12 @@ namespace Tubifarry.Indexers.Lucida
         {
             List<ReleaseInfo> releases = new();
             LucidaRequestData? requestData = GetRequestData(indexerResponse);
-
-            if (requestData == null)
-                return releases;
+            if (requestData == null) return releases;
 
             try
             {
-                (JArray? albumsArray, JArray? tracksArray) = ExtractSearchResults(indexerResponse.Content);
-                ProcessResults(albumsArray, tracksArray, releases, requestData);
+                (List<LucidaAlbum>? albums, List<LucidaTrack>? tracks) = ExtractSearchResults(indexerResponse.Content);
+                ProcessResults(albums, tracks, releases, requestData);
             }
             catch (Exception ex)
             {
@@ -51,8 +46,7 @@ namespace Tubifarry.Indexers.Lucida
         {
             try
             {
-                return JsonConvert.DeserializeObject<LucidaRequestData>(
-                    indexerResponse.Request.HttpRequest.ContentSummary ?? string.Empty);
+                return JsonSerializer.Deserialize<LucidaRequestData>(indexerResponse.Request.HttpRequest.ContentSummary ?? string.Empty);
             }
             catch (Exception ex)
             {
@@ -61,7 +55,7 @@ namespace Tubifarry.Indexers.Lucida
             }
         }
 
-        private (JArray? AlbumsArray, JArray? TracksArray) ExtractSearchResults(string html)
+        private (List<LucidaAlbum>? Albums, List<LucidaTrack>? Tracks) ExtractSearchResults(string html)
         {
             foreach (Regex pattern in SearchDataPatterns)
             {
@@ -70,47 +64,40 @@ namespace Tubifarry.Indexers.Lucida
 
                 try
                 {
-                    string rawData = NormalizeJsonData(match.Groups[1].Value);
-                    (JArray? AlbumsArray, JArray? TracksArray) results = ExtractResultsFromData(rawData);
-                    if (results.AlbumsArray != null || results.TracksArray != null)
-                        return results;
+                    string raw = NormalizeJsonData(match.Groups[1].Value);
+                    List<LucidaDataWrapper>? wrapperList = JsonSerializer.Deserialize<List<LucidaDataWrapper>>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (wrapperList != null)
+                    {
+                        LucidaDataWrapper? dataWrapper = wrapperList
+                            .FirstOrDefault(w => w.Type == "data" && w.Data?.Results?.Success == true);
+
+                        if (dataWrapper?.Data?.Results?.Results != null)
+                        {
+                            LucidaResultsData results = dataWrapper.Data.Results.Results;
+                            return (results.Albums, results.Tracks);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Debug(ex, "Error parsing search results");
+                    _logger.Debug(ex, "Typed deserialization failed, trying Jint fallback");
+                    try
+                    {
+                        return ExtractWithJintToRecords(match.Groups[1].Value);
+                    }
+                    catch (Exception jintEx)
+                    {
+                        _logger.Error(jintEx, "Jint extraction failed");
+                    }
                 }
             }
-
             return (null, null);
         }
 
-        private (JArray? AlbumsArray, JArray? TracksArray) ExtractResultsFromData(string rawData)
+        private static (List<LucidaAlbum>? Albums, List<LucidaTrack>? Tracks) ExtractWithJintToRecords(string jsData)
         {
-            // Direct extraction
-            JArray dataArray = JArray.Parse(rawData);
-            foreach (JToken item in dataArray)
-            {
-                if (item["type"]?.ToString() != "data" ||
-                    item["data"]?["results"]?["success"]?.Value<bool>() != true)
-                    continue;
-
-                JArray? albumsArray = item["data"]?["results"]?["results"]?["albums"] as JArray;
-                JArray? tracksArray = item["data"]?["results"]?["results"]?["tracks"] as JArray;
-
-                if ((albumsArray?.Count > 0) || (tracksArray?.Count > 0))
-                    return (albumsArray, tracksArray);
-            }
-
-            // Jint fallback
-            return ExtractWithJint(rawData);
-        }
-
-        private (JArray? AlbumsArray, JArray? TracksArray) ExtractWithJint(string jsData)
-        {
-            try
-            {
-                Engine engine = new();
-                engine.Execute($@"
+            Engine engine = new();
+            engine.Execute($@"
                     var data = {jsData};
                     
                     // Find the search results in the data array
@@ -122,118 +109,105 @@ namespace Tubifarry.Indexers.Lucida
                             break;
                         }}
                     }}
+
+                    // Extract separate arrays for albums and tracks
+                    var albums = searchResults && searchResults.results && searchResults.results.albums 
+                        ? searchResults.results.albums : [];
+                    var tracks = searchResults && searchResults.results && searchResults.results.tracks 
+                        ? searchResults.results.tracks : [];
                 ");
 
-                object? searchResults = engine.GetValue("searchResults").ToObject();
+            object? albumsObj = engine.GetValue("albums").ToObject();
+            object? tracksObj = engine.GetValue("tracks").ToObject();
 
-                if (searchResults == null)
-                    return (null, null);
-                JObject resultsObj = JObject.FromObject(new { results = searchResults });
+            string albumsJson = JsonSerializer.Serialize(albumsObj);
+            string tracksJson = JsonSerializer.Serialize(tracksObj);
 
-                return (
-                    resultsObj.SelectToken("results.results.albums") as JArray,
-                    resultsObj.SelectToken("results.results.tracks") as JArray
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error in Jint extraction");
-                return (null, null);
-            }
+            List<LucidaAlbum>? albums = null;
+            List<LucidaTrack>? tracks = null;
+
+            if (!string.IsNullOrEmpty(albumsJson) && albumsJson != "[]")
+                albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (!string.IsNullOrEmpty(tracksJson) && tracksJson != "[]")
+                tracks = JsonSerializer.Deserialize<List<LucidaTrack>>(tracksJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            return (albums, tracks);
         }
 
-        private void ProcessResults(JArray? albumsArray, JArray? tracksArray, List<ReleaseInfo> releases, LucidaRequestData requestData)
+        private void ProcessResults(List<LucidaAlbum>? albums, List<LucidaTrack>? tracks, List<ReleaseInfo> releases, LucidaRequestData requestData)
         {
             (AudioFormat format, int bitrate, int bitDepth) = LucidaServiceHelper.GetServiceQuality(requestData.ServiceValue);
 
-            if (albumsArray?.Count > 0)
-                ProcessAlbums(albumsArray, releases, requestData, format, bitrate, bitDepth);
-            if (tracksArray?.Count > 0 && (requestData.IsSingle || releases.Count == 0))
-                ProcessTracks(tracksArray, releases, requestData, format, bitrate, bitDepth);
-        }
-
-        private void ProcessAlbums(JArray albumsArray, List<ReleaseInfo> releases, LucidaRequestData requestData, AudioFormat format, int bitrate, int bitDepth)
-        {
-            foreach (JToken album in albumsArray)
+            if (albums?.Count > 0)
             {
-                try
-                {
-                    AlbumData albumData = CreateAlbumData(album, requestData, format, bitrate, bitDepth);
-                    releases.Add(albumData.ToReleaseInfo());
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"Error processing album: {album["title"]}");
-                }
+                foreach (LucidaAlbum alb in albums)
+                    TryAdd(() => CreateAlbumData(alb, requestData, format, bitrate, bitDepth), releases, alb.Title);
+            }
+
+            if (tracks != null && requestData.IsSingle && tracks.Count > 0)
+            {
+                foreach (LucidaTrack trk in tracks)
+                    TryAdd(() => CreateTrackData(trk, requestData, format, bitrate, bitDepth), releases, trk.Title);
             }
         }
 
-        private void ProcessTracks(JArray tracksArray, List<ReleaseInfo> releases, LucidaRequestData requestData, AudioFormat format, int bitrate, int bitDepth)
+        private void TryAdd(Func<AlbumData> factory, List<ReleaseInfo> list, string title)
         {
-            foreach (JToken track in tracksArray)
+            try
             {
-                try
-                {
-                    AlbumData albumData = CreateTrackData(track, requestData, format, bitrate, bitDepth);
-                    releases.Add(albumData.ToReleaseInfo());
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"Error processing track: {track["title"]}");
-                }
+                list.Add(factory().ToReleaseInfo());
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error processing item: {title}");
             }
         }
 
-        private AlbumData CreateAlbumData(JToken albumToken, LucidaRequestData requestData, AudioFormat format, int bitrate, int bitDepth)
+        private AlbumData CreateAlbumData(LucidaAlbum album, LucidaRequestData rd, AudioFormat format, int bitrate, int bitDepth)
         {
-            (string coverUrl, string coverResolution) = ExtractCoverInfo(albumToken["coverArtwork"]);
-            int trackCount = ExtractTrackCount(albumToken["trackCount"]);
-            string artistName = ExtractArtistName(albumToken["artists"]);
+            List<LucidaArtist> artists = album.Artists ?? new List<LucidaArtist>();
 
-            AlbumData albumData = new("Lucida", nameof(LucidaDownloadProtocol))
+            string artist = artists.FirstOrDefault()?.Name ?? "Unknown Artist";
+
+            AlbumData data = new("Lucida", nameof(LucidaDownloadProtocol))
             {
-                AlbumId = $"{requestData.ServiceValue}|{albumToken["id"]}|{albumToken["url"]}",
-                AlbumName = albumToken["title"]?.ToString() ?? "Unknown Album",
-                ArtistName = artistName,
-                InfoUrl = $"{requestData.BaseUrl}/?url={Uri.EscapeDataString(albumToken["url"]?.ToString() ?? string.Empty)}",
-                CustomString = coverUrl,
-                CoverResolution = coverResolution,
-                TotalTracks = trackCount,
+                AlbumId = $"A:{rd.BaseUrl}/?url={album.Url}",
+                AlbumName = album.Title,
+                ArtistName = artist,
+                InfoUrl = $"{rd.BaseUrl}/?url={album.Url}",
+                TotalTracks = album.TrackCount == 0 ? 10 : (int)album.TrackCount,
+                CustomString = "album",
                 Codec = format,
                 Bitrate = bitrate,
                 BitDepth = bitDepth
             };
 
-            ProcessReleaseDate(albumData, albumToken["releaseDate"]?.ToString());
-            return albumData;
+            ProcessReleaseDate(data, album.ReleaseDate);
+            return data;
         }
 
-        private AlbumData CreateTrackData(JToken trackToken, LucidaRequestData requestData, AudioFormat format, int bitrate, int bitDepth)
+        private AlbumData CreateTrackData(LucidaTrack track, LucidaRequestData rd, AudioFormat format, int bitrate, int bitDepth)
         {
-            (string coverUrl, string coverResolution) = ExtractCoverInfo(trackToken["coverArtwork"]);
-            string artistName = ExtractArtistName(trackToken["artists"]);
-            JToken? albumToken = trackToken["album"];
+            List<LucidaArtist> artists = track.Artists ?? new List<LucidaArtist>();
+            string artist = artists.FirstOrDefault()?.Name ?? "Unknown Artist";
+            string resolution = string.Empty;
 
-            AlbumData albumData = new("Lucida", nameof(LucidaDownloadProtocol))
+            AlbumData data = new("Lucida", nameof(LucidaDownloadProtocol))
             {
-                AlbumId = $"T:{requestData.ServiceValue}-{trackToken["id"]}-{trackToken["url"]}",
-                AlbumName = albumToken?["title"]?.ToString() ?? trackToken["title"]?.ToString() ?? "Unknown Album",
-                ArtistName = artistName,
-                InfoUrl = $"{requestData.BaseUrl}/?url={Uri.EscapeDataString(trackToken["url"]?.ToString() ?? string.Empty)}",
-                CustomString = coverUrl,
-                CoverResolution = coverResolution,
+                AlbumId = $"T:{rd.BaseUrl}/?url={track.Url}",
+                AlbumName = track.Title,
+                ArtistName = artist,
+                InfoUrl = $"{rd.BaseUrl}/?url={track.Url}",
                 TotalTracks = 1,
+                CustomString = "track",
                 Codec = format,
                 Bitrate = bitrate,
                 BitDepth = bitDepth
             };
 
-            ProcessReleaseDate(albumData,
-                trackToken["releaseDate"]?.ToString() ??
-                albumToken?["releaseDate"]?.ToString() ??
-                DateTime.Now.Year.ToString());
-
-            return albumData;
+            ProcessReleaseDate(data, track.ReleaseDate);
+            return data;
         }
 
         private static void ProcessReleaseDate(AlbumData albumData, string? releaseDate)
@@ -243,78 +217,33 @@ namespace Tubifarry.Indexers.Lucida
                 albumData.ReleaseDate = DateTime.Now.Year.ToString();
                 albumData.ReleaseDatePrecision = "year";
             }
-            else if (Regex.IsMatch(releaseDate, @"^\d{4}-\d{2}-\d{2}$"))
+            else if (Regex.IsMatch(releaseDate, "^\\d{4}-\\d{2}-\\d{2}$"))
             {
                 albumData.ReleaseDate = releaseDate;
                 albumData.ReleaseDatePrecision = "day";
             }
-            else if (Regex.IsMatch(releaseDate, @"^\d{4}$"))
+            else if (Regex.IsMatch(releaseDate, "^\\d{4}$"))
             {
                 albumData.ReleaseDate = releaseDate;
                 albumData.ReleaseDatePrecision = "year";
             }
             else
             {
-                Match yearMatch = Regex.Match(releaseDate, @"\b(\d{4})\b");
-                albumData.ReleaseDate = yearMatch.Success
-                    ? yearMatch.Groups[1].Value
-                    : DateTime.Now.Year.ToString();
+                Match match = Regex.Match(releaseDate, "\\b(\\d{4})\\b");
+                albumData.ReleaseDate = match.Success ? match.Groups[1].Value : DateTime.Now.Year.ToString();
                 albumData.ReleaseDatePrecision = "year";
             }
 
             albumData.ParseReleaseDate();
         }
 
-        private static string ExtractArtistName(JToken? artistsToken) =>
-            artistsToken is JArray artists && artists.Count > 0
-                ? artists[0]["name"]?.ToString() ?? "Unknown Artist"
-                : "Unknown Artist";
-
-        private static (string CoverUrl, string Resolution) ExtractCoverInfo(JToken? artworkToken)
+        private static string NormalizeJsonData(string js)
         {
-            if (artworkToken is JArray artworks && artworks.Count > 0)
-            {
-                JToken firstArtwork = artworks[0];
-                string url = firstArtwork["url"]?.ToString() ?? string.Empty;
-
-                int width = firstArtwork["width"]?.Value<int>() ?? 0;
-                int height = firstArtwork["height"]?.Value<int>() ?? 0;
-
-                return width > 0 && height > 0
-                    ? (url, $"{width}x{height}")
-                    : (url, "UnknownResolution");
-            }
-
-            return (string.Empty, "UnknownResolution");
-        }
-
-        private static int ExtractTrackCount(JToken? trackCountToken)
-        {
-            if (trackCountToken == null)
-                return 10;
-
-            return trackCountToken.Type switch
-            {
-                JTokenType.Float => (int)Math.Round(trackCountToken.Value<double>()),
-                JTokenType.Integer => trackCountToken.Value<int>(),
-                _ => int.TryParse(trackCountToken.ToString(), out int count)
-                    ? count
-                    : 10
-            };
-        }
-
-        private static string NormalizeJsonData(string jsObjectNotation)
-        {
-            jsObjectNotation = Regex.Replace(jsObjectNotation,
-                @"([{,])\s*([a-zA-Z0-9_$]+)\s*:", "$1\"$2\":");
-            jsObjectNotation = Regex.Replace(jsObjectNotation,
-                @":\s*'([^']*)'", ":\"$1\"");
-            jsObjectNotation = Regex.Replace(jsObjectNotation,
-                @":\s*True\b", ":true");
-            jsObjectNotation = Regex.Replace(jsObjectNotation,
-                @":\s*False\b", ":false");
-
-            return jsObjectNotation;
+            js = Regex.Replace(js, @"([\{,])\s*([a-zA-Z0-9_$]+)\s*:", "$1\"$2\":");
+            js = Regex.Replace(js, @":\s*'([^']*)'", ":\"$1\"");
+            js = Regex.Replace(js, @":\s*True\b", ":true");
+            js = Regex.Replace(js, @":\s*False\b", ":false");
+            return js;
         }
     }
 }

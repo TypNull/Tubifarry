@@ -1,8 +1,9 @@
-﻿using Newtonsoft.Json;
-using NLog;
+﻿using NLog;
 using NzbDrone.Common.Http;
+using Requests;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Text.Json;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Lucida
@@ -34,7 +35,7 @@ namespace Tubifarry.Indexers.Lucida
                 ["tidal"] = (AudioFormat.FLAC, 1000, 16),
                 ["deezer"] = (AudioFormat.MP3, 320, 0),
                 ["soundcloud"] = (AudioFormat.AAC, 128, 0),
-                ["amazon"] = (AudioFormat.AAC, 128, 0),
+                ["amazon"] = (AudioFormat.FLAC, 1000, 8),
                 ["yandex"] = (AudioFormat.MP3, 320, 0)
             };
 
@@ -83,11 +84,18 @@ namespace Tubifarry.Indexers.Lucida
                 : char.ToUpperInvariant(serviceValue[0]) + serviceValue[1..];
 
         /// <summary>
+        /// Gets the service key for a display name
+        /// </summary>
+        public static string? GetServiceKey(string displayName)
+            => _knownServices.FirstOrDefault(kvp => string.Equals(kvp.Value, displayName, StringComparison.OrdinalIgnoreCase)).Key;
+
+        /// <summary>
         /// Gets the quality information for a service
         /// </summary>
-        public static (AudioFormat Format, int Bitrate, int BitDepth) GetServiceQuality(string serviceValue)
-            => ServiceQualityMap.TryGetValue(serviceValue, out (AudioFormat Format, int Bitrate, int BitDepth) quality)
+        public static (AudioFormat Format, int Bitrate, int BitDepth) GetServiceQuality(string serviceValue) =>
+            ServiceQualityMap.TryGetValue(serviceValue, out (AudioFormat Format, int Bitrate, int BitDepth) quality)
                 ? quality : (AudioFormat.MP3, 320, 0);
+
 
         /// <summary>
         /// Clear the cached services for a specific instance
@@ -102,36 +110,40 @@ namespace Tubifarry.Indexers.Lucida
         private static async Task<Dictionary<string, List<ServiceCountry>>> FetchServicesAsync(string baseUrl, IHttpClient httpClient, Logger logger)
         {
             Dictionary<string, List<ServiceCountry>> result = new(StringComparer.OrdinalIgnoreCase);
-
+            RequestContainer<OwnRequest> container = new();
             foreach (string service in _knownServices.Keys)
             {
-                string url = $"{baseUrl}/api/load?url=%2Fapi%2Fcountries%3Fservice%3D{service}";
-                logger.Trace("Fetching countries for service {Service}: {Url}", service, url);
-
-                try
+                container.Add(new OwnRequest(async _ =>
                 {
-                    HttpRequest req = new(url);
-                    req.Headers["User-Agent"] = LucidaIndexer.UserAgent;
-                    HttpResponse response = await httpClient.ExecuteAsync(req);
-                    if (response.StatusCode != HttpStatusCode.OK)
-                    {
-                        logger.Warn("Failed to get countries for service {Service}: {StatusCode}", service, response.StatusCode);
-                        continue;
-                    }
+                    string url = $"{baseUrl}/api/load?url=%2Fapi%2Fcountries%3Fservice%3D{service}";
+                    logger.Trace("Fetching countries for service {Service}: {Url}", service, url);
 
-                    CountryResponse? payload = JsonConvert.DeserializeObject<CountryResponse>(response.Content);
-                    if (payload?.Success == true && payload.Countries?.Count > 0)
+                    try
                     {
-                        result[service] = payload.Countries;
-                        logger.Trace("Found {Count} countries for service {Service}", payload.Countries.Count, service);
+                        HttpRequest req = new(url);
+                        req.Headers["User-Agent"] = LucidaIndexer.UserAgent;
+                        HttpResponse response = await httpClient.ExecuteAsync(req);
+                        if (response.StatusCode != HttpStatusCode.OK)
+                        {
+                            logger.Warn("Failed to get countries for service {Service}: {StatusCode}", service, response.StatusCode);
+                            return true;
+                        }
+
+                        CountryResponse? payload = JsonSerializer.Deserialize<CountryResponse>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        if (payload?.Success == true && payload.Countries?.Count > 0)
+                        {
+                            result[service] = payload.Countries;
+                            logger.Trace("Found {Count} countries for service {Service}", payload.Countries.Count, service);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error(ex, "Error fetching countries for service {Service}", service);
-                }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex, "Error fetching countries for service {Service}", service);
+                    }
+                    return true;
+                }));
             }
-
+            await container.Task;
             return result;
         }
     }

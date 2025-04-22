@@ -5,6 +5,7 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using Requests;
 using System.Text.Json;
+using Tubifarry.Core.Replacements;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify

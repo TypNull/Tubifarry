@@ -65,7 +65,7 @@ namespace Tubifarry.Indexers.Lucida
             get
             {
                 Dictionary<string, List<ServiceCountry>>? services = LucidaServiceHelper.HasAvailableServices(BaseUrl) ? LucidaServiceHelper.GetAvailableServices(BaseUrl) : null;
-                return _defaultPriorities.Keys.Where(displayName => services?.ContainsKey(displayName.ToLowerInvariant()) != false)
+                return _defaultPriorities.Keys.Where(displayName => services == null || (LucidaServiceHelper.GetServiceKey(displayName) is string serviceKey && services.ContainsKey(serviceKey)))
                     .Select(displayName => new KeyValuePair<string, string>(displayName, _servicePriorities.FirstOrDefault(p =>
                             string.Equals(p.Key, displayName, StringComparison.OrdinalIgnoreCase)).Value ?? _defaultPriorities[displayName])).OrderBy(kvp => int.Parse(kvp.Value));
             }

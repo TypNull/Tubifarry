@@ -6,30 +6,32 @@ using NzbDrone.Core.IndexerSearch.Definitions;
 
 namespace Tubifarry.Indexers.Lucida
 {
-    public interface ILucidaRequestGenerator : IIndexerRequestGenerator { }
+    public interface ILucidaRequestGenerator : IIndexerRequestGenerator
+    {
+        public void SetSetting(LucidaIndexerSettings settings);
+    }
 
     /// <summary>
     /// Generates Lucida search requests with tiering and service checks
     /// </summary>
     public class LucidaRequestGenerator : ILucidaRequestGenerator
     {
-        private readonly LucidaIndexerSettings _settings;
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
+        private LucidaIndexerSettings? _settings;
 
-        public LucidaRequestGenerator(LucidaIndexerSettings settings, IHttpClient httpClient, Logger logger)
-            => (_settings, _httpClient, _logger) = (settings, httpClient, logger);
+        public LucidaRequestGenerator(IHttpClient httpClient, Logger logger) => (_httpClient, _logger) = (httpClient, logger);
 
         public IndexerPageableRequestChain GetRecentRequests() => new();
 
-        public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
-            => Generate(
+        public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria) => Generate(
                 query: string.Join(' ', new[] { searchCriteria.AlbumQuery, searchCriteria.ArtistQuery }.Where(s => !string.IsNullOrWhiteSpace(s))),
-                isSingle: searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value?.Min(r => r.TrackCount) == 1
-            );
+                isSingle: searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value?.Min(r => r.TrackCount) == 1);
 
-        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
-            => Generate(searchCriteria.ArtistQuery, false);
+        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria) => Generate(searchCriteria.ArtistQuery, false);
+
+        public void SetSetting(LucidaIndexerSettings settings) => _settings = settings;
+
 
         private IndexerPageableRequestChain Generate(string query, bool isSingle)
         {
@@ -40,7 +42,7 @@ namespace Tubifarry.Indexers.Lucida
                 return chain;
             }
 
-            string baseUrl = _settings.BaseUrl.TrimEnd('/');
+            string baseUrl = _settings!.BaseUrl.TrimEnd('/');
             Dictionary<string, List<ServiceCountry>> services = LucidaServiceHelper.GetServicesAsync(baseUrl, _httpClient, _logger)
                              .GetAwaiter().GetResult();
             if (!services.Any())
@@ -69,20 +71,20 @@ namespace Tubifarry.Indexers.Lucida
 
                 IEnumerable<ServiceCountry> picks = countries
                     .Where(c => userCountries.Contains(c.Code))
-                    .DefaultIfEmpty(countries.First())
+                    .DefaultIfEmpty(countries[0])
                     .Take(2);
 
                 foreach (ServiceCountry? country in picks)
                 {
                     string url = $"{baseUrl}/search?query={Uri.EscapeDataString(query)}&service={service}&country={country.Code}";
-                    _logger.Debug("Adding tier: {Url}", url);
+                    _logger.Trace("Adding tier: {Url}", url);
 
                     HttpRequest req = new(url)
                     {
-                        RequestTimeout = TimeSpan.FromSeconds(_settings.RequestTimeout)
+                        RequestTimeout = TimeSpan.FromSeconds(_settings.RequestTimeout),
+                        ContentSummary = new LucidaRequestData(service, _settings.BaseUrl, country.Code, isSingle).ToJson()
                     };
                     req.Headers["User-Agent"] = LucidaIndexer.UserAgent;
-                    req.ContentSummary = new LucidaRequestData(service, _settings.BaseUrl, country.Code, isSingle).ToJson();
 
                     chain.AddTier(new[] { new IndexerRequest(req) });
                 }

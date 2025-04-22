@@ -9,6 +9,7 @@ using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Parser.Model;
 using System.Net;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Core.Replacements
 {
