@@ -19,9 +19,9 @@ namespace Tubifarry.Indexers.Youtube
 
             // Validate poToken (optional)
             RuleFor(x => x.PoToken)
-                .Length(32, 256)
+                .Length(10, 256)
                 .When(x => !string.IsNullOrEmpty(x.PoToken))
-                .WithMessage("Proof of Origin (poToken) must be between 32 and 128 characters if provided.");
+                .WithMessage("Proof of Origin (poToken) must be between 10 and 128 characters if provided.");
 
             // Validate TrustedSessionGeneratorUrl (optional)
             RuleFor(x => x.TrustedSessionGeneratorUrl)

@@ -59,8 +59,8 @@ namespace Tubifarry.Download.Clients.YouTube
 
             // Validate poToken
             RuleFor(x => x.PoToken)
-               .Length(32, 256).When(x => !string.IsNullOrEmpty(x.PoToken))
-               .WithMessage("Proof of Origin (poToken) must be between 32 and 128 characters if provided.");
+               .Length(10, 256).When(x => !string.IsNullOrEmpty(x.PoToken))
+               .WithMessage("Proof of Origin (poToken) must be between 10 and 128 characters if provided.");
 
             // Validate TrustedSessionGeneratorUrl (optional)
             RuleFor(x => x.TrustedSessionGeneratorUrl)
