@@ -172,7 +172,7 @@ namespace Tubifarry.Indexers.Lucida
 
             AlbumData data = new("Lucida", nameof(LucidaDownloadProtocol))
             {
-                AlbumId = $"A:{rd.BaseUrl}/?url={album.Url}",
+                AlbumId = album.Url,
                 AlbumName = album.Title,
                 ArtistName = artist,
                 InfoUrl = $"{rd.BaseUrl}/?url={album.Url}",
@@ -195,7 +195,7 @@ namespace Tubifarry.Indexers.Lucida
 
             AlbumData data = new("Lucida", nameof(LucidaDownloadProtocol))
             {
-                AlbumId = $"T:{rd.BaseUrl}/?url={track.Url}",
+                AlbumId = track.Url,
                 AlbumName = track.Title,
                 ArtistName = artist,
                 InfoUrl = $"{rd.BaseUrl}/?url={track.Url}",
