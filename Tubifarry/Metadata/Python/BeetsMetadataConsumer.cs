@@ -1,14 +1,17 @@
-﻿using NLog;
+﻿using FluentValidation.Results;
+using NLog;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.ThingiProvider;
-using Python.Runtime;
 using Tubifarry.Core.PythonBridge;
 
 namespace Tubifarry.Metadata.Python
 {
+    /// <summary>
+    /// Consumes Beets metadata for music files using the Python bridge.
+    /// </summary>
     public class BeetsMetadataConsumer : MetadataBase<BeetsMetadataConsumerSettings>, IProvider
     {
         private readonly Logger _logger;
@@ -17,10 +20,20 @@ namespace Tubifarry.Metadata.Python
 
         public override string Name => "Beets";
 
+        /// <summary>
+        /// Initializes a new instance of the BeetsMetadataConsumer class.
+        /// </summary>
         public BeetsMetadataConsumer(IPythonBridge pythonBridge, Logger logger)
         {
             _logger = logger;
             _pythonBridge = pythonBridge;
+        }
+
+        ValidationResult IProvider.Test()
+        {
+            _logger.Info("Test");
+            _ = EnsurePythonInitializedAsync();
+            return new();
         }
 
         /// <summary>
@@ -39,6 +52,7 @@ namespace Tubifarry.Metadata.Python
                 .Select(p => p.Trim())
                 .ToArray();
 
+            // Always include beets package
             requiredPackages = requiredPackages.Append("beets").ToArray();
 
             bool initialized = await _pythonBridge.InitializeAsync(requiredPackages);
@@ -54,7 +68,7 @@ namespace Tubifarry.Metadata.Python
         }
 
         /// <summary>
-        /// Process an album folder with Beets using Python.NET directly
+        /// Process an album folder with Beets using Python
         /// </summary>
         private async Task<bool> ProcessAlbumWithBeetsAsync(Artist artist, Album album, string albumPath)
         {
@@ -70,9 +84,6 @@ namespace Tubifarry.Metadata.Python
                     return true;
                 }
 
-                _pythonBridge.OutLogger.OnOutputWritten += OutLogger_OnOutputWritten;
-
-
                 string libraryPath = Settings.LibraryPath;
                 if (Directory.Exists(libraryPath))
                 {
@@ -80,63 +91,65 @@ namespace Tubifarry.Metadata.Python
                     _logger.Debug($"Beets: Using database file at {libraryPath}");
                 }
 
-                using (Py.GIL())
+                // Build Python code for Beets execution
+                string pythonCode = $@"
+import sys
+import os
+
+try:
+    import beets.ui
+    
+    # Setup arguments for beets
+    sys.argv = [
+        'beet',
+        '-c', r'{Settings.ConfigPath.Replace("'", @"\'")}',
+        '-l', r'{libraryPath.Replace("'", @"\'")}',
+        '-d', r'{albumPath.Replace("'", @"\'")}',
+        'import',
+        '-C',  # Always use -C to prevent file movement
+        r'{albumPath.Replace("'", @"\'")}'
+    ]
+    
+    print(f'Executing beets with arguments: {{sys.argv}}')
+    beets.ui.main()
+    print('Beets processing completed successfully')
+    
+except ImportError as e:
+    print(f'Error importing beets: {{e}}')
+    sys.exit(1)
+except Exception as e:
+    print(f'Error processing with beets: {{e}}')
+    sys.exit(1)
+";
+
+                PythonExecutionResult result = _pythonBridge.ExecuteCode(pythonCode);
+                if (result.Success)
                 {
-                    _logger.Trace("Beets: Acquired Python GIL");
-                    dynamic sys = Py.Import("sys");
-                    dynamic os = Py.Import("os");
-                    dynamic beetslib = Py.Import("beets.ui");
-
-                    PyList args = new();
-                    args.Append(new PyString("beet"));
-                    args.Append(new PyString("-c"));
-                    args.Append(new PyString(Settings.ConfigPath));
-                    args.Append(new PyString("-l"));
-                    args.Append(new PyString(libraryPath));
-                    args.Append(new PyString("-d"));
-                    args.Append(new PyString(albumPath));
-                    args.Append(new PyString("import"));
-
-                    args.Append(new PyString("-C")); // Always use -C to prevent file movement
-                    args.Append(new PyString(albumPath));
-
-                    _logger.Debug($"Beets: Executing command with args: {string.Join(" ", args)}");
-                    sys.argv = args;
-
-                    try
-                    {
-                        beetslib.main();
-                        _logger.Info("Beets: Successfully processed album");
-                        return true;
-                    }
-                    catch (PythonException ex)
-                    {
-                        _logger.Error($"Beets: Python exception: {ex.Message}");
-                        _logger.Debug($"Beets: Python exception details: {ex}");
-                        return false;
-                    }
+                    _logger.Info("Beets: Successfully processed album");
+                    _logger.Debug($"Beets output: {result.StandardOutput}");
+                    return true;
+                }
+                else
+                {
+                    _logger.Error($"Beets: Failed to process album: {result.StandardError}");
+                    return false;
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Beets: Error processing album");
                 return false;
-
-            }
-            finally
-            {
-                _pythonBridge.OutLogger.OnOutputWritten -= OutLogger_OnOutputWritten;
             }
         }
 
-        private void OutLogger_OnOutputWritten(object? sender, string e) => _logger.Trace(e);
-
+        // Metadata interface implementation
         public override MetadataFile? FindMetadataFile(Artist artist, string path) => null;
 
         public override MetadataFileResult? ArtistMetadata(Artist artist) => null;
 
         public override MetadataFileResult? AlbumMetadata(Artist artist, Album album, string albumPath)
         {
+            _logger.Info("AlbumMetadata");
             bool success = ProcessAlbumWithBeetsAsync(artist, album, albumPath).GetAwaiter().GetResult();
             if (success)
                 _logger.Debug($"Beets: Successfully processed album {album.Title}");
@@ -145,9 +158,21 @@ namespace Tubifarry.Metadata.Python
             return null;
         }
 
-        public override MetadataFileResult? TrackMetadata(Artist artist, TrackFile trackFile) => null;
+        public override MetadataFileResult? TrackMetadata(Artist artist, TrackFile trackFile)
+        {
+            _logger.Info("TrackMetadata");
+            //bool success = ProcessAlbumWithBeetsAsync(artist, album, albumPath).GetAwaiter().GetResult();
+            //if (success)
+            //    _logger.Debug($"Beets: Successfully processed album {album.Title}");
+            //else
+            //    _logger.Warn($"Beets: Failed to process album {album.Title}");
+            return null;
+        }
+
         public override List<ImageFileResult> ArtistImages(Artist artist) => new();
+
         public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => new();
+
         public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
     }
 }

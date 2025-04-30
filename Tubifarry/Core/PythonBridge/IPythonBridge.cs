@@ -18,12 +18,12 @@ namespace Tubifarry.Core.PythonBridge
         /// <summary>
         /// Gets the logger for capturing standard output from Python operations.
         /// </summary>
-        public PythonConsoleLogger OutLogger { get; }
+        public PythonLogger OutLogger { get; }
 
         /// <summary>
         /// Gets the logger for capturing error output from Python operations.
         /// </summary>
-        public PythonConsoleLogger ErrLogger { get; }
+        public PythonLogger ErrLogger { get; }
 
         /// <summary>
         /// Asynchronously initializes the Python bridge with optional required packages.

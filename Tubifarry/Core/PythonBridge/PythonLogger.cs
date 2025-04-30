@@ -1,4 +1,4 @@
-using NLog;
+﻿using NLog;
 using System.Text;
 
 namespace Tubifarry.Core.PythonBridge
@@ -6,11 +6,10 @@ namespace Tubifarry.Core.PythonBridge
     /// <summary>
     /// A logger implementation for capturing and managing Python output streams.
     /// </summary>
-    public class PythonConsoleLogger : IPythonLogger, IDisposable
+    public class PythonLogger : IPythonLogger, IDisposable
     {
         private readonly StringBuilder _buffer;
         private readonly Logger _logger;
-        private readonly bool _isErrorStream;
         private bool _disposed;
         private readonly object _lock = new();
 
@@ -34,14 +33,12 @@ namespace Tubifarry.Core.PythonBridge
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PythonConsoleLogger"/> class.
+        /// Initializes a new instance of the PythonLogger class.
         /// </summary>
-        /// <param name="isErrorStream">Whether this logger is for an error stream.</param>
-        /// <param name="logger">The logger instance.</param>
-        public PythonConsoleLogger(bool isErrorStream, Logger? logger = null)
+        /// <param name="logger">Optional logger for diagnostic information.</param>
+        public PythonLogger(Logger? logger = null)
         {
             _buffer = new StringBuilder();
-            _isErrorStream = isErrorStream;
             _logger = logger ?? LogManager.GetCurrentClassLogger();
         }
 
@@ -58,13 +55,7 @@ namespace Tubifarry.Core.PythonBridge
             lock (_lock)
             {
                 _buffer.Append(text);
-
-                string logPrefix = _isErrorStream ? "[PythonStderr] " : "[PythonStdout] ";
-                if (_isErrorStream)
-                    _logger.Debug("{0}{1}", logPrefix, text);
-                else
-                    _logger.Trace("{0}{1}", logPrefix, text);
-
+                _logger.Trace($"[PythonOutput] {text}");
                 OnOutputWritten?.Invoke(this, text);
             }
         }
@@ -126,7 +117,7 @@ namespace Tubifarry.Core.PythonBridge
         public void close() => Dispose();
 
         /// <summary>
-        /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
+        /// Disposes resources.
         /// </summary>
         public void Dispose()
         {
@@ -139,6 +130,7 @@ namespace Tubifarry.Core.PythonBridge
                 OnOutputWritten = null;
                 _disposed = true;
             }
+            GC.SuppressFinalize(this);
         }
     }
 }

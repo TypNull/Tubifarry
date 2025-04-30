@@ -7,6 +7,9 @@ using YamlDotNet.RepresentationModel;
 
 namespace Tubifarry.Metadata.Python
 {
+    /// <summary>
+    /// Validator for Beets metadata consumer settings.
+    /// </summary>
     public class BeetsMetadataConsumerSettingsValidator : AbstractValidator<BeetsMetadataConsumerSettings>
     {
         public BeetsMetadataConsumerSettingsValidator()
@@ -46,6 +49,9 @@ namespace Tubifarry.Metadata.Python
         }
     }
 
+    /// <summary>
+    /// Settings for the Beets metadata consumer.
+    /// </summary>
     public class BeetsMetadataConsumerSettings : IProviderConfig
     {
         private static readonly BeetsMetadataConsumerSettingsValidator Validator = new();
@@ -59,6 +65,9 @@ namespace Tubifarry.Metadata.Python
         [FieldDefinition(2, Label = "Required Python Packages", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Comma-separated list of Python packages to install")]
         public string RequiredPackages { get; set; } = "pyacoustid";
 
+        /// <summary>
+        /// Validates the settings.
+        /// </summary>
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

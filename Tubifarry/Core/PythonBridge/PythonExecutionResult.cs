@@ -1,4 +1,4 @@
-namespace Tubifarry.Core.PythonBridge
+﻿namespace Tubifarry.Core.PythonBridge
 {
     /// <summary>
     /// Represents the result of a Python code or function execution.
@@ -43,7 +43,6 @@ namespace Tubifarry.Core.PythonBridge
         /// <summary>
         /// Returns a string that represents the current object.
         /// </summary>
-        /// <returns>A string that represents the current object.</returns>
         public override string ToString() => $"Success: {Success}, ExitCode: {ExitCode}, HasOutput: {HasOutput}";
     }
 }
