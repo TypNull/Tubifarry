@@ -62,6 +62,7 @@ namespace Tubifarry.Indexers.Soulseek
             AddSearchTiersToChain(
                 chain,
                 searchCriteria.ArtistQuery,
+                searchCriteria.AlbumYear.ToString(),
                 searchCriteria.ArtistQuery != searchCriteria.AlbumQuery ? searchCriteria.AlbumQuery : null,
                 searchCriteria.InteractiveSearch,
                 trackCount,
@@ -82,6 +83,7 @@ namespace Tubifarry.Indexers.Soulseek
                 chain,
                 searchCriteria.CleanArtistQuery,
                 null,
+                null,
                 searchCriteria.InteractiveSearch,
                 trackCount,
                 searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>());
@@ -89,7 +91,7 @@ namespace Tubifarry.Indexers.Soulseek
             return chain;
         }
 
-        private void AddSearchTiersToChain(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount, List<string> aliases)
+        private void AddSearchTiersToChain(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount, List<string> aliases)
         {
             _logger.Trace("Adding Tier 1: Base search with original terms");
             chain.AddTier(DeferredGetRequests(artist, album, interactive, trackCount));
@@ -101,7 +103,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             AddPunctuationStrippingTierIfEnabled(chain, artist, album, interactive, trackCount);
 
-            AddVariousArtistsTierIfEnabled(chain, artist, album, interactive, trackCount);
+            AddVariousArtistsTierIfEnabled(chain, artist, album, year, interactive, trackCount);
 
             AddVolumeVariationsTierIfEnabled(chain, artist, album, interactive, trackCount);
 
@@ -169,7 +171,7 @@ namespace Tubifarry.Indexers.Soulseek
             }
         }
 
-        private void AddVariousArtistsTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount)
+        private void AddVariousArtistsTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount)
         {
             if (!Settings.HandleVariousArtists || artist == null || album == null)
                 return;
@@ -181,10 +183,14 @@ namespace Tubifarry.Indexers.Soulseek
                 return;
 
             _logger.Trace("Adding Tier: Various Artists handling - search by album only");
+            chain.AddTier(DeferredGetRequests(null, $"{album} {year}", interactive, trackCount));
             chain.AddTier(DeferredGetRequests(null, album, interactive, trackCount));
 
             if (Settings.StripPunctuation)
+            {
+                AddStrippedVariousArtistsTier(chain, $"{album} {year}", interactive, trackCount);
                 AddStrippedVariousArtistsTier(chain, album, interactive, trackCount);
+            }
         }
 
         private void AddStrippedVariousArtistsTier(ExtendedIndexerPageableRequestChain chain, string album, bool interactive, int trackCount)
