@@ -84,15 +84,16 @@ namespace Tubifarry.Core.PythonBridge
             startInfo.StandardErrorEncoding = Encoding.UTF8;
             startInfo.StandardOutputEncoding = Encoding.UTF8;
 
-            // Set environment variables to ensure proper encoding
             startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
             startInfo.Environment["PYTHONLEGACYWINDOWSSTDIO"] = "utf-8";
 
-            return new Process
+            Process process = new()
             {
                 StartInfo = startInfo,
                 EnableRaisingEvents = true
             };
+
+            return process;
         }
 
         /// <summary>
@@ -107,17 +108,21 @@ namespace Tubifarry.Core.PythonBridge
             bool redirectError,
             bool createNoWindow)
         {
-            _logger.Trace($"Creating Unix process: {command} {arguments} (in {workingDirectory})");
+            _logger.Debug($"Creating Unix process: {command} {arguments} (in {workingDirectory})");
 
             bool useShellExecute = !redirectInput && !redirectOutput && !redirectError;
             bool isShellScript = command.EndsWith(".sh");
             string quotedCommand = QuotePathIfNeeded(command);
             ProcessStartInfo startInfo = new();
 
-            if (isShellScript)
+            if (isShellScript || command == "/bin/bash")
             {
-                startInfo.FileName = "/bin/bash";
-                startInfo.Arguments = $"-c \"{quotedCommand} {arguments}\"";
+                startInfo.FileName = command;
+
+                if (command == "/bin/bash" && !arguments.StartsWith("-c"))
+                    startInfo.Arguments = $"-c \"{arguments}\"";
+                else
+                    startInfo.Arguments = arguments;
             }
             else if (command.StartsWith("source "))
             {
@@ -127,7 +132,6 @@ namespace Tubifarry.Core.PythonBridge
             else
             {
                 startInfo.FileName = quotedCommand;
-
                 if (!string.IsNullOrWhiteSpace(arguments))
                     startInfo.Arguments = arguments;
             }
@@ -141,15 +145,17 @@ namespace Tubifarry.Core.PythonBridge
             startInfo.StandardErrorEncoding = Encoding.UTF8;
             startInfo.StandardOutputEncoding = Encoding.UTF8;
 
-            // Set environment variables to ensure proper encoding
             startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
             startInfo.Environment["LANG"] = "en_US.UTF-8";
+            startInfo.Environment["HOME"] = Environment.GetEnvironmentVariable("HOME");
 
-            return new Process
+            Process process = new()
             {
                 StartInfo = startInfo,
                 EnableRaisingEvents = true
             };
+
+            return process;
         }
 
         /// <summary>
@@ -195,6 +201,8 @@ namespace Tubifarry.Core.PythonBridge
             if (platform == OSPlatform.Windows)
                 command = command.Replace("\"", "\\\"");
 
+            _logger.Debug($"Executing shell command: {shellExecutable} {shellArgPrefix} \"{command}\" (in {workingDirectory ?? Environment.CurrentDirectory})");
+
             using Process process = new()
             {
                 StartInfo = new ProcessStartInfo
@@ -212,22 +220,35 @@ namespace Tubifarry.Core.PythonBridge
                 EnableRaisingEvents = true
             };
 
-            // Set environment variables to ensure proper encoding
             process.StartInfo.Environment["PYTHONIOENCODING"] = "utf-8";
             if (platform == OSPlatform.Windows)
                 process.StartInfo.Environment["PYTHONLEGACYWINDOWSSTDIO"] = "utf-8";
             else
+            {
                 process.StartInfo.Environment["LANG"] = "en_US.UTF-8";
+                process.StartInfo.Environment["HOME"] = Environment.GetEnvironmentVariable("HOME");
+            }
 
-            _logger.Trace($"Executing shell command: {command} (in {workingDirectory ?? Environment.CurrentDirectory})");
+            try
+            {
+                process.Start();
+                Task<string> readOutputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> readErrorTask = captureStdErr ? process.StandardError.ReadToEndAsync() : Task.FromResult(string.Empty);
+                await process.WaitForExitAsync();
 
-            process.Start();
-            string stdOut = await process.StandardOutput.ReadToEndAsync();
-            string stdErr = captureStdErr ? await process.StandardError.ReadToEndAsync() : string.Empty;
-            await process.WaitForExitAsync();
-            _logger.Trace($"Shell command completed with exit code {process.ExitCode}");
+                string stdOut = await readOutputTask;
+                string stdErr = await readErrorTask;
 
-            return (process.ExitCode, stdOut, stdErr);
+                _logger.Trace($"Shell command completed with exit code {process.ExitCode}");
+                if (process.ExitCode != 0)
+                    _logger.Debug($"Command error output: {stdErr}");
+                return (process.ExitCode, stdOut, stdErr);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error executing shell command: {command}");
+                return (-1, string.Empty, ex.ToString());
+            }
         }
     }
 }

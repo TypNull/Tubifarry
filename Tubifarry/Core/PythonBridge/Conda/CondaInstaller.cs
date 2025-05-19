@@ -14,19 +14,6 @@ namespace Tubifarry.Core.PythonBridge.Conda
         private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         private const string condaUrl = "https://repo.anaconda.com/miniconda/";
 
-        // Maps platform and architecture to regex patterns for installer names
-        private static readonly Dictionary<(OSPlatform, string), string> InstallerPatterns = new()
-        {
-            { (OSPlatform.Windows, "x86_64"), @"Miniconda3-\d+\.\d+\.\d+-Windows-x86_64\.exe" },
-            { (OSPlatform.Windows, "x86"), @"Miniconda3-\d+\.\d+\.\d+-Windows-x86\.exe" },
-            { (OSPlatform.Linux, "x86_64"), @"Miniconda3-\d+\.\d+\.\d+-Linux-x86_64\.sh" },
-            { (OSPlatform.Linux, "x86"), @"Miniconda3-\d+\.\d+\.\d+-Linux-x86\.sh" },
-            { (OSPlatform.Linux, "arm64"), @"Miniconda3-\d+\.\d+\.\d+-Linux-aarch64\.sh" },
-            { (OSPlatform.Linux, "armv7l"), @"Miniconda3-\d+\.\d+\.\d+-Linux-armv7l\.sh" },
-            { (OSPlatform.MacOS, "x86_64"), @"Miniconda3-\d+\.\d+\.\d+-MacOSX-x86_64\.sh" },
-            { (OSPlatform.MacOS, "arm64"), @"Miniconda3-\d+\.\d+\.\d+-MacOSX-arm64\.sh" },
-        };
-
         // Maps platform and architecture to latest installer names
         private static readonly Dictionary<(OSPlatform, string), string> LatestInstallers = new()
         {
@@ -35,21 +22,25 @@ namespace Tubifarry.Core.PythonBridge.Conda
             { (OSPlatform.Linux, "x86_64"), "Miniconda3-latest-Linux-x86_64.sh" },
             { (OSPlatform.Linux, "x86"), "Miniconda3-latest-Linux-x86.sh" },
             { (OSPlatform.Linux, "arm64"), "Miniconda3-latest-Linux-aarch64.sh" },
-            { (OSPlatform.Linux, "armv7l"), "Miniconda3-latest-Linux-armv7l.sh" },
             { (OSPlatform.MacOS, "x86_64"), "Miniconda3-latest-MacOSX-x86_64.sh" },
-            { (OSPlatform.MacOS, "arm64"), "Miniconda3-latest-MacOSX-arm64.sh" },
+            { (OSPlatform.MacOS, "arm64"), "Miniconda3-latest-MacOSX-arm64.sh" }
         };
 
         /// <summary>
         /// Finds the Conda environment and returns an installation path.
         /// If Conda is not found, it downloads and installs Miniconda.
         /// </summary>
-        /// <param name="installPaths">Optional paths to check for Conda installation</param>
-        /// <returns>The path to the Conda installation, or null if installation fails.</returns>
         public static async Task<string?> FindOrInstallCondaAsync(params string[] installPaths)
         {
             if (installPaths.Length == 0)
                 installPaths = new string[] { Environment.CurrentDirectory };
+
+            string? systemConda = FindCondaInSystemPath();
+            if (!string.IsNullOrWhiteSpace(systemConda))
+            {
+                _logger.Info($"Found system Conda at: {systemConda}");
+                return systemConda;
+            }
 
             string? minicondaPath = FindCondaPath(installPaths);
 
@@ -71,6 +62,41 @@ namespace Tubifarry.Core.PythonBridge.Conda
         }
 
         /// <summary>
+        /// Looks for Conda in the system path
+        /// </summary>
+        private static string? FindCondaInSystemPath()
+        {
+            try
+            {
+                OSPlatform platform = PlatformUtils.GetCurrentPlatform();
+                string condaExecutableName = "conda" + PlatformUtils.GetExecutableExtension();
+                string command = platform == OSPlatform.Windows ? "where" : "which";
+
+                (int exitCode, string output, string _) = CrossPlatformProcessRunner.ExecuteShellCommand($"{command} {condaExecutableName}")
+                    .GetAwaiter().GetResult();
+
+                if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                {
+                    string condaPath = output.Trim().Split(Environment.NewLine)[0];
+                    if (File.Exists(condaPath))
+                        return Path.GetDirectoryName(Path.GetDirectoryName(condaPath));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Trace($"Error checking for system Conda: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks if the system is running Alpine Linux
+        /// </summary>
+        private static bool IsAlpineLinux() => File.Exists("/etc/alpine-release");
+
+
+        /// <summary>
         /// Finds the path to the Conda installation.
         /// </summary>
         private static string? FindCondaPath(string[] installPaths)
@@ -78,21 +104,14 @@ namespace Tubifarry.Core.PythonBridge.Conda
             OSPlatform platform = PlatformUtils.GetCurrentPlatform();
             string condaExecutableName = "conda" + PlatformUtils.GetExecutableExtension();
 
-            _logger.Trace($"Looking for Conda executable: {condaExecutableName}");
-
             foreach (string basePath in installPaths)
             {
                 if (!Directory.Exists(basePath))
-                {
-                    _logger.Debug($"Base path does not exist: {basePath}");
                     continue;
-                }
 
                 try
                 {
-                    _logger.Trace($"Searching for Miniconda in: {basePath}");
                     string[] minicondaDirs = Directory.GetDirectories(basePath, "miniconda3*", SearchOption.TopDirectoryOnly);
-                    _logger.Trace($"Found {minicondaDirs.Length} potential Miniconda directories");
 
                     foreach (string dir in minicondaDirs)
                     {
@@ -103,31 +122,8 @@ namespace Tubifarry.Core.PythonBridge.Conda
                             _ => null
                         };
 
-                        _logger.Trace($"Checking for Conda at: {condaPath}");
-
                         if (condaPath != null && File.Exists(condaPath))
-                        {
-                            _logger.Debug($"Found Conda at: {condaPath}");
                             return dir;
-                        }
-                    }
-
-                    if (Path.GetFileName(basePath).StartsWith("miniconda3", StringComparison.OrdinalIgnoreCase))
-                    {
-                        string? condaPath = platform switch
-                        {
-                            OSPlatform.Windows => Path.Combine(basePath, "Scripts", condaExecutableName),
-                            OSPlatform.Linux or OSPlatform.MacOS => Path.Combine(basePath, "bin", condaExecutableName),
-                            _ => null
-                        };
-
-                        _logger.Trace($"Checking for Conda directly at: {condaPath}");
-
-                        if (condaPath != null && File.Exists(condaPath))
-                        {
-                            _logger.Debug($"Found Conda at: {condaPath}");
-                            return basePath;
-                        }
                     }
                 }
                 catch (Exception ex)
@@ -136,85 +132,180 @@ namespace Tubifarry.Core.PythonBridge.Conda
                 }
             }
 
-            _logger.Trace("No Conda installation found");
             return null;
+        }
+
+        /// <summary>
+        /// Sets up the Alpine Linux environment for Miniconda installation.
+        /// FAILS HARD on any permission errors.
+        /// </summary>
+        private static async Task SetupAlpineEnvironmentAsync(string tempDir)
+        {
+            _logger.Info("Setting up Alpine Linux environment for Miniconda installation");
+
+            // 1. Install required base packages
+            _logger.Debug("Installing required base packages for Alpine");
+            (int exitCode1, _, string error1) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                "apk add --no-cache wget ca-certificates bash libstdc++",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode1 != 0)
+            {
+                _logger.Error($"Failed to install base packages: {error1}");
+                throw new Exception($"Cannot install Alpine base packages. Exit code: {exitCode1}. Error: {error1}");
+            }
+
+            // 2. Download and install glibc packages
+            _logger.Trace("Installing glibc packages for Alpine");
+            string glibcDir = Path.Combine(tempDir, "alpine-glibc");
+            Directory.CreateDirectory(glibcDir);
+
+            using (HttpClient client = new())
+            {
+                // Download sgerrand.rsa.pub key
+                const string keyUrl = "https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub";
+                string keyPath = Path.Combine(glibcDir, "sgerrand.rsa.pub");
+                _logger.Trace($"Downloading {keyUrl}");
+                byte[] keyData = await client.GetByteArrayAsync(keyUrl);
+                await File.WriteAllBytesAsync(keyPath, keyData);
+
+                // Download glibc packages
+                string[] glibcPackages = new[]
+                {
+                    "glibc-2.35-r0.apk",
+                    "glibc-bin-2.35-r0.apk",
+                    "glibc-i18n-2.35-r0.apk"
+                };
+
+                foreach (string package in glibcPackages)
+                {
+                    string packageUrl = $"https://github.com/sgerrand/alpine-pkg-glibc/releases/download/2.35-r0/{package}";
+                    string packagePath = Path.Combine(glibcDir, package);
+                    _logger.Trace($"Downloading {packageUrl}");
+                    byte[] packageData = await client.GetByteArrayAsync(packageUrl);
+                    await File.WriteAllBytesAsync(packagePath, packageData);
+                }
+            }
+
+            // Install key
+            (int exitCode2, _, string error2) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                $"cp {Path.Combine(glibcDir, "sgerrand.rsa.pub")} /etc/apk/keys/",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode2 != 0)
+            {
+                _logger.Error($"Failed to install sgerrand key: {error2}");
+                throw new Exception($"Cannot install sgerrand key. Exit code: {exitCode2}. Error: {error2}. This requires root privileges.");
+            }
+
+            // Install glibc packages
+            string packagesPath = string.Join(" ", Directory.GetFiles(glibcDir, "*.apk"));
+            (int exitCode3, _, string error3) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                $"apk add --no-cache --force-overwrite {packagesPath}",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode3 != 0)
+            {
+                _logger.Error($"Failed to install glibc packages: {error3}");
+                throw new Exception($"Cannot install glibc packages. Exit code: {exitCode3}. Error: {error3}. This requires root privileges.");
+            }
+
+            // 3. Set up locale
+            _logger.Debug("Setting up locale for Alpine");
+            (int exitCode4, _, string error4) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                "/usr/glibc-compat/bin/localedef -i en_US -f UTF-8 en_US.UTF-8",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode4 != 0)
+            {
+                _logger.Error($"Failed to set up locale: {error4}");
+                throw new Exception($"Cannot set up locale. Exit code: {exitCode4}. Error: {error4}");
+            }
+
+            // 4. Create critical symlinks
+            _logger.Debug("Creating critical symlinks for glibc compatibility");
+
+            (int exitCode5, _, string error5) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                "ln -sf /usr/glibc-compat/lib/ld-linux-x86-64.so.2 /lib/",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode5 != 0)
+            {
+                _logger.Error($"Failed to create ld-linux symlink: {error5}");
+                throw new Exception($"Cannot create ld-linux symlink. Exit code: {exitCode5}. Error: {error5}. This requires root privileges.");
+            }
+
+            (int exitCode6, _, string error6) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                "ln -sf /usr/glibc-compat/lib/libc.so.6 /lib/",
+                tempDir,
+                captureStdErr: true);
+
+            if (exitCode6 != 0)
+            {
+                _logger.Error($"Failed to create libc symlink: {error6}");
+                throw new Exception($"Cannot create libc symlink. Exit code: {exitCode6}. Error: {error6}. This requires root privileges.");
+            }
+
+            // 5. Set environment variables
+            _logger.Trace("Setting glibc environment variables");
+            Environment.SetEnvironmentVariable("LD_LIBRARY_PATH", "/usr/glibc-compat/lib", EnvironmentVariableTarget.Process);
+            Environment.SetEnvironmentVariable("PATH", $"/usr/glibc-compat/bin:{Environment.GetEnvironmentVariable("PATH")}", EnvironmentVariableTarget.Process);
+
+            _logger.Debug("Alpine Linux environment setup completed successfully");
         }
 
         /// <summary>
         /// Downloads and installs Miniconda.
         /// </summary>
-        /// <param name="installFolder">The folder where Miniconda will be installed.</param>
         private static async Task DownloadAndInstallMinicondaAsync(string installFolder)
         {
             OSPlatform platform = PlatformUtils.GetCurrentPlatform();
             string architecture = PlatformUtils.GetArchitecture();
+            bool isAlpine = platform == OSPlatform.Linux && IsAlpineLinux();
 
             try
             {
                 (string downloadUrl, string hash) = await GetMinicondaDownloadUrlAsync(platform, architecture);
                 Directory.CreateDirectory(installFolder);
-                _logger.Trace($"Created installation directory: {installFolder}");
+
                 string tempDir = Path.Combine(Path.GetTempPath(), "miniconda_installer_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(tempDir);
                 _logger.Debug($"Created temp directory: {tempDir}");
+
+                if (isAlpine)
+                    await SetupAlpineEnvironmentAsync(tempDir);
+
                 string installerPath = Path.Combine(tempDir, Path.GetFileName(downloadUrl));
                 _logger.Debug($"Downloading Miniconda installer to: {installerPath}");
 
                 using (HttpClient client = new())
                 {
-                    _logger.Trace("Downloading Miniconda installer...");
                     byte[] installerData = await client.GetByteArrayAsync(downloadUrl);
                     await File.WriteAllBytesAsync(installerPath, installerData);
-                    _logger.Trace("Download complete");
                 }
-                string fileHash = CalculateFileHash(installerPath);
-                _logger.Trace($"Calculated hash: {fileHash}");
-                _logger.Trace($"Expected hash: {hash}");
 
-                if (hash == fileHash)
-                    _logger.Trace("File hash matches the expected hash.");
-                else
+                string fileHash = CalculateFileHash(installerPath);
+                if (hash != fileHash)
                     throw new Exception("File hash does not match the expected hash.");
 
-                _logger.Trace("Installing Miniconda...");
+                _logger.Info("Installing Miniconda...");
 
                 if (platform == OSPlatform.Windows)
                     await InstallMinicondaWindowsAsync(installerPath, installFolder);
                 else
-                    await InstallMinicondaUnixAsync(installerPath, installFolder);
+                    await InstallMinicondaUnixAsync(installerPath, installFolder, isAlpine);
 
-                _logger.Trace("Miniconda installation complete.");
-
-                if (platform == OSPlatform.Windows)
-                {
-                    string libraryBinPath = Path.Combine(installFolder, "Library", "bin");
-                    string dllsPath = Path.Combine(installFolder, "DLLs");
-
-                    _logger.Trace($"Setting up DLLs from {libraryBinPath} to {dllsPath}");
-
-                    if (Directory.Exists(libraryBinPath))
-                    {
-                        if (!Directory.Exists(dllsPath))
-                        {
-                            Directory.CreateDirectory(dllsPath);
-                            _logger.Debug($"Created DLLs directory: {dllsPath}");
-                        }
-                        CopyFiles(libraryBinPath, dllsPath, "libcrypto-1_1-x64.*");
-                        CopyFiles(libraryBinPath, dllsPath, "libssl-1_1-x64.*");
-                    }
-                    else
-                    {
-                        _logger.Warn($"Warning: Library bin path not found: {libraryBinPath}");
-                    }
-                }
+                _logger.Info("Miniconda installation complete.");
 
                 try
                 {
                     if (Directory.Exists(tempDir))
-                    {
                         Directory.Delete(tempDir, true);
-                        _logger.Trace($"Cleaned up temp directory: {tempDir}");
-                    }
                 }
                 catch (Exception ex)
                 {
@@ -229,78 +320,33 @@ namespace Tubifarry.Core.PythonBridge.Conda
         }
 
         /// <summary>
-        /// Copies files from one directory to another matching a pattern.
-        /// </summary>
-        private static void CopyFiles(string sourceDir, string destDir, string pattern)
-        {
-            foreach (string file in Directory.GetFiles(sourceDir, pattern))
-            {
-                string destFile = Path.Combine(destDir, Path.GetFileName(file));
-                File.Copy(file, destFile, true);
-                _logger.Trace($"Copied {file} to {destFile}");
-            }
-        }
-
-        /// <summary>
         /// Installs Miniconda on Windows.
         /// </summary>
         private static async Task InstallMinicondaWindowsAsync(string installerPath, string installFolder)
         {
-            try
+            ProcessStartInfo startInfo = new()
             {
-                bool isUpdate = Directory.Exists(installFolder);
-                if (installFolder.Contains(' '))
-                    _logger.Warn("Installation folder contains spaces which may cause issues with conda packages");
+                FileName = installerPath,
+                Arguments = $"/S /D={installFolder}",
+                UseShellExecute = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(installerPath) ?? Environment.CurrentDirectory
+            };
 
-                string escapedPath = installFolder.Replace("\"", "\\\"");
+            using Process process = Process.Start(startInfo) ?? throw new Exception("Failed to start Miniconda installer process");
+            await process.WaitForExitAsync();
 
-                _logger.Trace($"Running installer: {installerPath} with arguments: /S /D={escapedPath}");
+            if (process.ExitCode != 0)
+                throw new Exception($"Miniconda installation failed with exit code {process.ExitCode}");
 
-                ProcessStartInfo startInfo = new()
-                {
-                    FileName = installerPath,
-                    // For Windows, the /D= parameter needs to be last
-                    Arguments = $"/S /D={escapedPath}",
-                    UseShellExecute = true,
-                    CreateNoWindow = true,
-                    WorkingDirectory = Path.GetDirectoryName(installerPath) ?? Environment.CurrentDirectory
-                };
+            string condaExecutable = Path.Combine(installFolder, "Scripts", "conda.exe");
+            if (!File.Exists(condaExecutable))
+                throw new Exception("Miniconda installation did not create conda.exe");
 
-                using Process process = Process.Start(startInfo) ??
-                    throw new Exception("Failed to start Miniconda installer process");
-
-                _logger.Trace("Waiting for installer to complete...");
-                await process.WaitForExitAsync();
-
-                _logger.Trace($"Installer exited with code: {process.ExitCode}");
-
-                if (process.ExitCode != 0)
-                    throw new Exception($"Miniconda installation failed with exit code {process.ExitCode}");
-
-                string condaExecutable = Path.Combine(installFolder, "Scripts", "conda.exe");
-
-                if (!File.Exists(condaExecutable))
-                {
-                    _logger.Error($"Conda executable not found at expected location: {condaExecutable}");
-                    throw new Exception("Miniconda installation did not create conda.exe");
-                }
-
-                _logger.Debug(isUpdate
-                    ? $"Successfully updated Miniconda installation at: {installFolder}"
-                    : $"Successfully installed Miniconda at: {installFolder}");
-                process.Close();
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Error during Miniconda installation: {ex.Message}");
-                throw;
-            }
+            _logger.Info($"Successfully installed Miniconda at: {installFolder}");
         }
 
-        /// <summary>
-        /// Installs Miniconda on Unix-like systems (Linux and macOS).
-        /// </summary>
-        private static async Task InstallMinicondaUnixAsync(string installerPath, string installFolder)
+        private static async Task InstallMinicondaUnixAsync(string installerPath, string installFolder, bool isAlpine = false)
         {
             (int chmodExitCode, _, string chmodError) = await CrossPlatformProcessRunner.ExecuteShellCommand(
                 $"chmod +x \"{installerPath}\"",
@@ -310,27 +356,30 @@ namespace Tubifarry.Core.PythonBridge.Conda
             if (chmodExitCode != 0)
                 throw new Exception($"Failed to make installer executable: exit code {chmodExitCode}: {chmodError}");
 
-            // Check if directory already exists and add -u flag if needed
-            string installArgs = Directory.Exists(installFolder)
-                ? $"\"{installerPath}\" -b -u -p \"{installFolder}\""  // Add -u flag for update
-                : $"\"{installerPath}\" -b -p \"{installFolder}\"";    // Normal install
+            bool needsUpdate = Directory.Exists(installFolder);
+            string installCmd = needsUpdate
+                ? $"bash \"{installerPath}\" -b -u -p \"{installFolder}\""  // Add -u flag for update
+                : $"bash \"{installerPath}\" -b -p \"{installFolder}\"";   // Normal install
 
-            _logger.Trace($"Running installer with command: {installArgs}");
+            // For Alpine Linux, ensure the environment variables are set
+            if (isAlpine)
+                installCmd = $"export LD_LIBRARY_PATH=/usr/glibc-compat/lib && export PATH=/usr/glibc-compat/bin:$PATH && {installCmd}";
 
-            using Process installProcess = CrossPlatformProcessRunner.CreateProcess(
-                "/bin/bash",
-                $"-c {installArgs}",
-                Path.GetDirectoryName(installerPath) ?? Environment.CurrentDirectory);
+            _logger.Debug($"Running installer with command: {installCmd}");
 
-            installProcess.Start();
-            string output = await installProcess.StandardOutput.ReadToEndAsync();
-            string error = await installProcess.StandardError.ReadToEndAsync();
-            await installProcess.WaitForExitAsync();
+            (int exitCode, string output, string error) = await CrossPlatformProcessRunner.ExecuteShellCommand(
+                installCmd,
+                Path.GetDirectoryName(installerPath) ?? Environment.CurrentDirectory,
+                captureStdErr: true);
 
-            if (installProcess.ExitCode != 0)
-                throw new Exception($"Miniconda installation failed with exit code {installProcess.ExitCode}: {error}");
+            if (exitCode != 0)
+                throw new Exception($"Miniconda installation failed with exit code {exitCode}: {error}");
 
-            _logger.Debug(output);
+            string condaExecutable = Path.Combine(installFolder, "bin", "conda");
+            if (!File.Exists(condaExecutable))
+                throw new Exception($"Conda executable not found at expected location: {condaExecutable}");
+
+            _logger.Info($"Successfully installed Miniconda at: {installFolder}");
         }
 
         /// <summary>
@@ -338,11 +387,8 @@ namespace Tubifarry.Core.PythonBridge.Conda
         /// </summary>
         private static async Task<(string, string)> GetMinicondaDownloadUrlAsync(OSPlatform platform, string architecture)
         {
-            if (!InstallerPatterns.TryGetValue((platform, architecture), out _))
-                throw new PlatformNotSupportedException($"Unsupported platform ({platform}) or architecture ({architecture})");
-
             if (!LatestInstallers.TryGetValue((platform, architecture), out string? latestInstallerName))
-                throw new PlatformNotSupportedException($"No latest installer available for platform ({platform}) and architecture ({architecture})");
+                throw new PlatformNotSupportedException($"No installer available for platform ({platform}) and architecture ({architecture})");
 
             using HttpClient client = new();
             string html = await client.GetStringAsync(condaUrl);

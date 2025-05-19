@@ -70,7 +70,7 @@ namespace Tubifarry.Core.PythonBridge
 
             try
             {
-                _logger.Trace("Initializing Conda Python bridge");
+                _logger.Info("Initializing Conda Python bridge");
 
                 // Step 1: Download and install Miniconda if not already installed
                 string? installedCondaPath = await CondaInstaller.FindOrInstallCondaAsync(_condaBasePath);
@@ -81,16 +81,31 @@ namespace Tubifarry.Core.PythonBridge
                     return false;
                 }
 
-                _logger.Trace($"Using Conda installation at: {installedCondaPath}");
+                _logger.Info($"Using Conda installation at: {installedCondaPath}");
 
                 // Step 2: Create a CondaClient to manage environments
                 string condaExecutablePath = PlatformUtils.GetCondaExecutablePath(installedCondaPath);
+
+                if (!File.Exists(condaExecutablePath))
+                {
+                    _logger.Error($"Conda executable not found at {condaExecutablePath}");
+                    return false;
+                }
+
                 _condaClient = new CondaClient(condaExecutablePath, _logger);
 
                 // Step 3: Get Conda system information
-                CondaInfo condaInfo = await _condaClient.GetCondaInfoAsync();
-                _logger.Info($"Conda version: {condaInfo.CondaVersion}");
-                _logger.Info($"Python version: {condaInfo.PythonVersion}");
+                try
+                {
+                    CondaInfo condaInfo = await _condaClient.GetCondaInfoAsync();
+                    _logger.Debug($"Conda version: {condaInfo.CondaVersion}");
+                    _logger.Info($"Python version: {condaInfo.PythonVersion}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Failed to get Conda info");
+                    return false;
+                }
 
                 // Step 4: Check if environment exists or create a new one
                 bool envExists = await _condaClient.EnvironmentExistsAsync(_environmentName);
@@ -112,15 +127,21 @@ namespace Tubifarry.Core.PythonBridge
                     _logger.Debug($"Using existing environment: {_environmentName}");
                 }
 
-                // Step 6: Add conda-forge as channel
+                // Step 5: Add conda-forge as channel
                 await _condaClient.AddCondaForgeChannelAsync();
 
                 // Step 6: Install required packages
                 if (requiredPackages.Length > 0)
                 {
-                    _logger.Debug($"Installing {requiredPackages.Length} required packages...");
+                    _logger.Trace($"Installing {requiredPackages.Length} required packages...");
                     foreach (string package in requiredPackages)
-                        await _condaClient.InstallPackageAsync(package, _environmentName);
+                    {
+                        bool success = await _condaClient.InstallPackageAsync(package, _environmentName);
+                        if (!success)
+                        {
+                            _logger.Warn($"Failed to install package: {package}");
+                        }
+                    }
                 }
 
                 // Step 7: Get environment path and initialize PythonNetEnv
@@ -133,7 +154,7 @@ namespace Tubifarry.Core.PythonBridge
 
                 string pythonVersion = await _condaClient.GetPythonVersionAsync(_environmentName);
                 PythonVersion = pythonVersion;
-                _logger.Debug($"Using Python version: {pythonVersion}");
+                _logger.Trace($"Using Python version: {pythonVersion}");
 
                 // Step 8: Initialize PythonNetEnv
                 try
@@ -142,7 +163,7 @@ namespace Tubifarry.Core.PythonBridge
                     OutLogger.OnOutputWritten += (sender, content) => _pythonNetEnv.OutLogger.write(content);
                     ErrLogger.OnOutputWritten += (sender, content) => _pythonNetEnv.ErrLogger.write(content);
 
-                    _logger.Info("Python.NET environment initialized successfully");
+                    _logger.Debug("Python.NET environment initialized successfully");
                     IsInitialized = true;
                     return true;
                 }
@@ -183,8 +204,8 @@ namespace Tubifarry.Core.PythonBridge
                 string modifiedCode = "print('=== Python execution started ===')\n" + code;
                 _pythonNetEnv.ExecutePythonCodeAsync(modifiedCode, Directory.GetCurrentDirectory()).GetAwaiter().GetResult();
 
-                _logger.Trace($"Python stdout: {OutLogger.Content}");
-                _logger.Trace($"Python stderr: {ErrLogger.Content}");
+                _logger.Debug($"Python stdout: {OutLogger.Content}");
+                _logger.Debug($"Python stderr: {ErrLogger.Content}");
 
                 return new PythonExecutionResult
                 {
@@ -236,7 +257,7 @@ namespace Tubifarry.Core.PythonBridge
 
             try
             {
-                _logger.Trace($"Installing Python packages: {string.Join(", ", packages)}");
+                _logger.Info($"Installing Python packages: {string.Join(", ", packages)}");
 
                 OutLogger.Clear();
                 ErrLogger.Clear();

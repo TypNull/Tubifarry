@@ -31,7 +31,7 @@ namespace Tubifarry.Metadata.Python
 
         ValidationResult IProvider.Test()
         {
-            _logger.Info("Test");
+            _logger.Info("Testing Beets metadata consumer");
             _ = EnsurePythonInitializedAsync();
             return new();
         }
