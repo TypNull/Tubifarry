@@ -5,6 +5,7 @@ using NzbDrone.Common.Instrumentation;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using NzbDrone.Core.Music;
 using System.Globalization;
 using System.Net;
 using System.Text;
@@ -54,7 +55,9 @@ namespace Tubifarry.Indexers.Soulseek
         public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
             _logger.Trace($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
-            int trackCount = searchCriteria.Albums.FirstOrDefault()?.AlbumReleases.Value.Min(x => x.TrackCount) ?? 0;
+            Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
+            List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
+            int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
             _processedSearches.Clear();
 
             ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
@@ -74,7 +77,9 @@ namespace Tubifarry.Indexers.Soulseek
         public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
             _logger.Debug($"Generating search requests for artist: {searchCriteria.CleanArtistQuery}");
-            int trackCount = searchCriteria.Albums.FirstOrDefault()?.AlbumReleases.Value.Min(x => x.TrackCount) ?? 0;
+            Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
+            List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
+            int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
             _processedSearches.Clear();
 
             ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
