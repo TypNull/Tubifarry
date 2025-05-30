@@ -1,7 +1,6 @@
 ﻿using DryIoc;
 using NLog;
 using NzbDrone.Common.Messaging;
-using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
@@ -34,7 +33,7 @@ namespace Tubifarry.Metadata.Proxy
     {
         public static IProxyService? ProxyService { get; private set; }
         public ProxyServiceStarter(IProxyService service) => ProxyService = service;
-        public void Handle(ApplicationStartedEvent message) { }
+        public void Handle(ApplicationStartedEvent message) => ProxyService?.CheckProxy();
     }
 
     public interface IProxyService
@@ -44,14 +43,14 @@ namespace Tubifarry.Metadata.Proxy
         void CheckProxy();
     }
 
-    public class MetadataProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>, IHandle<ProviderAddedEvent<IMetadata>>
+    public class MetadataProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>
     {
         private readonly ILogger _logger;
         private readonly IMetadataFactory _metadataFactory;
         private readonly IContainer _container;
-        private readonly IProxy[] _proxys;
         private readonly List<IProxy> _activeProxys;
         private readonly IEventAggregator _eventAggregator;
+        private IProxy[] _proxys;
         private IProxy? _activeProxy;
 
         public IList<IProxy> Proxys => _proxys;
@@ -77,7 +76,6 @@ namespace Tubifarry.Metadata.Proxy
 
             foreach (Type interfaceType in typeof(ProxyForMetadataProxy).GetInterfaces())
                 _container.Register(interfaceType, typeof(ProxyForMetadataProxy), Reuse.Singleton, null, null, IfAlreadyRegistered.Replace);
-            CheckProxy();
         }
 
         public void CheckProxy()
@@ -85,7 +83,11 @@ namespace Tubifarry.Metadata.Proxy
             _logger.Debug("Checking active proxies...");
 
             if (!_proxys.Any())
-                return;
+            {
+                _proxys = _metadataFactory.GetAvailableProviders().OfType<IProxy>().ToArray();
+                if (!_proxys.Any())
+                    return;
+            }
 
             if (!_activeProxys.Any())
             {
@@ -145,7 +147,5 @@ namespace Tubifarry.Metadata.Proxy
             }
             CheckProxy();
         }
-
-        public void Handle(ProviderAddedEvent<IMetadata> message) => CheckProxy();
     }
 }
