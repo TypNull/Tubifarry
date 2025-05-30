@@ -21,7 +21,7 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 ForeignAlbumId = dAlbum.Id + _identifier,
                 Title = dAlbum.Title ?? string.Empty,
                 ReleaseDate = dAlbum.ReleaseDate,
-                CleanTitle = Parser.NormalizeTitle(dAlbum.Title),
+                CleanTitle = dAlbum.Title.CleanArtistName(), // Use CleanArtistName instead of CleanAlbumTitle, as lidar utilizes it too.
                 Links = new List<Links>(),
                 Genres = dAlbum.Genres?.Data?.Select(g => g.Name).ToList() ?? new List<string>(),
                 AlbumType = AlbumMapper.PrimaryTypeMap.TryGetValue(dAlbum.RecordType.ToLowerInvariant(), out string? mappedType) ? mappedType : "Album",

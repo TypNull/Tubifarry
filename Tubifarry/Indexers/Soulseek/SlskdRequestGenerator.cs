@@ -65,8 +65,8 @@ namespace Tubifarry.Indexers.Soulseek
             AddSearchTiersToChain(
                 chain,
                 searchCriteria.ArtistQuery,
-                searchCriteria.AlbumYear.ToString(),
                 searchCriteria.ArtistQuery != searchCriteria.AlbumQuery ? searchCriteria.AlbumQuery : null,
+                searchCriteria.AlbumYear.ToString(),
                 searchCriteria.InteractiveSearch,
                 trackCount,
                 searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>());

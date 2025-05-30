@@ -19,7 +19,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
             {
                 ForeignAlbumId = $"{lastfmAlbum.ArtistName}::{lastfmAlbum.Name}{_identifier}",
                 Title = lastfmAlbum.Name ?? string.Empty,
-                CleanTitle = Parser.NormalizeTitle(lastfmAlbum.Name),
+                CleanTitle = lastfmAlbum.Name.CleanArtistName(), // Use CleanArtistName instead of CleanAlbumTitle, as lidar utilizes it too.
                 Links = new List<Links>(),
                 Genres = lastfmAlbum.Tags?.Tag?.Select(g => g.Name).ToList() ?? new List<string>(),
                 SecondaryTypes = new List<SecondaryAlbumType>(),
@@ -188,7 +188,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
             {
                 ForeignAlbumId = $"{artist.ForeignArtistId.Replace(_identifier, "")}::{topAlbum.Name}{_identifier}",
                 Title = topAlbum.Name ?? string.Empty,
-                CleanTitle = Parser.NormalizeTitle(topAlbum.Name),
+                CleanTitle = topAlbum.Name.CleanArtistName(),
                 Links = new List<Links> { new() { Url = topAlbum.Url, Name = "Last.fm" } },
                 AlbumType = "Album",
                 Ratings = new(),
