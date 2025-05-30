@@ -1,23 +1,31 @@
 ﻿using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
+using NzbDrone.Core.Lifecycle;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
 using System.Text.Json;
 using Tubifarry.Core.Model;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    public class SlskdIndexerParser : IParseIndexerResponse
+    public class SlskdIndexerParser : IParseIndexerResponse, IHandle<AlbumGrabbedEvent>, IHandle<ApplicationShutdownRequested>
     {
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
+        private readonly Lazy<IIndexerFactory> _indexerFactory;
         private readonly IHttpClient _httpClient;
+
+        private static Dictionary<int, string> _interactiveResults = new();
+
         private SlskdSettings Settings => _indexer.Settings;
 
-        public SlskdIndexerParser(SlskdIndexer indexer, IHttpClient httpClient)
+        public SlskdIndexerParser(SlskdIndexer indexer, Lazy<IIndexerFactory> indexerFactory, IHttpClient httpClient)
         {
             _indexer = indexer;
+            _indexerFactory = indexerFactory;
             _logger = NzbDroneLogger.GetLogger(this);
             _httpClient = httpClient;
         }
@@ -89,16 +97,57 @@ namespace Tubifarry.Indexers.Soulseek
             {
                 try
                 {
-                    if (delay) await Task.Delay(90000);
-                    HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}").SetHeader("X-API-KEY", Settings.ApiKey).Build();
-                    request.Method = HttpMethod.Delete;
-                    HttpResponse response = await _httpClient.ExecuteAsync(request);
+                    if (delay)
+                    {
+                        _interactiveResults.TryGetValue(_indexer.Definition.Id, out string? staleId);
+                        _interactiveResults[_indexer.Definition.Id] = searchId;
+                        if (staleId != null)
+                            searchId = staleId;
+                        else return;
+                    }
+                    await ExecuteRemovalAsync(Settings, searchId);
                 }
                 catch (HttpException ex)
                 {
                     _logger.Error(ex, $"Failed to remove slskd search with ID: {searchId}");
                 }
             });
+        }
+
+        public void Handle(AlbumGrabbedEvent message)
+        {
+            if (!_interactiveResults.TryGetValue(message.Album.Release.IndexerId, out string? selectedId) || !message.Album.Release.InfoUrl.EndsWith(selectedId))
+                return;
+            ExecuteRemovalAsync((SlskdSettings)_indexerFactory.Value.Get(message.Album.Release.IndexerId).Settings, selectedId).Wait();
+            _interactiveResults.Remove(message.Album.Release.IndexerId);
+        }
+
+        public void Handle(ApplicationShutdownRequested message)
+        {
+            foreach (int indexerId in _interactiveResults.Keys.ToList())
+            {
+                if (_interactiveResults.TryGetValue(indexerId, out string? selectedId))
+                {
+                    ExecuteRemovalAsync((SlskdSettings)_indexerFactory.Value.Get(indexerId).Settings, selectedId).Wait();
+                    _interactiveResults.Remove(indexerId);
+                }
+            }
+        }
+
+        private async Task ExecuteRemovalAsync(SlskdSettings settings, string searchId)
+        {
+            try
+            {
+                HttpRequest request = new HttpRequestBuilder($"{settings.BaseUrl}/api/v0/searches/{searchId}")
+                    .SetHeader("X-API-KEY", settings.ApiKey)
+                    .Build();
+                request.Method = HttpMethod.Delete;
+                await _httpClient.ExecuteAsync(request);
+            }
+            catch (HttpException ex)
+            {
+                _logger.Error(ex, $"Failed to remove slskd search with ID: {searchId}");
+            }
         }
     }
 }
