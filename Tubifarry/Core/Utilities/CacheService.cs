@@ -66,7 +66,7 @@ namespace Tubifarry.Core.Utilities
                 _memoryCache[key] = new CachedData<object>
                 {
                     Data = value!,
-                    CreatedAt = DateTime.Now,
+                    CreatedAt = DateTime.UtcNow,
                     ExpirationDuration = CacheDuration,
                 };
             }
@@ -96,7 +96,7 @@ namespace Tubifarry.Core.Utilities
         }
 
         private bool IsExpired(CachedData<object> entry) =>
-            (DateTime.Now - entry.CreatedAt) > CacheDuration;
+            (DateTime.UtcNow - entry.CreatedAt) > CacheDuration;
     }
 
     /// <summary>

@@ -93,26 +93,42 @@ namespace Tubifarry.Metadata.Proxy.Core
         /// Determines secondary album types from a title using keyword matching.
         /// </summary>
         /// <param name="title">The title of the album to analyze.</param>
-        /// <returns>A list of detected secondary album types.</returns>
+        /// <returns>A list of detected secondary album types. Returns empty list if title is null or whitespace.</returns>
         public static List<SecondaryAlbumType> DetermineSecondaryTypesFromTitle(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
                 return new List<SecondaryAlbumType>();
 
-            string cleanTitle = Parser.NormalizeTitle(title).ToLowerInvariant();
-            List<SecondaryAlbumType> detectedTypes = new();
+            string? cleanTitle = Parser.NormalizeTitle(title)?.ToLowerInvariant();
+            if (cleanTitle == null)
+                return new List<SecondaryAlbumType>();
+
+            HashSet<SecondaryAlbumType> detectedTypes = new();
+            HashSet<string> keywordMatcher = new();
 
             foreach (KeyValuePair<SecondaryAlbumType, List<string>> kvp in SecondaryTypeKeywords)
             {
-                if (kvp.Value.Any(keyword => cleanTitle.Contains(keyword)))
-                    detectedTypes.Add(kvp.Key);
+                keywordMatcher.Clear();
+                foreach (string keyword in kvp.Value)
+                {
+                    keywordMatcher.Add(keyword.ToLowerInvariant());
+                }
+
+                foreach (string keyword in keywordMatcher)
+                {
+                    if (cleanTitle.Contains(keyword))
+                    {
+                        detectedTypes.Add(kvp.Key);
+                        break;
+                    }
+                }
             }
 
             // In this example, if both Live and Remix are detected, remove Remix.
             if (detectedTypes.Contains(SecondaryAlbumType.Live) && detectedTypes.Contains(SecondaryAlbumType.Remix))
                 detectedTypes.Remove(SecondaryAlbumType.Remix);
 
-            return detectedTypes.Distinct().ToList();
+            return detectedTypes.ToList();
         }
 
         /// <summary>

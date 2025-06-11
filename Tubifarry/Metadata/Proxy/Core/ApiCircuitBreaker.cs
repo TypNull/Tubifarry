@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace Tubifarry.Metadata.Proxy.Core
 {
@@ -66,34 +67,84 @@ namespace Tubifarry.Metadata.Proxy.Core
 
     public static class CircuitBreakerFactory
     {
-        private static readonly ConcurrentDictionary<Type, ICircuitBreaker> _typeBreakers = new();
+        private static readonly ConditionalWeakTable<Type, ICircuitBreaker> _typeBreakers = new();
+        private static readonly ConcurrentDictionary<string, WeakReference<ICircuitBreaker>> _namedBreakers = new();
 
-        private static readonly ConcurrentDictionary<string, ICircuitBreaker> _namedBreakers = new();
+        private static readonly object _cleanupLock = new();
+        private static DateTime _lastCleanup = DateTime.UtcNow;
+        private static readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(15);
 
         /// <summary>
         /// Gets a circuit breaker for a specific type.
         /// </summary>
-        public static ICircuitBreaker GetBreaker<T>() => _typeBreakers.GetOrAdd(typeof(T), _ => new ApiCircuitBreaker());
+        public static ICircuitBreaker GetBreaker<T>() => GetBreaker(typeof(T));
 
         /// <summary>
         /// Gets a circuit breaker for a specific object.
         /// </summary>
-        public static ICircuitBreaker GetBreaker(object obj) => _typeBreakers.GetOrAdd(obj.GetType(), _ => new ApiCircuitBreaker());
+        public static ICircuitBreaker GetBreaker(object obj) => GetBreaker(obj.GetType());
 
         /// <summary>
         /// Gets a circuit breaker for a specific type.
         /// </summary>
-        public static ICircuitBreaker GetBreaker(Type type) => _typeBreakers.GetOrAdd(type, _ => new ApiCircuitBreaker());
+        public static ICircuitBreaker GetBreaker(Type type)
+        {
+            if (!_typeBreakers.TryGetValue(type, out ICircuitBreaker? breaker))
+            {
+                breaker = new ApiCircuitBreaker();
+                _typeBreakers.Add(type, breaker);
+            }
+            return breaker;
+        }
 
         /// <summary>
         /// Gets a circuit breaker by name.
         /// </summary>
-        public static ICircuitBreaker GetBreaker(string name) => _namedBreakers.GetOrAdd(name, _ => new ApiCircuitBreaker());
+        public static ICircuitBreaker GetBreaker(string name)
+        {
+            CleanupIfNeeded();
+
+            if (_namedBreakers.TryGetValue(name, out WeakReference<ICircuitBreaker>? weakRef) && weakRef.TryGetTarget(out ICircuitBreaker? breaker))
+                return breaker;
+
+            breaker = new ApiCircuitBreaker();
+            _namedBreakers[name] = new WeakReference<ICircuitBreaker>(breaker);
+            return breaker;
+        }
 
         /// <summary>
         /// Gets a circuit breaker with custom configuration.
         /// </summary>
-        public static ICircuitBreaker GetCustomBreaker<T>(int failureThreshold, int resetTimeoutMinutes) => _typeBreakers.GetOrAdd(typeof(T), _ => new ApiCircuitBreaker(failureThreshold, resetTimeoutMinutes));
+        public static ICircuitBreaker GetCustomBreaker<T>(int failureThreshold, int resetTimeoutMinutes)
+        {
+            Type type = typeof(T);
+            if (!_typeBreakers.TryGetValue(type, out ICircuitBreaker? breaker))
+            {
+                breaker = new ApiCircuitBreaker(failureThreshold, resetTimeoutMinutes);
+                _typeBreakers.Add(type, breaker);
+            }
+            return breaker;
+        }
 
+        private static void CleanupIfNeeded()
+        {
+            lock (_cleanupLock)
+            {
+                if (DateTime.UtcNow - _lastCleanup > _cleanupInterval)
+                {
+                    CleanupNamedBreakers();
+                    _lastCleanup = DateTime.UtcNow;
+                }
+            }
+        }
+
+        private static void CleanupNamedBreakers()
+        {
+            foreach (KeyValuePair<string, WeakReference<ICircuitBreaker>> kvp in _namedBreakers)
+            {
+                if (!kvp.Value.TryGetTarget(out _))
+                    _namedBreakers.TryRemove(kvp.Key, out _);
+            }
+        }
     }
 }
