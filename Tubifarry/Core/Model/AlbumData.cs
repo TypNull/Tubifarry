@@ -35,7 +35,7 @@ namespace Tubifarry.Core.Model
         // Soulseek
         public long? Size { get; set; }
         public int Priotity { get; set; }
-        public string? ExtraInfo { get; set; }
+        public List<string>? ExtraInfo { get; set; }
 
         public string DownloadProtocol { get; set; }
 
@@ -105,8 +105,9 @@ namespace Tubifarry.Core.Model
                 title += $" [{Codec} {BitDepth}bit]";
             else
                 title += $" [{Codec}]";
-            if (ExtraInfo != null)
-                title += $" [{ExtraInfo}]";
+
+            if (ExtraInfo?.Count > 0)
+                title += string.Concat(ExtraInfo.Where(info => !string.IsNullOrEmpty(info)).Select(info => $" [{info}]"));
 
             title += " [WEB]";
             return title;

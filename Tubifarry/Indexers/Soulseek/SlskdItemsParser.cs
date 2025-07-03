@@ -91,8 +91,11 @@ namespace Tubifarry.Indexers.Soulseek
                 HasFreeUploadSlot: false,
                 UploadSpeed: 0,
                 LockedFileCount: 0,
-                LockedFiles: new List<string>()
-            );
+                LockedFiles: new List<SlskdLockedFile>(),
+                QueueLength: 0,
+                Token: 0,
+                FileCount: 0,
+                Files: new List<SlskdFileData>());
         }
 
         public static AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, SlskdSearchData searchData, SlskdFolderData folderData, SlskdSettings? settings = null)
@@ -121,12 +124,12 @@ namespace Tubifarry.Indexers.Soulseek
             string finalAlbum = DetermineFinalAlbum(isAlbumMatch, folderData, searchData);
             string finalYear = folderData.Year;
 
-            (AudioFormat Codec, int? BitRate, int? BitDepth, int? SampleRate, long TotalSize, int TotalDuration) audioInfo = AnalyzeAudioQuality(directory);
-            string qualityInfo = FormatQualityInfo(audioInfo.Codec, audioInfo.BitRate, audioInfo.BitDepth, audioInfo.SampleRate);
+            (AudioFormat Codec, int? BitRate, int? BitDepth, int? SampleRate, long TotalSize, int TotalDuration) = AnalyzeAudioQuality(directory);
+            string qualityInfo = FormatQualityInfo(Codec, BitRate, BitDepth, SampleRate);
 
             List<SlskdFileData>? filesToDownload = directory.GroupBy(f => f.Filename?[..f.Filename.LastIndexOf('\\')]).FirstOrDefault(g => g.Key == directory.Key)?.ToList();
 
-            Logger.Trace($"Audio: {audioInfo.Codec}, BitRate: {audioInfo.BitRate}, BitDepth: {audioInfo.BitDepth}, Files: {filesToDownload?.Count ?? 0}");
+            Logger.Trace($"Audio: {Codec}, BitRate: {BitRate}, BitDepth: {BitDepth}, Files: {filesToDownload?.Count ?? 0}");
 
             string infoUrl = settings != null ? $"{(string.IsNullOrEmpty(settings.ExternalUrl) ? settings.BaseUrl : settings.ExternalUrl)}/searches/{searchId}" : "";
 
@@ -139,17 +142,17 @@ namespace Tubifarry.Indexers.Soulseek
                 ReleaseDateTime = string.IsNullOrEmpty(finalYear) || !int.TryParse(finalYear, out int yearInt)
                     ? DateTime.MinValue
                     : new DateTime(yearInt, 1, 1),
-                Codec = audioInfo.Codec,
-                BitDepth = audioInfo.BitDepth ?? 0,
-                Bitrate = (audioInfo.Codec == AudioFormat.MP3
-                          ? AudioFormatHelper.RoundToStandardBitrate(audioInfo.BitRate ?? 0)
-                          : audioInfo.BitRate) ?? 0,
-                Size = audioInfo.TotalSize,
+                Codec = Codec,
+                BitDepth = BitDepth ?? 0,
+                Bitrate = (Codec == AudioFormat.MP3
+                          ? AudioFormatHelper.RoundToStandardBitrate(BitRate ?? 0)
+                          : BitRate) ?? 0,
+                Size = TotalSize,
                 InfoUrl = infoUrl,
                 Priotity = folderData.CalculatePriority(),
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
-                ExtraInfo = $"User: {folderData.Username}",
-                Duration = audioInfo.TotalDuration
+                ExtraInfo = new List<string>() { $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}" },
+                Duration = TotalDuration
             };
         }
 

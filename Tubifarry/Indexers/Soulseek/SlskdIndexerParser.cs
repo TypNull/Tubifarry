@@ -35,44 +35,47 @@ namespace Tubifarry.Indexers.Soulseek
             List<AlbumData> albumDatas = new();
             try
             {
-                using JsonDocument jsonDoc = JsonDocument.Parse(indexerResponse.Content);
-                JsonElement root = jsonDoc.RootElement;
+                SlskdSearchResponse? searchResponse = JsonSerializer.Deserialize<SlskdSearchResponse>(indexerResponse.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (!root.TryGetProperty("searchText", out JsonElement searchTextElement) ||
-                    !root.TryGetProperty("responses", out JsonElement responsesElement) ||
-                    !root.TryGetProperty("id", out JsonElement idElement))
+                if (searchResponse == null)
                 {
-                    _logger.Error("Required fields are missing in the slskd search response.");
+                    _logger.Error("Failed to deserialize slskd search response.");
                     return new List<ReleaseInfo>();
                 }
 
                 SlskdSearchData searchTextData = SlskdSearchData.FromJson(indexerResponse.HttpRequest.ContentSummary);
 
-                foreach (JsonElement responseElement in GetResponses(responsesElement))
+                foreach (SlskdFolderData response in searchResponse.Responses)
                 {
-                    if (!responseElement.TryGetProperty("fileCount", out JsonElement fileCountElement) || fileCountElement.GetInt32() < searchTextData.MinimumFiles)
+                    if (response.FileCount < searchTextData.MinimumFiles)
                         continue;
 
-                    if (!responseElement.TryGetProperty("files", out JsonElement filesElement))
-                        continue;
+                    IEnumerable<SlskdFileData> filteredFiles = SlskdFileData.GetFilteredFiles(response.Files, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions);
 
-                    List<SlskdFileData> files = SlskdFileData.GetFiles(filesElement, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions).ToList();
-
-                    foreach (IGrouping<string, SlskdFileData>? directory in files.GroupBy(f => f.Filename?[..f.Filename.LastIndexOf('\\')] ?? "").ToList())
+                    foreach (IGrouping<string, SlskdFileData> directoryGroup in filteredFiles.GroupBy(f => GetDirectoryFromFilename(f.Filename)))
                     {
-                        if (string.IsNullOrEmpty(directory.Key))
+                        if (string.IsNullOrEmpty(directoryGroup.Key))
                             continue;
 
-                        SlskdFolderData folderData = SlskdItemsParser.ParseFolderName(directory.Key).FillWithSlskdData(responseElement);
+                        SlskdFolderData folderData = SlskdItemsParser.ParseFolderName(directoryGroup.Key) with
+                        {
+                            Username = response.Username,
+                            HasFreeUploadSlot = response.HasFreeUploadSlot,
+                            UploadSpeed = response.UploadSpeed,
+                            LockedFileCount = response.LockedFileCount,
+                            LockedFiles = response.LockedFiles,
+                            QueueLength = response.QueueLength,
+                            Token = response.Token,
+                            FileCount = response.FileCount
+                        };
 
-                        AlbumData albumData = SlskdItemsParser.CreateAlbumData(idElement.GetString()!, directory, searchTextData, folderData, Settings);
+                        AlbumData albumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, directoryGroup, searchTextData, folderData, Settings);
 
                         albumDatas.Add(albumData);
                     }
                 }
 
-                if (idElement.GetString() is string searchID)
-                    RemoveSearch(searchID, albumDatas.Any() && searchTextData.Interactive);
+                RemoveSearch(searchResponse.Id, albumDatas.Any() && searchTextData.Interactive);
             }
             catch (Exception ex)
             {
@@ -82,13 +85,12 @@ namespace Tubifarry.Indexers.Soulseek
             return albumDatas.OrderByDescending(x => x.Priotity).Select(a => a.ToReleaseInfo()).ToList();
         }
 
-        private static IEnumerable<JsonElement> GetResponses(JsonElement responsesElement)
+        private static string GetDirectoryFromFilename(string? filename)
         {
-            if (responsesElement.ValueKind != JsonValueKind.Array)
-                yield break;
-
-            foreach (JsonElement response in responsesElement.EnumerateArray())
-                yield return response;
+            if (string.IsNullOrEmpty(filename))
+                return "";
+            int lastBackslashIndex = filename.LastIndexOf('\\');
+            return lastBackslashIndex >= 0 ? filename[..lastBackslashIndex] : "";
         }
 
         public void RemoveSearch(string searchId, bool delay = false)

@@ -230,7 +230,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             HasFreeUploadSlot = true,
             UploadSpeed = 0,
             LockedFileCount = 0,
-            LockedFiles = new List<string>()
+            LockedFiles = new List<SlskdLockedFile>()
         };
     }
 

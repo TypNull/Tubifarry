@@ -4,56 +4,90 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    public record SlskdFileData(string? Filename, int? BitRate, int? BitDepth, long Size, int? Length, string? Extension, int? SampleRate, int Code, bool IsLocked)
+    public record SlskdSearchResponse(
+        [property: JsonPropertyName("id")] string Id,
+        [property: JsonPropertyName("searchText")] string SearchText,
+        [property: JsonPropertyName("startedAt")] DateTime StartedAt,
+        [property: JsonPropertyName("endedAt")] DateTime? EndedAt,
+        [property: JsonPropertyName("state")] string State,
+        [property: JsonPropertyName("isComplete")] bool IsComplete,
+        [property: JsonPropertyName("fileCount")] int FileCount,
+        [property: JsonPropertyName("responseCount")] int ResponseCount,
+        [property: JsonPropertyName("token")] int Token,
+        [property: JsonPropertyName("responses")] List<SlskdFolderData> Responses
+    );
+
+    public record SlskdLockedFile(
+        [property: JsonPropertyName("filename")] string Filename
+    );
+
+    public record SlskdFileData(
+        [property: JsonPropertyName("filename")] string? Filename,
+        [property: JsonPropertyName("bitRate")] int? BitRate,
+        [property: JsonPropertyName("bitDepth")] int? BitDepth,
+        [property: JsonPropertyName("size")] long Size,
+        [property: JsonPropertyName("length")] int? Length,
+        [property: JsonPropertyName("extension")] string? Extension,
+        [property: JsonPropertyName("sampleRate")] int? SampleRate,
+        [property: JsonPropertyName("code")] int Code,
+        [property: JsonPropertyName("isLocked")] bool IsLocked)
     {
-        public static IEnumerable<SlskdFileData> GetFiles(JsonElement filesElement, bool onlyIncludeAudio = false, IEnumerable<string>? includedFileExtensions = null)
+        public static IEnumerable<SlskdFileData> GetFilteredFiles(List<SlskdFileData> files, bool onlyIncludeAudio = false, IEnumerable<string>? includedFileExtensions = null)
         {
-            if (filesElement.ValueKind != JsonValueKind.Array)
-                yield break;
-
-            foreach (JsonElement file in filesElement.EnumerateArray())
+            foreach (SlskdFileData file in files)
             {
-                string? filename = file.GetProperty("filename").GetString();
-                string? extension = !file.TryGetProperty("extension", out JsonElement extensionElement) || string.IsNullOrWhiteSpace(extensionElement.GetString()) ? Path.GetExtension(filename) : extensionElement.GetString();
+                string? extension = !string.IsNullOrWhiteSpace(file.Extension) ? file.Extension : Path.GetExtension(file.Filename);
 
-                if (onlyIncludeAudio && AudioFormatHelper.GetAudioCodecFromExtension(extension ?? "") == AudioFormat.Unknown && !(includedFileExtensions?.Contains(null, StringComparer.OrdinalIgnoreCase) ?? false))
+                if (onlyIncludeAudio &&
+                    AudioFormatHelper.GetAudioCodecFromExtension(extension ?? "") == AudioFormat.Unknown &&
+                    !(includedFileExtensions?.Contains(extension, StringComparer.OrdinalIgnoreCase) ?? false))
                     continue;
 
-                yield return new SlskdFileData(
-                    Filename: filename,
-                    BitRate: file.TryGetProperty("bitRate", out JsonElement bitRateElement) ? bitRateElement.GetInt32() : null,
-                    BitDepth: file.TryGetProperty("bitDepth", out JsonElement bitDepthElement) ? bitDepthElement.GetInt32() : null,
-                    Size: file.GetProperty("size").GetInt64(),
-                    Length: file.TryGetProperty("length", out JsonElement lengthElement) ? lengthElement.GetInt32() : null,
-                    Extension: extension,
-                    SampleRate: file.TryGetProperty("sampleRate", out JsonElement sampleRateElement) ? sampleRateElement.GetInt32() : null,
-                    Code: file.TryGetProperty("code", out JsonElement codeElement) ? codeElement.GetInt32() : 1,
-                    IsLocked: file.TryGetProperty("isLocked", out JsonElement isLockedElement) && isLockedElement.GetBoolean()
-                );
+                yield return file with { Extension = extension };
             }
         }
     }
 
-    public record SlskdFolderData(string Path, string Artist, string Album, string Year, string Username, bool HasFreeUploadSlot, long UploadSpeed, int LockedFileCount, List<string> LockedFiles)
+    public record SlskdFolderData(
+        string Path,
+        string Artist,
+        string Album,
+        string Year,
+        [property: JsonPropertyName("username")] string Username,
+        [property: JsonPropertyName("hasFreeUploadSlot")] bool HasFreeUploadSlot,
+        [property: JsonPropertyName("uploadSpeed")] long UploadSpeed,
+        [property: JsonPropertyName("lockedFileCount")] int LockedFileCount,
+        [property: JsonPropertyName("lockedFiles")] List<SlskdLockedFile> LockedFiles,
+        [property: JsonPropertyName("queueLength")] int QueueLength,
+        [property: JsonPropertyName("token")] int Token,
+        [property: JsonPropertyName("fileCount")] int FileCount,
+        [property: JsonPropertyName("files")] List<SlskdFileData> Files)
     {
-        public SlskdFolderData FillWithSlskdData(JsonElement jsonElement) => this with
-        {
-            Username = jsonElement.GetProperty("username").GetString() ?? string.Empty,
-            HasFreeUploadSlot = jsonElement.GetProperty("hasFreeUploadSlot").GetBoolean(),
-            UploadSpeed = jsonElement.GetProperty("uploadSpeed").GetInt64(),
-            LockedFileCount = jsonElement.GetProperty("lockedFileCount").GetInt32(),
-            LockedFiles = jsonElement.GetProperty("lockedFiles").EnumerateArray()
-                .Select(file => file.GetProperty("filename").GetString() ?? string.Empty).ToList()
-        };
-
         public int CalculatePriority()
         {
-            if (LockedFileCount > 0)
+            if (LockedFileCount >= FileCount && FileCount > 0)
                 return 0;
 
-            double uploadSpeedPriority = Math.Log(UploadSpeed + 1) * 100;
-            double freeSlotPenalty = HasFreeUploadSlot ? 0 : -1000;
-            return (int)(uploadSpeedPriority + freeSlotPenalty);
+            int score = 0;
+            if (FileCount > 0)
+            {
+                double availabilityRatio = (FileCount - LockedFileCount) / (double)FileCount;
+                score += (int)(Math.Pow(availabilityRatio, 0.6) * 4000);
+            }
+
+            if (UploadSpeed > 0)
+            {
+                double speedMbps = UploadSpeed / (1024.0 * 1024.0 / 8.0);
+                score += (int)(Math.Log10(Math.Max(0.1, speedMbps) + 1) * 1200);
+            }
+            double queuePenalty = Math.Pow(0.9, Math.Min(QueueLength, 30));
+            score += (int)(queuePenalty * 2000);
+            if (HasFreeUploadSlot)
+                score += 1000;
+            if (FileCount >= 15)
+                score += 200;
+
+            return Math.Clamp(score, 0, 10000);
         }
     }
 
@@ -66,4 +100,3 @@ namespace Tubifarry.Indexers.Soulseek
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, new JsonSerializerOptions() { PropertyNameCaseInsensitive = true })!;
     }
 }
-
