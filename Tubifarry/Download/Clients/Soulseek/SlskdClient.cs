@@ -135,7 +135,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                     return;
                 }
 
-                List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content);
+                List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 bool hasRemainingDownloads = false;
                 downloads?.ForEach(user =>
                 {
@@ -177,11 +177,10 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             HttpRequest request = BuildHttpRequest("/api/v0/transfers/downloads/");
             HttpResponse response = await ExecuteAsync(request);
-
             if (response.StatusCode != HttpStatusCode.OK)
                 throw new DownloadClientException($"Failed to fetch downloads. Status Code: {response.StatusCode}");
 
-            List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content);
+            List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             HashSet<string> currentDownloadIds = new();
 
             downloads?.ForEach(user =>

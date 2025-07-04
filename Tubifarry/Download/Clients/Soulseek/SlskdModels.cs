@@ -44,10 +44,11 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             _logger = NzbDroneLogger.GetLogger(this);
             ReleaseInfo = releaseInfo;
-            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(ReleaseInfo.Source) ?? new();
+            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(ReleaseInfo.Source, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
             _lastUpdateTime = DateTime.UtcNow;
             _lastDownloadedSize = 0;
             ID = GetStableMD5Id(FileData.Select(file => file.Filename));
+            _logger.Trace($"Created SlskdDownloadItem with ID: {ID}");
             _downloadClientItem = new() { DownloadId = ID, CanBeRemoved = true, CanMoveFiles = true };
         }
 
@@ -91,7 +92,12 @@ namespace Tubifarry.Download.Clients.Soulseek
             _downloadClientItem.Title = ReleaseInfo.Title;
 
             if (SlskdDownloadDirectory?.Files == null)
+            {
+                _logger.Debug($"No files in SlskdDownloadDirectory for {ID}");
                 return _downloadClientItem;
+            }
+
+            _logger.Trace($"GetDownloadClientItem called for {ID}");
 
             long totalSize = SlskdDownloadDirectory.Files.Sum(file => file.Size);
             long remainingSize = SlskdDownloadDirectory.Files.Sum(file => file.BytesRemaining);
