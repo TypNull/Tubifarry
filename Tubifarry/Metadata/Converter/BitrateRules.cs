@@ -1,6 +1,7 @@
 using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Text.RegularExpressions;
+using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Metadata.Converter
@@ -14,7 +15,12 @@ namespace Tubifarry.Metadata.Converter
         public int? TargetBitrate { get; set; }
         public bool IsArtistRule { get; set; }
 
-        public bool IsGlobalRule => SourceFormat.ToString().Equals(RuleParser.GlobalRuleIdentifier, StringComparison.OrdinalIgnoreCase);
+        // Track the type of category rule
+        public bool IsGlobalRule { get; set; }
+        public bool IsLossyRule { get; set; }
+        public bool IsLosslessRule { get; set; }
+
+        public bool IsCategoryRule => IsGlobalRule || IsLossyRule || IsLosslessRule;
 
         public bool MatchesBitrate(int? currentBitrate)
         {
@@ -24,6 +30,20 @@ namespace Tubifarry.Metadata.Converter
             if (!currentBitrate.HasValue)
                 return false;
             return EvaluateBitrateCondition(currentBitrate.Value);
+        }
+
+        public bool MatchesFormat(AudioFormat trackFormat)
+        {
+            if (IsGlobalRule)
+                return true;
+
+            if (IsLossyRule)
+                return AudioFormatHelper.IsLossyFormat(trackFormat);
+
+            if (IsLosslessRule)
+                return !AudioFormatHelper.IsLossyFormat(trackFormat);
+
+            return SourceFormat == trackFormat;
         }
 
         private bool HasBitrateConstraints() => SourceBitrateOperator.HasValue && SourceBitrateValue.HasValue;
@@ -51,7 +71,16 @@ namespace Tubifarry.Metadata.Converter
 
         private string FormatSourcePart()
         {
-            string source = SourceFormat.ToString();
+            string source;
+            if (IsGlobalRule)
+                source = RuleParser.GlobalRuleIdentifier;
+            else if (IsLossyRule)
+                source = RuleParser.LossyRuleIdentifier;
+            else if (IsLosslessRule)
+                source = RuleParser.LosslessRuleIdentifier;
+            else
+                source = SourceFormat.ToString();
+
             if (HasBitrateConstraints())
                 source += GetOperatorSymbol() + SourceBitrateValue!.Value;
             return source;
@@ -117,6 +146,8 @@ namespace Tubifarry.Metadata.Converter
     public static class RuleParser
     {
         public const string GlobalRuleIdentifier = "all";
+        public const string LossyRuleIdentifier = "lossy";
+        public const string LosslessRuleIdentifier = "lossless";
         public const string NoConversionTag = "no-conversion";
         private static readonly Regex SourceFormatPattern = new(@"^([a-zA-Z0-9]+)(?:([!<>=]{1,2})(\d+))?$", RegexOptions.Compiled);
         private static readonly Regex TargetFormatPattern = new(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?$", RegexOptions.Compiled);
@@ -193,6 +224,13 @@ namespace Tubifarry.Metadata.Converter
 
             if (sourceMatch.Groups[2].Success && sourceMatch.Groups[3].Success)
             {
+                // Category rules (all, lossy, lossless) cannot have bitrate constraints
+                if (rule.IsCategoryRule)
+                {
+                    _logger.Warn("Invalid: Bitrate constraints not applicable to category rules (all, lossy, lossless)");
+                    return false;
+                }
+
                 if (!AudioFormatHelper.IsLossyFormat(rule.SourceFormat))
                 {
                     _logger.Warn("Invalid: Bitrate constraints not applicable to lossless format");
@@ -211,6 +249,21 @@ namespace Tubifarry.Metadata.Converter
             if (string.Equals(formatName, GlobalRuleIdentifier, StringComparison.OrdinalIgnoreCase))
             {
                 rule.SourceFormat = AudioFormat.Unknown;
+                rule.IsGlobalRule = true;
+                return true;
+            }
+
+            if (string.Equals(formatName, LossyRuleIdentifier, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.SourceFormat = AudioFormat.Unknown;
+                rule.IsLossyRule = true;
+                return true;
+            }
+
+            if (string.Equals(formatName, LosslessRuleIdentifier, StringComparison.OrdinalIgnoreCase))
+            {
+                rule.SourceFormat = AudioFormat.Unknown;
+                rule.IsLosslessRule = true;
                 return true;
             }
 
@@ -261,6 +314,12 @@ namespace Tubifarry.Metadata.Converter
             if (!Enum.TryParse(formatName, true, out AudioFormat targetFormat))
             {
                 _logger.Debug("Invalid target format: {0}", formatName);
+                return false;
+            }
+
+            if (!AudioMetadataHandler.IsTargetFormatSupportedForEncoding(targetFormat))
+            {
+                _logger.Warn("Target format {0} is not supported for encoding by FFmpeg", targetFormat);
                 return false;
             }
 

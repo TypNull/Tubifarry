@@ -17,7 +17,8 @@ namespace Tubifarry.Core.Utilities
         MIDI,
         AMR,
         WMA,
-        ALAC
+        ALAC,
+        APE
     }
 
     internal static class AudioFormatHelper
@@ -92,6 +93,7 @@ namespace Tubifarry.Core.Utilities
             "ac3" => ".ac3",
             "alac" => ".m4a",
             "vorbis" => ".ogg",
+            "ape" => ".ape",
             "pcm_s16le" or "pcm_s24le" or "pcm_s32le" => ".wav",
             _ => ".aac" // Default to AAC if the codec is unknown
         };
@@ -113,6 +115,7 @@ namespace Tubifarry.Core.Utilities
             "amr" => AudioFormat.AMR,
             "wma" => AudioFormat.WMA,
             "alac" => AudioFormat.ALAC,
+            "ape" => AudioFormat.APE,
             _ => AudioFormat.Unknown // Default for unknown formats
         };
 
@@ -134,6 +137,7 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.MP4 => ".mp4",
             AudioFormat.OGG => ".ogg",
             AudioFormat.ALAC => ".m4a",
+            AudioFormat.APE => ".ape",
             _ => ".aac" // Default to AAC if the format is unknown
         };
 
@@ -171,6 +175,7 @@ namespace Tubifarry.Core.Utilities
             "amr" => AudioFormat.AMR,
             "wma" => AudioFormat.WMA,
             "alac" => AudioFormat.ALAC,
+            "ape" => AudioFormat.APE,
             _ => AudioFormat.Unknown
         };
 

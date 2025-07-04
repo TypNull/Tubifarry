@@ -41,7 +41,7 @@ namespace Tubifarry.Metadata.Converter
 
         private async Task ConvertTrack(TrackFile trackFile)
         {
-            AudioFormat trackFormat = GetTrackAudioFormat(trackFile.Path);
+            AudioFormat trackFormat = await GetTrackAudioFormatAsync(trackFile.Path);
             if (trackFormat == AudioFormat.Unknown)
                 return;
 
@@ -134,7 +134,7 @@ namespace Tubifarry.Metadata.Converter
                 return false;
             }
 
-            AudioFormat trackFormat = GetTrackAudioFormat(trackFile.Path);
+            AudioFormat trackFormat = await GetTrackAudioFormatAsync(trackFile.Path);
             if (trackFormat == AudioFormat.Unknown)
                 return false;
 
@@ -169,7 +169,7 @@ namespace Tubifarry.Metadata.Converter
 
         private bool IsRuleMatching(ConversionRule rule, AudioFormat trackFormat, int? currentBitrate)
         {
-            bool formatMatches = rule.IsGlobalRule || rule.SourceFormat == trackFormat;
+            bool formatMatches = rule.MatchesFormat(trackFormat);
             bool bitrateMatches = rule.MatchesBitrate(currentBitrate);
             if (formatMatches && bitrateMatches)
             {
@@ -179,9 +179,25 @@ namespace Tubifarry.Metadata.Converter
             return false;
         }
 
-        private AudioFormat GetTrackAudioFormat(string trackPath)
+        private async Task<AudioFormat> GetTrackAudioFormatAsync(string trackPath)
         {
-            AudioFormat trackFormat = AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(trackPath));
+            string extension = Path.GetExtension(trackPath);
+
+            // For .m4a files, use codec detection since they can contain AAC or ALAC
+            if (string.Equals(extension, ".m4a", StringComparison.OrdinalIgnoreCase))
+            {
+                AudioFormat detectedFormat = await AudioMetadataHandler.GetSupportedCodecAsync(trackPath);
+                if (detectedFormat != AudioFormat.Unknown)
+                {
+                    _logger.Trace($"Detected codec-based format {detectedFormat} for .m4a file: {trackPath}");
+                    return detectedFormat;
+                }
+
+                _logger.Warn($"Failed to detect codec for .m4a file, falling back to extension-based detection: {trackPath}");
+            }
+
+            // For all other extensions, use extension-based detection
+            AudioFormat trackFormat = AudioFormatHelper.GetAudioCodecFromExtension(extension);
             if (trackFormat == AudioFormat.Unknown)
                 _logger.Warn($"Unknown audio format for track: {trackPath}");
             return trackFormat;
@@ -205,6 +221,7 @@ namespace Tubifarry.Metadata.Converter
             AudioFormat.FLAC => Settings.ConvertFLAC,
             AudioFormat.WAV => Settings.ConvertWAV,
             AudioFormat.Opus => Settings.ConvertOpus,
+            AudioFormat.APE => Settings.ConvertOther,
             AudioFormat.Vorbis => Settings.ConvertOther,
             AudioFormat.OGG => Settings.ConvertOther,
             AudioFormat.WMA => Settings.ConvertOther,

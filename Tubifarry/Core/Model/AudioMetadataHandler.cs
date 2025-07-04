@@ -381,6 +381,45 @@ namespace Tubifarry.Core.Model
             }
         }
 
+        /// <summary>
+        /// Checks if the specified audio format is supported for encoding by FFmpeg.
+        /// </summary>
+        /// <param name="format">The audio format to check</param>
+        /// <returns>True if the format can be used as a conversion target, false otherwise</returns>
+        public static bool IsTargetFormatSupportedForEncoding(AudioFormat format) => BaseConversionParameters.ContainsKey(format);
+
+
+        /// <summary>
+        /// Gets the actual audio codec from a file using FFmpeg and returns the corresponding AudioFormat.
+        /// </summary>
+        /// <param name="filePath">Path to the audio file</param>
+        /// <returns>AudioFormat enum value or AudioFormat.Unknown if codec is not supported or detection fails</returns>
+        public static async Task<AudioFormat> GetSupportedCodecAsync(string filePath)
+        {
+            try
+            {
+                IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(filePath);
+                IAudioStream? audioStream = mediaInfo.AudioStreams.FirstOrDefault();
+
+                if (audioStream == null)
+                {
+                    NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler)).Debug("No audio stream found in file: {0}", filePath);
+                    return AudioFormat.Unknown;
+                }
+
+                string codec = audioStream.Codec.ToLower();
+                AudioFormat format = AudioFormatHelper.GetAudioFormatFromCodec(codec);
+
+                NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler)).Trace("Detected codec '{0}' as format '{1}' for file: {2}", codec, format, filePath);
+                return format;
+            }
+            catch (Exception ex)
+            {
+                NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler)).Error(ex, "Failed to detect codec for file: {0}", filePath);
+                return AudioFormat.Unknown;
+            }
+        }
+
         public static bool CheckFFmpegInstalled()
         {
             if (_isFFmpegInstalled.HasValue)
