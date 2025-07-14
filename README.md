@@ -6,6 +6,8 @@ Tubifarry is a versatile plugin for **Lidarr** that enhances your music library 
 Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This makes it easy to manage and download soundtracks for your favorite movies and TV shows. 🎬🎵
 For further customization, Codec Tinker lets you convert audio files between formats using FFmpeg, helping you optimize your library.⚙️  
 
+**Note:** There is a development version of Tubifarry. Please do not open issues for the stable version
+
 ---
 
 ## Table of Contents 📑
@@ -19,6 +21,9 @@ For further customization, Codec Tinker lets you convert audio files between for
 7. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
 
 ----
+
+> ### ⚠️ Compatibility Notice
+> **Tubifarry version 1.8.0 is not compatible with Lidarr version 2.13.1 or above, please update Tubifarry!**
 
 ## Installation 🚀  
 To use Tubifarry, ensure your Lidarr setup is on the `plugins` branch. Follow the steps below to get started.  
