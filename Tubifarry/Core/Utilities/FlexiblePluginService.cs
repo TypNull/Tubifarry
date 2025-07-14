@@ -4,12 +4,13 @@ using NzbDrone.Common.Http;
 using NzbDrone.Core.Plugins;
 using NzbDrone.Core.Plugins.Resources;
 using System.Text.RegularExpressions;
+
 namespace Tubifarry.Core.Utilities
 {
     public class FlexiblePluginService : PluginService, IPluginService
     {
-        private static readonly Regex MinVersionRegex = new(@"\**Minimum Lidarr Version: (?<version>\d+\.\d+\.\d+\.\d+)\**", RegexOptions.Compiled);
-        private static readonly Regex RepoRegex = new(@"https://github\.com/(?<owner>[^/]+)/(?<name>[^/]+)(/tree/(?<branch>[^/]+))?", RegexOptions.Compiled);
+        private static readonly Regex MinVersionRegex = new(@"Minimum Lidarr Version:?\s*(?:\*\*)?[\s]*(?<version>\d+\.\d+\.\d+\.\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex RepoRegex = new(@"https://github\.com/(?<owner>[^/]+)/(?<name>[^/]+)(?:/tree/(?<branch>[^/\s]+))?", RegexOptions.Compiled);
         private readonly Logger _logger;
         private readonly IHttpClient _httpClient;
 
@@ -33,7 +34,10 @@ namespace Tubifarry.Core.Utilities
                 return null;
             }
 
-            Release? latest = releases?.OrderByDescending(x => x.PublishedAt).FirstOrDefault(x => IsSupported(x, branch));
+            var framework = branch == null ? "net6.0" : $"net6.0-{branch}";
+
+            releases = releases!.Where(release => release.Assets.Any(asset => asset.Name.EndsWith($"{framework}.zip"))).ToList();
+            var latest = releases.OrderByDescending(x => x.PublishedAt).FirstOrDefault(x => IsSupported(x, branch));
 
             if (latest == null)
             {
@@ -41,11 +45,8 @@ namespace Tubifarry.Core.Utilities
                 return null;
             }
 
-
-            Version version = Version.Parse(latest.TagName.TrimStart('v'));
-            string framework = branch == null ? "net6.0" : $"net6.0-{branch}";
-
-            Asset? asset = latest.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
+            var version = Version.Parse(latest.TagName.TrimStart('v'));
+            var asset = latest.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
 
             if (asset == null)
             {
@@ -83,7 +84,7 @@ namespace Tubifarry.Core.Utilities
             if (match.Success)
             {
                 Version minVersion = Version.Parse(match.Groups["version"].Value);
-                if (minVersion > BuildInfo.Version && minVersion < new Version(100, 0))
+                if (minVersion > BuildInfo.Version)
                     return false;
             }
             Version version = Version.Parse(release.TagName.TrimStart('v'));
