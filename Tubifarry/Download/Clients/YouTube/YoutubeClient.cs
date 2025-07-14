@@ -5,6 +5,7 @@ using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
@@ -20,7 +21,7 @@ namespace Tubifarry.Download.Clients.YouTube
         private readonly IYoutubeDownloadManager _dlManager;
         private readonly INamingConfigService _naminService;
 
-        public YoutubeClient(IYoutubeDownloadManager dlManager, IConfigService configService, IDiskProvider diskProvider, INamingConfigService namingConfigService, IRemotePathMappingService remotePathMappingService, Logger logger) : base(configService, diskProvider, remotePathMappingService, logger)
+        public YoutubeClient(IYoutubeDownloadManager dlManager, IConfigService configService, IDiskProvider diskProvider, INamingConfigService namingConfigService, IRemotePathMappingService remotePathMappingService, ILocalizationService localizationService, Logger logger) : base(configService, diskProvider, remotePathMappingService, localizationService, logger)
         {
             _dlManager = dlManager;
             _naminService = namingConfigService;

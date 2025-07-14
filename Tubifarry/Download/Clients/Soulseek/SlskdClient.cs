@@ -8,6 +8,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.Clients;
 using NzbDrone.Core.Download.History;
 using NzbDrone.Core.Indexers;
+using NzbDrone.Core.Localization;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using System.Net;
@@ -27,8 +28,8 @@ namespace Tubifarry.Download.Clients.Soulseek
         public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
 
-        public SlskdClient(IHttpClient httpClient, IDownloadHistoryService downloadService, IConfigService configService, IDiskProvider diskProvider, IRemotePathMappingService remotePathMappingService, Logger logger)
-            : base(configService, diskProvider, remotePathMappingService, logger)
+        public SlskdClient(IHttpClient httpClient, IDownloadHistoryService downloadService, IConfigService configService, IDiskProvider diskProvider, IRemotePathMappingService remotePathMappingService, ILocalizationService localizationService, Logger logger)
+            : base(configService, diskProvider, remotePathMappingService, localizationService, logger)
         {
             _httpClient = httpClient;
             _downloadService = downloadService;
