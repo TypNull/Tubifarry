@@ -176,9 +176,12 @@ namespace Tubifarry.Metadata.Proxy.Deezer
                 () => apiService.GetAlbumAsync(int.Parse(RemoveIdentifier(foreignAlbumId)))!)
                 ?? throw new Exception("Album not found from Deezer API.");
 
-            Artist? existingArtist = _artistService.FindById(albumDetails.Artist.Id + _identifier);
+            Artist? existingArtist = existingAlbum?.Artist?.Value ?? _artistService.FindById(albumDetails.Artist.Id + _identifier);
             if (existingArtist == null)
+            {
+                _logger.Debug("Artist {0} not found, returning empty album", albumDetails.Artist.Name);
                 return Tuple.Create("", new Album() { AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease>()) }, new List<ArtistMetadata>());
+            }
 
             Album mappedAlbum = DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumDetails, existingArtist);
             Album finalAlbum = existingAlbum != null ? DeezerMappingHelper.MergeAlbums(existingAlbum, mappedAlbum) : mappedAlbum;
