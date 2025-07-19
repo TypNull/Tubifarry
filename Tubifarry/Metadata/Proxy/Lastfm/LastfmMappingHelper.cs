@@ -17,7 +17,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
         {
             Album album = new()
             {
-                ForeignAlbumId = $"{lastfmAlbum.ArtistName}::{lastfmAlbum.Name}{_identifier}",
+                ForeignAlbumId = $"{SanitizeName(lastfmAlbum.ArtistName)}::{SanitizeName(lastfmAlbum.Name)}{_identifier}",
                 Title = lastfmAlbum.Name ?? string.Empty,
                 CleanTitle = lastfmAlbum.Name.CleanArtistName(), // Use CleanArtistName instead of CleanAlbumTitle, as lidar utilizes it too.
                 Links = new List<Links>(),
@@ -130,7 +130,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
         {
             ArtistMetadata metadata = new()
             {
-                ForeignArtistId = lastfmArtist.Name + _identifier,
+                ForeignArtistId = SanitizeName(lastfmArtist.Name) + _identifier,
                 Name = lastfmArtist.Name ?? string.Empty,
                 Links = new List<Links>
                 {
@@ -186,7 +186,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
         {
             Album album = new()
             {
-                ForeignAlbumId = $"{artist.ForeignArtistId.Replace(_identifier, "")}::{topAlbum.Name}{_identifier}",
+                ForeignAlbumId = $"{artist.ForeignArtistId.Replace(_identifier, "")}::{SanitizeName(topAlbum.Name)}{_identifier}",
                 Title = topAlbum.Name ?? string.Empty,
                 CleanTitle = topAlbum.Name.CleanArtistName(),
                 Links = new List<Links> { new() { Url = topAlbum.Url, Name = "Last.fm" } },
@@ -198,7 +198,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
 
             AlbumRelease albumRelease = new()
             {
-                ForeignReleaseId = $"{topAlbum.ArtistName}::{topAlbum.Name}{_identifier}",
+                ForeignReleaseId = $"{SanitizeName(topAlbum.ArtistName)}::{SanitizeName(topAlbum.Name)}{_identifier}",
                 Title = topAlbum.Name,
                 Album = album,
                 Status = "Official",
@@ -223,8 +223,8 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
         /// </summary>
         public static Track MapTrack(LastfmTrack lastfmTrack, Album album, AlbumRelease albumRelease, Artist artist, int trackPosition) => new()
         {
-            ForeignRecordingId = $"{artist.Name}::{album.Title}::{lastfmTrack.Name}{_identifier}",
-            ForeignTrackId = $"{artist.Name}::{album.Title}::{lastfmTrack.Name}{_identifier}",
+            ForeignRecordingId = $"{SanitizeName(artist.Name)}::{SanitizeName(album.Title)}::{SanitizeName(lastfmTrack.Name)}{_identifier}",
+            ForeignTrackId = $"{SanitizeName(artist.Name)}::{SanitizeName(album.Title)}::{SanitizeName(lastfmTrack.Name)}{_identifier}",
             Title = lastfmTrack.Name,
             Duration = (int)TimeSpan.FromSeconds(lastfmTrack.Duration ?? 0).TotalMilliseconds,
             TrackNumber = trackPosition.ToString(),
@@ -320,6 +320,17 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
                     _ => MediaCoverTypes.Unknown,
                 };
             }
+        }
+
+        /// <summary>
+        /// Sanitizes names for use in foreign IDs by replacing characters that break URL routing
+        /// </summary>
+        private static string SanitizeName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return string.Empty;
+            string decoded = Uri.UnescapeDataString(name);
+            return decoded.Replace("%", "-pct-", StringComparison.Ordinal);
         }
 
         /// <summary>

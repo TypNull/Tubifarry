@@ -70,6 +70,9 @@ namespace Tubifarry.Metadata.Lyrics
 
         private bool ShouldProcessTrack(TrackFile trackFile)
         {
+            if (trackFile == null || string.IsNullOrEmpty(trackFile.Path))
+                return false;
+
             if (!File.Exists(trackFile.Path))
                 return false;
 
@@ -83,19 +86,23 @@ namespace Tubifarry.Metadata.Lyrics
         {
             _logger.Debug($"Processing lyrics for track: {trackFile.Path}");
 
-            if (trackFile.Tracks.Value.Count == 0)
+            if (trackFile.Tracks?.Value == null || trackFile.Tracks.Value.Count == 0)
             {
                 _logger.Warn($"No track information found for file: {trackFile.Path}");
                 return null;
             }
 
-            Track track = trackFile.Tracks.Value.First();
+            Track track = trackFile.Tracks.Value[0];
+
             Album album = track.Album;
 
             string trackTitle = track.Title;
             string artistName = artist.Name;
             string albumName = album.Title;
-            int trackDuration = (int)Math.Round(TimeSpan.FromMilliseconds(track.Duration).TotalSeconds);
+            int trackDuration = 0;
+
+            if (track.Duration > 0)
+                trackDuration = (int)Math.Round(TimeSpan.FromMilliseconds(track.Duration).TotalSeconds);
 
             Lyric? lyric = null;
 
@@ -145,7 +152,7 @@ namespace Tubifarry.Metadata.Lyrics
                 lrcContent.AppendLine($"[by:Tubifarry Lyrics Enhancer]");
                 lrcContent.AppendLine();
 
-                foreach (SyncLine syncLine in lyric.SyncedLyrics.Where(l => !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line)).OrderBy(l => double.Parse(l.Milliseconds ?? "0")))
+                foreach (SyncLine syncLine in lyric.SyncedLyrics.Where(l => l != null && !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line)).OrderBy(l => double.TryParse(l.Milliseconds ?? "0", out double ms) ? ms : 0))
                     lrcContent.AppendLine($"{syncLine.LrcTimestamp} {syncLine.Line}");
 
                 return lrcContent.ToString();
