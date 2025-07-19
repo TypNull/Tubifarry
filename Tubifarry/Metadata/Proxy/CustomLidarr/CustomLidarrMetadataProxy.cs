@@ -12,15 +12,13 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
     public class CustomLidarrMetadataProxy : ConsumerProxyPlaceholder<CustomLidarrMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly ICustomLidarrProxy _customLidarrProxy;
-        private readonly Logger _logger;
 
         public override string Name => "Lidarr Custom";
-        private CustomLidarrMetadataProxySettings ActiveSettings => Settings ?? CustomLidarrMetadataProxySettings.Instance!;
+        private static CustomLidarrMetadataProxySettings ActiveSettings => CustomLidarrMetadataProxySettings.Instance!;
 
-        public CustomLidarrMetadataProxy(Lazy<IProxyService> proxyService, ICustomLidarrProxy customLidarrProxy, Logger logger) : base(proxyService)
+        public CustomLidarrMetadataProxy(Lazy<IProxyService> proxyService, ICustomLidarrProxy customLidarrProxy) : base(proxyService)
         {
             _customLidarrProxy = customLidarrProxy;
-            _logger = logger;
         }
 
         public override ValidationResult Test() => new();
@@ -43,10 +41,10 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
-            if (albumTitle?.StartsWith("mb:") == true || albumTitle?.StartsWith("mbid:") == true || albumTitle?.StartsWith("musicbrainzid:") == true)
+            if (albumTitle?.StartsWith("cl:") == true || albumTitle?.StartsWith("clid:") == true || albumTitle?.StartsWith("customlidarrid:") == true)
                 return MetadataSupportLevel.Supported;
 
-            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
+            if ((albumTitle != null && _formatRegex.IsMatch(albumTitle)) || (artistName != null && _formatRegex.IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.Supported;
@@ -105,7 +103,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
         private static readonly Regex _musicBrainzRegex = new(
             @"musicbrainz\.org\/(?:artist|release|recording)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex _guidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        private static readonly Regex _guidRegex = new("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 }

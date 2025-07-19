@@ -55,7 +55,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
             if (httpResponse.Resource.Limited)
             {
-                return null;
+                return null!;
             }
 
             return new HashSet<string>(httpResponse.Resource.Items);
@@ -90,13 +90,15 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
                 }
             }
 
-            Artist artist = new();
-            artist.Metadata = MapArtistMetadata(httpResponse.Resource);
+            Artist artist = new()
+            {
+                Metadata = MapArtistMetadata(httpResponse.Resource)
+            };
             artist.CleanName = artist.Metadata.Value.Name.CleanArtistName();
             artist.SortName = Parser.NormalizeTitle(artist.Metadata.Value.Name);
 
             artist.Albums = FilterAlbums(httpResponse.Resource.Albums, metadataProfileId)
-                .Select(x => MapAlbum(x, null)).ToList();
+                .Select(x => MapAlbum(x, null!)).ToList();
 
             return artist;
         }
@@ -120,7 +122,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
             if (httpResponse.Resource.Limited)
             {
-                return null;
+                return null!;
             }
 
             return new HashSet<string>(httpResponse.Resource.Items);
@@ -134,7 +136,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
             HashSet<string> releaseStatuses = new(metadataProfile.ReleaseStatuses.Where(s => s.Allowed).Select(s => s.ReleaseStatus.Name));
 
             return albums.Where(album => primaryTypes.Contains(album.Type) &&
-                                (!album.SecondaryTypes.Any() && secondaryTypes.Contains("Studio") ||
+                                ((!album.SecondaryTypes.Any() && secondaryTypes.Contains("Studio")) ||
                                  album.SecondaryTypes.Any(x => secondaryTypes.Contains(x))) &&
                                 album.ReleaseStatuses.Any(x => releaseStatuses.Contains(x)));
         }
@@ -168,7 +170,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
                 }
             }
 
-            List<ArtistMetadata> artists = httpResponse.Resource.Artists.Select(MapArtistMetadata).ToList();
+            List<ArtistMetadata> artists = httpResponse.Resource.Artists.ConvertAll(MapArtistMetadata);
             Dictionary<string, ArtistMetadata> artistDict = artists.ToDictionary(x => x.ForeignArtistId, x => x);
             Album album = MapAlbum(httpResponse.Resource, artistDict);
             album.ArtistMetadata = artistDict[httpResponse.Resource.ArtistId];
@@ -188,7 +190,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
                     bool isValid = Guid.TryParse(slug, out Guid searchGuid);
 
-                    if (slug.IsNullOrWhiteSpace() || slug.Any(char.IsWhiteSpace) || isValid == false)
+                    if (slug.IsNullOrWhiteSpace() || slug.Any(char.IsWhiteSpace) || !isValid)
                     {
                         return new List<Artist>();
                     }
@@ -201,7 +203,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
                             return new List<Artist> { existingArtist };
                         }
 
-                        int metadataProfile = _metadataProfileService.All().First().Id; // Change this to Use last Used profile?
+                        int metadataProfile = _metadataProfileService.All().First().Id;
 
                         return new List<Artist> { GetArtistInfo(settings, searchGuid.ToString(), metadataProfile) };
                     }
@@ -250,7 +252,7 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
                     bool isValid = Guid.TryParse(slug, out Guid searchGuid);
 
-                    if (slug.IsNullOrWhiteSpace() || slug.Any(char.IsWhiteSpace) || isValid == false)
+                    if (slug.IsNullOrWhiteSpace() || slug.Any(char.IsWhiteSpace) || !isValid)
                     {
                         return new List<Album>();
                     }
@@ -331,13 +333,13 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
                 List<Artist> artist = SearchNewArtist(settings, lowerTitle);
                 if (artist.Any())
                 {
-                    return new List<object> { artist.First() };
+                    return new List<object> { artist[0] };
                 }
 
                 List<Album> album = SearchNewAlbum(settings, lowerTitle, null!);
                 if (album.Any())
                 {
-                    Album? result = album.Where(x => x.AlbumReleases.Value.Any()).FirstOrDefault();
+                    Album? result = album.FirstOrDefault(x => x.AlbumReleases.Value.Any());
                     if (result != null)
                     {
                         return new List<object> { result };
@@ -379,11 +381,10 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
         private Artist MapSearchResult(ArtistResource resource)
         {
             Artist? artist = _artistService.FindById(resource.Id);
-            if (artist == null)
+            artist ??= new Artist
             {
-                artist = new Artist();
-                artist.Metadata = MapArtistMetadata(resource);
-            }
+                Metadata = MapArtistMetadata(resource)
+            };
 
             return artist;
         }
@@ -393,11 +394,10 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
             Dictionary<string, ArtistMetadata> artists = resource.Artists.Select(MapArtistMetadata).ToDictionary(x => x.ForeignArtistId, x => x);
 
             Artist? artist = _artistService.FindById(resource.ArtistId);
-            if (artist == null)
+            artist ??= new Artist
             {
-                artist = new Artist();
-                artist.Metadata = artists[resource.ArtistId];
-            }
+                Metadata = artists[resource.ArtistId]
+            };
 
             Album album = _albumService.FindById(resource.Id) ?? MapAlbum(resource, artists);
             album.Artist = artist;
@@ -429,21 +429,23 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
         private static Album MapAlbum(AlbumResource resource, Dictionary<string, ArtistMetadata> artistDict)
         {
-            Album album = new();
-            album.ForeignAlbumId = resource.Id;
-            album.OldForeignAlbumIds = resource.OldIds;
-            album.Title = resource.Title;
-            album.Overview = resource.Overview;
-            album.Disambiguation = resource.Disambiguation;
-            album.ReleaseDate = resource.ReleaseDate;
+            Album album = new()
+            {
+                ForeignAlbumId = resource.Id,
+                OldForeignAlbumIds = resource.OldIds,
+                Title = resource.Title,
+                Overview = resource.Overview,
+                Disambiguation = resource.Disambiguation,
+                ReleaseDate = resource.ReleaseDate
+            };
 
             if (resource.Images != null)
             {
-                album.Images = resource.Images.Select(MapImage).ToList();
+                album.Images = resource.Images.ConvertAll(MapImage);
             }
 
             album.AlbumType = resource.Type;
-            album.SecondaryTypes = resource.SecondaryTypes.Select(MapSecondaryTypes).ToList();
+            album.SecondaryTypes = resource.SecondaryTypes.ConvertAll(MapSecondaryTypes);
             album.Ratings = MapRatings(resource.Rating);
             album.Links = resource.Links?.Select(MapLink).ToList();
             album.Genres = resource.Genres;
@@ -472,18 +474,20 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
 
         private static AlbumRelease MapRelease(ReleaseResource resource, Dictionary<string, ArtistMetadata> artistDict)
         {
-            AlbumRelease release = new();
-            release.ForeignReleaseId = resource.Id;
-            release.OldForeignReleaseIds = resource.OldIds;
-            release.Title = resource.Title;
-            release.Status = resource.Status;
-            release.Label = resource.Label;
-            release.Disambiguation = resource.Disambiguation;
-            release.Country = resource.Country;
-            release.ReleaseDate = resource.ReleaseDate;
+            AlbumRelease release = new()
+            {
+                ForeignReleaseId = resource.Id,
+                OldForeignReleaseIds = resource.OldIds,
+                Title = resource.Title,
+                Status = resource.Status,
+                Label = resource.Label,
+                Disambiguation = resource.Disambiguation,
+                Country = resource.Country,
+                ReleaseDate = resource.ReleaseDate
+            };
 
             // Get the complete set of media/tracks returned by the API, adding missing media if necessary
-            List<Medium> allMedia = resource.Media.Select(MapMedium).ToList();
+            List<Medium> allMedia = resource.Media.ConvertAll(MapMedium);
             IEnumerable<Track> allTracks = resource.Tracks.Select(x => MapTrack(x, artistDict));
             if (!allMedia.Any())
             {
@@ -509,55 +513,42 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
             return release;
         }
 
-        private static Medium MapMedium(MediumResource resource)
+        private static Medium MapMedium(MediumResource resource) => new()
         {
-            Medium medium = new()
-            {
-                Name = resource.Name,
-                Number = resource.Position,
-                Format = resource.Format
-            };
+            Name = resource.Name,
+            Number = resource.Position,
+            Format = resource.Format
+        };
 
-            return medium;
-        }
-
-        private static Track MapTrack(TrackResource resource, Dictionary<string, ArtistMetadata> artistDict)
+        private static Track MapTrack(TrackResource resource, Dictionary<string, ArtistMetadata> artistDict) => new()
         {
-            Track track = new()
-            {
-                ArtistMetadata = artistDict[resource.ArtistId],
-                Title = resource.TrackName,
-                ForeignTrackId = resource.Id,
-                OldForeignTrackIds = resource.OldIds,
-                ForeignRecordingId = resource.RecordingId,
-                OldForeignRecordingIds = resource.OldRecordingIds,
-                TrackNumber = resource.TrackNumber,
-                AbsoluteTrackNumber = resource.TrackPosition,
-                Duration = resource.DurationMs,
-                MediumNumber = resource.MediumNumber
-            };
+            ArtistMetadata = artistDict[resource.ArtistId],
+            Title = resource.TrackName,
+            ForeignTrackId = resource.Id,
+            OldForeignTrackIds = resource.OldIds,
+            ForeignRecordingId = resource.RecordingId,
+            OldForeignRecordingIds = resource.OldRecordingIds,
+            TrackNumber = resource.TrackNumber,
+            AbsoluteTrackNumber = resource.TrackPosition,
+            Duration = resource.DurationMs,
+            MediumNumber = resource.MediumNumber
+        };
 
-            return track;
-        }
-
-        private static ArtistMetadata MapArtistMetadata(ArtistResource resource)
+        private static ArtistMetadata MapArtistMetadata(ArtistResource resource) => new()
         {
-            ArtistMetadata artist = new();
-
-            artist.Name = resource.ArtistName;
-            artist.Aliases = resource.ArtistAliases;
-            artist.ForeignArtistId = resource.Id;
-            artist.OldForeignArtistIds = resource.OldIds;
-            artist.Genres = resource.Genres;
-            artist.Overview = resource.Overview;
-            artist.Disambiguation = resource.Disambiguation;
-            artist.Type = resource.Type;
-            artist.Status = MapArtistStatus(resource.Status);
-            artist.Ratings = MapRatings(resource.Rating);
-            artist.Images = resource.Images?.Select(MapImage).ToList();
-            artist.Links = resource.Links?.Select(MapLink).ToList();
-            return artist;
-        }
+            Name = resource.ArtistName,
+            Aliases = resource.ArtistAliases,
+            ForeignArtistId = resource.Id,
+            OldForeignArtistIds = resource.OldIds,
+            Genres = resource.Genres,
+            Overview = resource.Overview,
+            Disambiguation = resource.Disambiguation,
+            Type = resource.Type,
+            Status = MapArtistStatus(resource.Status),
+            Ratings = MapRatings(resource.Rating),
+            Images = resource.Images?.Select(MapImage).ToList(),
+            Links = resource.Links?.Select(MapLink).ToList()
+        };
 
         private static ArtistStatusType MapArtistStatus(string status)
         {
@@ -597,67 +588,38 @@ namespace Tubifarry.Metadata.Proxy.CustomLidarr
             };
         }
 
-        private static Links MapLink(LinkResource arg)
+        private static Links MapLink(LinkResource arg) => new()
         {
-            return new Links
-            {
-                Url = arg.Target,
-                Name = arg.Type
-            };
-        }
+            Url = arg.Target,
+            Name = arg.Type
+        };
 
-        private static MediaCoverTypes MapCoverType(string coverType)
+        private static MediaCoverTypes MapCoverType(string coverType) => coverType.ToLower() switch
         {
-            switch (coverType.ToLower())
-            {
-                case "poster":
-                    return MediaCoverTypes.Poster;
-                case "banner":
-                    return MediaCoverTypes.Banner;
-                case "fanart":
-                    return MediaCoverTypes.Fanart;
-                case "cover":
-                    return MediaCoverTypes.Cover;
-                case "disc":
-                    return MediaCoverTypes.Disc;
-                case "logo":
-                case "clearlogo":
-                    return MediaCoverTypes.Clearlogo;
-                default:
-                    return MediaCoverTypes.Unknown;
-            }
-        }
+            "poster" => MediaCoverTypes.Poster,
+            "banner" => MediaCoverTypes.Banner,
+            "fanart" => MediaCoverTypes.Fanart,
+            "cover" => MediaCoverTypes.Cover,
+            "disc" => MediaCoverTypes.Disc,
+            "logo" or "clearlogo" => MediaCoverTypes.Clearlogo,
+            _ => MediaCoverTypes.Unknown,
+        };
 
-        public static SecondaryAlbumType MapSecondaryTypes(string albumType)
+        public static SecondaryAlbumType MapSecondaryTypes(string albumType) => albumType.ToLowerInvariant() switch
         {
-            switch (albumType.ToLowerInvariant())
-            {
-                case "compilation":
-                    return SecondaryAlbumType.Compilation;
-                case "soundtrack":
-                    return SecondaryAlbumType.Soundtrack;
-                case "spokenword":
-                    return SecondaryAlbumType.Spokenword;
-                case "interview":
-                    return SecondaryAlbumType.Interview;
-                case "audiobook":
-                    return SecondaryAlbumType.Audiobook;
-                case "live":
-                    return SecondaryAlbumType.Live;
-                case "remix":
-                    return SecondaryAlbumType.Remix;
-                case "dj-mix":
-                    return SecondaryAlbumType.DJMix;
-                case "mixtape/street":
-                    return SecondaryAlbumType.Mixtape;
-                case "demo":
-                    return SecondaryAlbumType.Demo;
-                case "audio drama":
-                    return SecondaryAlbumType.Audiodrama;
-                default:
-                    return SecondaryAlbumType.Studio;
-            }
-        }
+            "compilation" => SecondaryAlbumType.Compilation,
+            "soundtrack" => SecondaryAlbumType.Soundtrack,
+            "spokenword" => SecondaryAlbumType.Spokenword,
+            "interview" => SecondaryAlbumType.Interview,
+            "audiobook" => SecondaryAlbumType.Audiobook,
+            "live" => SecondaryAlbumType.Live,
+            "remix" => SecondaryAlbumType.Remix,
+            "dj-mix" => SecondaryAlbumType.DJMix,
+            "mixtape/street" => SecondaryAlbumType.Mixtape,
+            "demo" => SecondaryAlbumType.Demo,
+            "audio drama" => SecondaryAlbumType.Audiodrama,
+            _ => SecondaryAlbumType.Studio,
+        };
 
         private static IHttpRequestBuilderFactory GetRequestBuilder(CustomLidarrMetadataProxySettings settings) => new HttpRequestBuilder(settings.MetadataSource.TrimEnd("/") + "/{route}").KeepAlive().CreateFactory();
     }
