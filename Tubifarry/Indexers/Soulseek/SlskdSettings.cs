@@ -2,6 +2,7 @@
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
+using NzbDrone.Core.Validation.Paths;
 
 namespace Tubifarry.Indexers.Soulseek
 {
@@ -64,6 +65,12 @@ namespace Tubifarry.Indexers.Soulseek
             RuleFor(c => c.IncludeFileExtensions)
                 .Must(extensions => extensions == null || extensions.All(ext => !ext.Contains('.')))
                 .WithMessage("File extensions must not contain a dot ('.').");
+
+            // Ignore List File Path validation
+            RuleFor(c => c.IgnoreListPath)
+                .IsValidPath()
+                .When(c => !string.IsNullOrWhiteSpace(c.IgnoreListPath))
+                .WithMessage("File path must be valid.");
         }
     }
 
@@ -134,6 +141,9 @@ namespace Tubifarry.Indexers.Soulseek
 
         [FieldDefinition(19, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Minimum number of results required before stopping the search. If a Slskd finds fewer results than this, additional search strategies will be tried.", Advanced = true)]
         public int MinimumResults { get; set; }
+
+        [FieldDefinition(20, Type = FieldType.FilePath, Label = "Ignore List Path", HelpText = "Path to a file containing usernames to ignore (separated by new lines)", Advanced = true)]
+        public string? IgnoreListPath { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

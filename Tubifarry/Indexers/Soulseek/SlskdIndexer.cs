@@ -60,6 +60,13 @@ namespace Tubifarry.Indexers.Soulseek
                 if (string.IsNullOrEmpty(serverState) || !serverState.Contains("Connected"))
                     return new ValidationFailure("BaseUrl", $"Slskd server is not connected. State: {serverState}");
 
+                if (!string.IsNullOrWhiteSpace(Settings.IgnoreListPath))
+                {
+                    if (!File.Exists(Settings.IgnoreListPath))
+                        return new ValidationFailure("IgnoreListPath", "Ignore List File does not exists.");
+                    SlskdIndexerParser.InvalidIgnoreCache(Settings.IgnoreListPath);
+                    return PermissionTester.TestReadWritePermissions(Path.GetDirectoryName(Settings.IgnoreListPath)!, _logger)!;
+                }
                 return null!;
             }
             catch (HttpException ex)

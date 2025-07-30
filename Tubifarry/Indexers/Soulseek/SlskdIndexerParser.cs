@@ -18,7 +18,8 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly Lazy<IIndexerFactory> _indexerFactory;
         private readonly IHttpClient _httpClient;
 
-        private static Dictionary<int, string> _interactiveResults = new();
+        private static readonly Dictionary<int, string> _interactiveResults = new();
+        private static readonly Dictionary<string, (HashSet<string> IgnoredUsers, long LastFileSize)> _ignoreListCache = new();
 
         private SlskdSettings Settings => _indexer.Settings;
 
@@ -45,9 +46,11 @@ namespace Tubifarry.Indexers.Soulseek
 
                 SlskdSearchData searchTextData = SlskdSearchData.FromJson(indexerResponse.HttpRequest.ContentSummary);
 
+                HashSet<string>? ignoredUsers = GetIgnoredUsers(Settings.IgnoreListPath);
+
                 foreach (SlskdFolderData response in searchResponse.Responses)
                 {
-                    if (response.FileCount < searchTextData.MinimumFiles)
+                    if (response.FileCount < searchTextData.MinimumFiles || ignoredUsers?.Contains(response.Username) == true)
                         continue;
 
                     IEnumerable<SlskdFileData> filteredFiles = SlskdFileData.GetFilteredFiles(response.Files, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions);
@@ -136,6 +139,8 @@ namespace Tubifarry.Indexers.Soulseek
             }
         }
 
+        public static void InvalidIgnoreCache(string path) => _ignoreListCache.Remove(path);
+
         private async Task ExecuteRemovalAsync(SlskdSettings settings, string searchId)
         {
             try
@@ -151,5 +156,45 @@ namespace Tubifarry.Indexers.Soulseek
                 _logger.Error(ex, $"Failed to remove slskd search with ID: {searchId}");
             }
         }
+
+        private HashSet<string>? GetIgnoredUsers(string? ignoreListPath)
+        {
+            if (string.IsNullOrWhiteSpace(ignoreListPath) || !File.Exists(ignoreListPath))
+                return null;
+
+            try
+            {
+                FileInfo fileInfo = new(ignoreListPath);
+                long fileSize = fileInfo.Length;
+
+                if (_ignoreListCache.TryGetValue(ignoreListPath, out (HashSet<string> IgnoredUsers, long LastFileSize) cached) && cached.LastFileSize == fileSize)
+                {
+                    _logger.Trace($"Using cached ignore list from: {ignoreListPath} with {cached.IgnoredUsers.Count} users");
+                    return cached.IgnoredUsers;
+                }
+                HashSet<string> ignoredUsers = ParseIgnoreListContent(File.ReadAllText(ignoreListPath));
+                _ignoreListCache[ignoreListPath] = (ignoredUsers, fileSize);
+                _logger.Trace($"Loaded ignore list with {ignoredUsers.Count} users from: {ignoreListPath}");
+                return ignoredUsers;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, $"Failed to load ignore list from: {ignoreListPath}");
+                return null;
+            }
+        }
+
+        private static HashSet<string> ParseIgnoreListContent(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            return content
+                .Split(new[] { '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(username => !string.IsNullOrWhiteSpace(username))
+                .Select(username => username.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
     }
 }
