@@ -1,46 +1,58 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
-using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
-using Requests;
+using NzbDrone.Core.ThingiProvider;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify
 {
-    internal class TubifarryIndexer : HttpIndexerBase<SpotifyIndexerSettings>
+    internal class TubifarryIndexer : ExtendedHttpIndexerBase<SpotifyIndexerSettings, ExtendedIndexerPageableRequest>
     {
         public override string Name => "Tubifarry";
         public override string Protocol => nameof(YoutubeDownloadProtocol);
         public override bool SupportsRss => true;
         public override bool SupportsSearch => true;
-        public override int PageSize => 50;
-        public override TimeSpan RateLimit => new(3);
+        public override int PageSize => 20;
+        public override TimeSpan RateLimit => TimeSpan.FromSeconds(2);
 
-        private readonly ISpotifyRequestGenerator _indexerRequestGenerator;
-        private readonly ISpotifyToYoutubeParser _parseIndexerResponse;
+        private readonly ISpotifyRequestGenerator _requestGenerator;
+        private readonly ISpotifyParser _parser;
 
-        public TubifarryIndexer(ISpotifyToYoutubeParser parser, ISpotifyRequestGenerator generator, IHttpClient httpClient, IIndexerStatusService indexerStatusService, IConfigService configService, IParsingService parsingService, Logger logger)
+        public override ProviderMessage Message => new(
+            "Spotify is used to discover music releases, but actual downloads are provided through YouTube Music. " +
+            "This indexer searches Spotify for album information and enriches it with YouTube Music streaming data. " +
+            "Ensure you have valid authentication for both services for the best results.",
+            ProviderMessageType.Info
+        );
+
+        public TubifarryIndexer(
+            ISpotifyParser parser,
+            ISpotifyRequestGenerator generator,
+            IHttpClient httpClient,
+            IIndexerStatusService indexerStatusService,
+            IConfigService configService,
+            IParsingService parsingService,
+            Logger logger)
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
-            _parseIndexerResponse = parser;
-            _indexerRequestGenerator = generator;
-            if (generator.TokenIsExpired())
-                generator.StartTokenRequest();
-
-            RequestHandler.MainRequestHandlers[0].MaxParallelism = 1;
+            _parser = parser;
+            _requestGenerator = generator;
         }
 
         protected override async Task Test(List<ValidationFailure> failures)
         {
+            UpdateComponentSettings();
+
+            if (_requestGenerator.TokenIsExpired())
+                _requestGenerator.StartTokenRequest();
+
             if (!string.IsNullOrEmpty(Settings.TrustedSessionGeneratorUrl))
             {
                 try
                 {
-                    TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.PoToken, Settings.VisitorData, Settings.CookiePath).Wait();
-
                     (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
 
                     if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
@@ -48,19 +60,36 @@ namespace Tubifarry.Indexers.Spotify
                         Settings.PoToken = poToken;
                         Settings.VisitorData = visitorData;
                     }
+                    else
+                    {
+                        failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
+                    }
                 }
                 catch (Exception ex)
                 {
-                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Error connecting to the trusted session generator: {ex.Message}"));
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
                 }
             }
 
-            _parseIndexerResponse.SetAuth(Settings);
-            failures.AddIfNotNull(await TestConnection());
+            _parser.SetYouTubeAuth(Settings);
         }
 
-        public override IIndexerRequestGenerator GetRequestGenerator() => _indexerRequestGenerator;
+        private void UpdateComponentSettings()
+        {
+            _requestGenerator.UpdateSettings(Settings);
+            _parser.SetYouTubeAuth(Settings);
+        }
 
-        public override IParseIndexerResponse GetParser() => _parseIndexerResponse;
+        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator()
+        {
+            UpdateComponentSettings();
+            return _requestGenerator;
+        }
+
+        public override IParseIndexerResponse GetParser()
+        {
+            UpdateComponentSettings();
+            return _parser;
+        }
     }
 }

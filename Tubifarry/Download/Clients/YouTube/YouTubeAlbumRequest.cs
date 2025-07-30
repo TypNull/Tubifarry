@@ -97,7 +97,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
             _albumCover = await TryDownloadCoverAsync(albumInfo, token).ConfigureAwait(false);
 
-            foreach (AlbumSongInfo trackInfo in albumInfo.Songs)
+            foreach (AlbumSong trackInfo in albumInfo.Songs)
             {
                 if (trackInfo.Id == null)
                 {
@@ -148,7 +148,7 @@ namespace Tubifarry.Download.Clients.YouTube
             return await response.Content.ReadAsByteArrayAsync(token);
         }
 
-        private void AddTrackDownloadRequests(AlbumInfo albumInfo, AlbumSongInfo trackInfo, AudioStreamInfo audioStreamInfo)
+        private void AddTrackDownloadRequests(AlbumInfo albumInfo, AlbumSong trackInfo, AudioStreamInfo audioStreamInfo)
         {
             _albumData.Title = albumInfo.Name;
             Track musicInfo = new() { Title = trackInfo.Name, Artist = _remoteAlbum.Artist, Duration = (int)trackInfo.Duration.TotalSeconds, Explicit = trackInfo.IsExplicit, TrackNumber = trackInfo.SongNumber.ToString(), AbsoluteTrackNumber = trackInfo.SongNumber ?? 0 };
@@ -195,7 +195,7 @@ namespace Tubifarry.Download.Clients.YouTube
             _requestContainer.Add(postProcessReq);
         }
 
-        private async Task<bool> SongDownloadCompletedAsync(AlbumInfo albumInfo, AlbumSongInfo trackInfo, LoadRequest req, CancellationToken token)
+        private async Task<bool> SongDownloadCompletedAsync(AlbumInfo albumInfo, AlbumSong trackInfo, LoadRequest req, CancellationToken token)
         {
             string trackPath = req.Destination;
             if (!File.Exists(trackPath))

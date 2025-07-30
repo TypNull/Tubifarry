@@ -1,21 +1,22 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using System.Net;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Internal;
-using YouTubeMusicAPI.Types;
+using YouTubeMusicAPI.Models.Search;
 
-namespace Tubifarry.Indexers.Youtube
+namespace Tubifarry.Indexers.YouTube
 {
-    public interface IYoutubeRequestGenerator : IIndexerRequestGenerator
+    public interface IYouTubeRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
     {
-        public void SetCookies(string path);
-        public void SetTrustedSessionData(string poToken, string visitorData);
+        void SetCookies(string path);
+        void SetTrustedSessionData(string poToken, string visitorData);
     }
 
-    internal class YoutubeRequestGenerator : IYoutubeRequestGenerator
+    internal class YouTubeRequestGenerator : IYouTubeRequestGenerator
     {
         private const int MaxPages = 3;
 
@@ -24,46 +25,100 @@ namespace Tubifarry.Indexers.Youtube
         private string? _poToken;
         private string? _visitorData;
 
-        public YoutubeRequestGenerator(Logger logger) => _logger = logger;
+        public YouTubeRequestGenerator(Logger logger) => _logger = logger;
 
-        public IndexerPageableRequestChain GetRecentRequests()
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests()
         {
-            IndexerPageableRequestChain pageableRequests = new();
-            //pageableRequests.Add(GetRecentReleaseRequests());
-            return pageableRequests;
+            // YouTube doesn't support RSS/recent releases functionality in a traditional sense
+            return new ExtendedIndexerPageableRequestChain();
         }
 
-        private IEnumerable<IndexerRequest> GetRecentReleaseRequests()
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
-            Dictionary<string, object> payload = Payload.WebRemix(
-                geographicalLocation: "US",
-                visitorData: _visitorData,
-                poToken: _poToken,
-                null,
-                items: new (string key, object? value)[]
+            _logger.Debug($"Generating search requests for album: '{searchCriteria.AlbumQuery}' by artist: '{searchCriteria.ArtistQuery}'");
+
+            ExtendedIndexerPageableRequestChain chain = new(5);
+
+            // Primary search: album + artist
+            if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery) && !string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+            {
+                string primaryQuery = $"{searchCriteria.AlbumQuery} {searchCriteria.ArtistQuery}";
+                chain.Add(GetRequests(primaryQuery, SearchCategory.Albums));
+            }
+
+            // Fallback search: album only
+            if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery))
+            {
+                chain.AddTier(GetRequests(searchCriteria.AlbumQuery, SearchCategory.Albums));
+            }
+
+            // Last resort: artist only (still search for albums)
+            if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+            {
+                chain.AddTier(GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
+            }
+
+            return chain;
+        }
+
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
+        {
+            _logger.Debug($"Generating search requests for artist: '{searchCriteria.ArtistQuery}'");
+
+            ExtendedIndexerPageableRequestChain chain = new(5);
+            if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+                chain.Add(GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
+
+
+            return chain;
+        }
+
+        private IEnumerable<IndexerRequest> GetRequests(string searchQuery, SearchCategory category)
+        {
+            for (int page = 0; page < MaxPages; page++)
+            {
+                Dictionary<string, object> payload = Payload.WebRemix(
+                    geographicalLocation: "US",
+                    visitorData: _visitorData,
+                    poToken: _poToken,
+                    signatureTimestamp: null,
+                    items: new (string key, object? value)[]
+                    {
+                        ("query", searchQuery),
+                        ("params", ToParams(category)),
+                        ("continuation", null)
+                    }
+                );
+
+                string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+
+                HttpRequest request = new($"https://music.youtube.com/youtubei/v1/search?key={PluginKeys.YouTubeSecret}", HttpAccept.Json) { Method = HttpMethod.Post };
+                if (!string.IsNullOrEmpty(_cookiePath))
                 {
-                    ("browseId", "FEmusic_new_releases"),
-                    ("params", Extensions.ToParams(YouTubeMusicItemKind.Albums))
+                    try
+                    {
+                        foreach (Cookie cookie in CookieManager.ParseCookieFile(_cookiePath))
+                            request.Cookies[cookie.Name] = cookie.Value;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn(ex, $"Failed to load cookies from {_cookiePath}");
+                    }
                 }
-            );
+                request.SetContent(jsonPayload);
+                _logger.Trace($"Created YouTube Music API request for query: '{searchQuery}', category: {category}");
 
-            string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-
-            string url = "https://music.youtube.com/youtubei/v1/browse";
-            HttpRequest request = new(url, HttpAccept.Json) { Method = HttpMethod.Post };
-            request.SetContent(jsonPayload);
-
-            _logger.Trace($"Created request for recent releases: {url}");
-
-            IndexerRequest req = new(request);
-            yield return req;
+                yield return new IndexerRequest(request);
+            }
         }
 
         public void SetCookies(string path)
         {
             if (string.IsNullOrEmpty(path) || path == _cookiePath)
                 return;
+
             _cookiePath = path;
+            _logger.Debug($"Cookie path set: {!string.IsNullOrEmpty(path)}");
         }
 
         public void SetTrustedSessionData(string poToken, string visitorData)
@@ -73,61 +128,18 @@ namespace Tubifarry.Indexers.Youtube
             _logger.Debug($"Trusted session data set: poToken={!string.IsNullOrEmpty(poToken)}, visitorData={!string.IsNullOrEmpty(visitorData)}");
         }
 
-        public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
-        {
-            _logger.Debug($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
-            IndexerPageableRequestChain chain = new();
-
-            string searchQuery = $"album:{searchCriteria.AlbumQuery} artist:{searchCriteria.ArtistQuery}";
-            for (int page = 0; page < MaxPages; page++)
-                chain.AddTier(GetRequests(searchQuery, YouTubeMusicItemKind.Albums));
-            return chain;
-        }
-
-        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
-        {
-            _logger.Debug($"Generating search requests for artist: {searchCriteria.ArtistQuery}");
-            IndexerPageableRequestChain chain = new();
-
-            string searchQuery = $"artist:{searchCriteria.ArtistQuery}";
-            for (int page = 0; page < MaxPages; page++)
-                chain.AddTier(GetRequests(searchQuery, YouTubeMusicItemKind.Albums));
-            return chain;
-        }
-
-        private IEnumerable<IndexerRequest> GetRequests(string searchQuery, YouTubeMusicItemKind kind)
-        {
-            Dictionary<string, object> payload = Payload.WebRemix(
-                geographicalLocation: "US",
-                visitorData: _visitorData,
-                poToken: _poToken,
-                null,
-                items: new (string key, object? value)[]
-                {
-                    ("query", searchQuery),
-                    ("params", Extensions.ToParams(kind)),
-                    ("continuation", null)
-                }
-            );
-
-            string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-
-            string url = $"https://music.youtube.com/youtubei/v1/search";
-            HttpRequest s = new(url, HttpAccept.Json);
-            if (!string.IsNullOrEmpty(_cookiePath))
-            {
-                foreach (System.Net.Cookie cookie in CookieManager.ParseCookieFile(_cookiePath))
-                {
-                    if (s.Cookies.ContainsKey(cookie.Name))
-                        s.Cookies[cookie.Name] = cookie.Value;
-                    else
-                        s.Cookies.Add(cookie.Name, cookie.Value);
-                }
-            }
-
-            s.Method = HttpMethod.Post;
-            s.SetContent(jsonPayload);
-            yield return new(s);
-        }
+        public static string? ToParams(SearchCategory? value) =>
+           value switch
+           {
+               SearchCategory.Songs => "EgWKAQIIAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               SearchCategory.Videos => "EgWKAQIQAWoQEAMQBBAJEAoQBRAREBAQFQ%3D%3D",
+               SearchCategory.Albums => "EgWKAQIYAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               SearchCategory.CommunityPlaylists => "EgeKAQQoAEABahAQAxAKEAkQBBAFEBEQEBAV",
+               SearchCategory.Artists => "EgWKAQIgAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               SearchCategory.Podcasts => "EgWKAQJQAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               SearchCategory.Episodes => "EgWKAQJIAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               SearchCategory.Profiles => "EgWKAQJYAWoQEAMQChAJEAQQBRAREBAQFQ%3D%3D",
+               _ => null
+           };
     }
 }

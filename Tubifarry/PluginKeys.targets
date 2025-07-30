@@ -15,6 +15,7 @@
     {
         public const string SpotifyClientId = &quot;$(SpotifyClientId)&quot;%3B
         public const string SpotifyClientSecret = &quot;$(SpotifyClientSecret)&quot;%3B
+        public const string YouTubeSecret = &quot;$(YouTubeSecret)&quot;%3B
     }
 }"
 			Encoding="UTF-8"

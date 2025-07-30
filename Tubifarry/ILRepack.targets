@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-    <Target Name="ILRepacker" AfterTargets="Build">
-        <ItemGroup>
+	<Target Name="ILRepacker" AfterTargets="Build">
+		<ItemGroup>
 			<InputAssemblies Include="$(OutputPath)Lidarr.Plugin.$(MSBuildProjectName).dll" />
 			<InputAssemblies Include="$(OutputPath)YouTubeMusicAPI.dll" />
 			<InputAssemblies Include="$(OutputPath)DownloadAssistant.dll" />
@@ -10,11 +10,12 @@
 			<InputAssemblies Include="$(OutputPath)Xabe.FFmpeg.Downloader.dll" />
 			<InputAssemblies Include="$(OutputPath)FuzzySharp.dll" />
 			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
+			<InputAssemblies Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" />
 			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
 		</ItemGroup>
 
-        <ILRepack
+		<ILRepack
             Parallel="true"
             Internalize="true"
             InputAssemblies="@(InputAssemblies)"
@@ -22,5 +23,5 @@
             LibraryPath="..\Submodules\Lidarr\_output\net6.0\;$(OutputPath)"
             OutputFile="$(OutputPath)$(AssemblyName).dll"
         />
-    </Target>
+	</Target>
 </Project>

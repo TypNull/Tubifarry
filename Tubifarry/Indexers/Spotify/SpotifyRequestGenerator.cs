@@ -1,39 +1,56 @@
-﻿using DownloadAssistant.Base;
+using DownloadAssistant.Base;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using Requests;
 using System.Text.Json;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify
 {
-    public interface ISpotifyRequestGenerator : IIndexerRequestGenerator
+    public interface ISpotifyRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
     {
         void StartTokenRequest();
         bool TokenIsExpired();
         bool RequestNewToken();
+        void UpdateSettings(SpotifyIndexerSettings settings);
     }
 
-    public class SpotifyRequestGenerator : ISpotifyRequestGenerator
+    internal class SpotifyRequestGenerator : ISpotifyRequestGenerator
     {
         private const int MaxPages = 3;
-        private const int PageSize = 20;
-        private const int NewReleaseLimit = 20;
+        private const int DefaultPageSize = 20;
+        private const int DefaultNewReleaseLimit = 30;
 
         private string _token = string.Empty;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private OwnRequest? _tokenRequest;
+        private SpotifyIndexerSettings? _settings;
 
         private readonly Logger _logger;
 
         public SpotifyRequestGenerator(Logger logger) => _logger = logger;
 
-        public IndexerPageableRequestChain GetRecentRequests()
+        public void UpdateSettings(SpotifyIndexerSettings settings) => _settings = settings;
+
+        private int PageSize => Math.Min(_settings?.MaxSearchResults ?? DefaultPageSize, 50);
+        private int NewReleaseLimit => Math.Min(_settings?.MaxSearchResults ?? DefaultNewReleaseLimit, 50);
+
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests()
         {
-            IndexerPageableRequestChain pageableRequests = new();
-            pageableRequests.Add(GetRecentReleaseRequests());
-            return pageableRequests;
+            ExtendedIndexerPageableRequestChain chain = new(10);
+
+            try
+            {
+                chain.Add(GetRecentReleaseRequests());
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to generate recent release requests");
+            }
+
+            return chain;
         }
 
         private IEnumerable<IndexerRequest> GetRecentReleaseRequests()
@@ -49,25 +66,66 @@ namespace Tubifarry.Indexers.Spotify
             yield return req;
         }
 
-        public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
-            _logger.Debug($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
-            IndexerPageableRequestChain chain = new();
+            _logger.Debug($"Generating search requests for album: '{searchCriteria.AlbumQuery}' by artist: '{searchCriteria.ArtistQuery}'");
 
-            string searchQuery = $"album:{searchCriteria.AlbumQuery} artist:{searchCriteria.ArtistQuery}";
-            for (int page = 0; page < MaxPages; page++)
-                chain.AddTier(GetRequests(searchQuery, "album", page * PageSize));
+            ExtendedIndexerPageableRequestChain chain = new(3);
+
+            try
+            {
+                // Primary search: album + artist
+                if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery) && !string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+                {
+                    string primaryQuery = $"album:{searchCriteria.AlbumQuery} artist:{searchCriteria.ArtistQuery}";
+                    for (int page = 0; page < MaxPages; page++)
+                        chain.Add(GetRequests(primaryQuery, "album", page * PageSize), 10);
+                }
+
+                // Fallback search: album only
+                if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery))
+                {
+                    string albumQuery = $"album:{searchCriteria.AlbumQuery}";
+                    for (int page = 0; page < MaxPages; page++)
+                        chain.AddTier(GetRequests(albumQuery, "album", page * PageSize), 5);
+                }
+
+                // Last resort: artist only (albums by that artist)
+                if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+                {
+                    string artistQuery = $"artist:{searchCriteria.ArtistQuery}";
+                    for (int page = 0; page < MaxPages; page++)
+                        chain.AddTier(GetRequests(artistQuery, "album", page * PageSize), 3);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to generate album search requests");
+            }
+
             return chain;
         }
 
-        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
-            _logger.Debug($"Generating search requests for artist: {searchCriteria.ArtistQuery}");
-            IndexerPageableRequestChain chain = new();
+            _logger.Debug($"Generating search requests for artist: '{searchCriteria.ArtistQuery}'");
 
-            string searchQuery = $"artist:{searchCriteria.ArtistQuery}";
-            for (int page = 0; page < MaxPages; page++)
-                chain.AddTier(GetRequests(searchQuery, "album", page * PageSize));
+            ExtendedIndexerPageableRequestChain chain = new(3);
+
+            try
+            {
+                if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
+                {
+                    string artistQuery = $"artist:{searchCriteria.ArtistQuery}";
+                    for (int page = 0; page < MaxPages; page++)
+                        chain.Add(GetRequests(artistQuery, "album", page * PageSize));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to generate artist search requests");
+            }
+
             return chain;
         }
 
@@ -107,7 +165,7 @@ namespace Tubifarry.Indexers.Spotify
                     HttpRequestMessage request = new(HttpMethod.Post, "https://accounts.spotify.com/api/token");
                     string credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{PluginKeys.SpotifyClientId}:{PluginKeys.SpotifyClientSecret}"));
                     request.Headers.Add("Authorization", $"Basic {credentials}");
-                    request.Content = (FormUrlEncodedContent)new(new Dictionary<string, string> { { "grant_type", "client_credentials" } });
+                    request.Content = new FormUrlEncodedContent(new Dictionary<string, string> { { "grant_type", "client_credentials" } });
                     System.Net.Http.HttpClient httpClient = HttpGet.HttpClient;
                     HttpResponseMessage response = await httpClient.SendAsync(request, token);
                     response.EnsureSuccessStatusCode();

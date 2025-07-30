@@ -61,6 +61,7 @@ jobs:
     secrets:       
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}       
       SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}     
+      YOUTUBE_SECRET: ${{ secrets.YOUTUBE_SECRET }}     
     needs: [metadata, git-info, dotnet-setup]      
 
   # Package the artifacts   

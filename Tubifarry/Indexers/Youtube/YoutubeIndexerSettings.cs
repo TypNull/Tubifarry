@@ -4,11 +4,11 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
 using Tubifarry.Core.Utilities;
 
-namespace Tubifarry.Indexers.Youtube
+namespace Tubifarry.Indexers.YouTube
 {
-    public class YoutubeIndexerSettingsValidator : AbstractValidator<YoutubeIndexerSettings>
+    public class YouTubeIndexerSettingsValidator : AbstractValidator<YouTubeIndexerSettings>
     {
-        public YoutubeIndexerSettingsValidator()
+        public YouTubeIndexerSettingsValidator()
         {
             // Validate CookiePath (if provided)
             RuleFor(x => x.CookiePath)
@@ -30,9 +30,9 @@ namespace Tubifarry.Indexers.Youtube
         }
     }
 
-    public class YoutubeIndexerSettings : IIndexerSettings
+    public class YouTubeIndexerSettings : IIndexerSettings
     {
-        private static readonly YoutubeIndexerSettingsValidator Validator = new();
+        private static readonly YouTubeIndexerSettingsValidator Validator = new();
 
         [FieldDefinition(0, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;
@@ -51,6 +51,6 @@ namespace Tubifarry.Indexers.Youtube
 
         public string BaseUrl { get; set; } = string.Empty;
 
-        public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
+        public virtual NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

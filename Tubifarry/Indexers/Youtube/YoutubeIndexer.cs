@@ -1,27 +1,25 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
-using Requests;
 using Tubifarry.Core.Utilities;
-using Tubifarry.Indexers.Spotify;
 
-namespace Tubifarry.Indexers.Youtube
+namespace Tubifarry.Indexers.YouTube
 {
-    internal class YoutubeIndexer : HttpIndexerBase<SpotifyIndexerSettings>
+    internal class YouTubeIndexer : ExtendedHttpIndexerBase<YouTubeIndexerSettings, ExtendedIndexerPageableRequest>
     {
         public override string Name => "Youtube";
         public override string Protocol => nameof(YoutubeDownloadProtocol);
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
         public override int PageSize => 50;
-        public override TimeSpan RateLimit => new(30);
+        public override TimeSpan RateLimit => TimeSpan.FromSeconds(2);
 
-        private readonly IYoutubeRequestGenerator _indexerRequestGenerator;
-        private readonly IYoutubeParser _parseIndexerResponse;
+        private readonly IYouTubeRequestGenerator _requestGenerator;
+        private readonly IYouTubeParser _parser;
 
         public override ProviderMessage Message => new(
             "YouTube frequently blocks downloads to prevent unauthorized access. To confirm you're not a bot, you may need to provide additional verification. " +
@@ -31,13 +29,18 @@ namespace Tubifarry.Indexers.Youtube
             ProviderMessageType.Warning
         );
 
-        public YoutubeIndexer(IYoutubeParser parser, IYoutubeRequestGenerator generator, IHttpClient httpClient, IIndexerStatusService indexerStatusService, IConfigService configService, IParsingService parsingService, Logger logger)
+        public YouTubeIndexer(
+            IYouTubeParser parser,
+            IYouTubeRequestGenerator generator,
+            IHttpClient httpClient,
+            IIndexerStatusService indexerStatusService,
+            IConfigService configService,
+            IParsingService parsingService,
+            Logger logger)
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
-            _parseIndexerResponse = parser;
-            _indexerRequestGenerator = generator;
-
-            RequestHandler.MainRequestHandlers[0].MaxParallelism = 1;
+            _parser = parser;
+            _requestGenerator = generator;
         }
 
         protected override async Task Test(List<ValidationFailure> failures)
@@ -46,17 +49,17 @@ namespace Tubifarry.Indexers.Youtube
             {
                 try
                 {
-                    (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
+                    (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(
+                        Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
 
                     if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
                     {
-                        _indexerRequestGenerator.SetTrustedSessionData(poToken, visitorData);
+                        _requestGenerator.SetTrustedSessionData(poToken, visitorData);
                         Settings.PoToken = poToken;
                         Settings.VisitorData = visitorData;
                     }
                     else
                         failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
-
                 }
                 catch (Exception ex)
                 {
@@ -65,16 +68,16 @@ namespace Tubifarry.Indexers.Youtube
             }
             else if (!string.IsNullOrEmpty(Settings.PoToken) && !string.IsNullOrEmpty(Settings.VisitorData))
             {
-                _indexerRequestGenerator.SetTrustedSessionData(Settings.PoToken, Settings.VisitorData);
+                _requestGenerator.SetTrustedSessionData(Settings.PoToken, Settings.VisitorData);
                 _logger.Debug("Using manually provided tokens");
             }
 
-            _indexerRequestGenerator.SetCookies(Settings.CookiePath);
-            _parseIndexerResponse.SetAuth(Settings);
+            _requestGenerator.SetCookies(Settings.CookiePath);
+            _parser.SetAuth(Settings);
         }
 
-        public override IIndexerRequestGenerator GetRequestGenerator() => _indexerRequestGenerator;
+        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator() => _requestGenerator;
 
-        public override IParseIndexerResponse GetParser() => _parseIndexerResponse;
+        public override IParseIndexerResponse GetParser() => _parser;
     }
 }

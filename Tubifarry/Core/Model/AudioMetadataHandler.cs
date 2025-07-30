@@ -315,7 +315,7 @@ namespace Tubifarry.Core.Model
             }
         }
 
-        public bool TryEmbedMetadata(AlbumInfo albumInfo, AlbumSongInfo trackInfo, ReleaseInfo releaseInfo)
+        public bool TryEmbedMetadata(AlbumInfo albumInfo, AlbumSong trackInfo, ReleaseInfo releaseInfo)
         {
             _logger?.Trace($"Embedding metadata for track: {trackInfo.Name}");
 
