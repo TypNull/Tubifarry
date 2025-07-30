@@ -1,215 +1,338 @@
-﻿using FuzzySharp;
+using FuzzySharp;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.ImportLists;
+using NzbDrone.Core.ImportLists.Exceptions;
 using NzbDrone.Core.Parser.Model;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Web;
 using System.Xml.Linq;
-using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.ImportLists.ArrStack
 {
+    /// <summary>
+    /// Handles MusicBrainz API integration for finding soundtrack albums.
+    /// </summary>
     internal class ArrSoundtrackImportParser : IParseImportListResponse
     {
         private static readonly string[] SoundtrackTerms = { "soundtrack", "ost", "score", "original soundtrack", "film score" };
-        public readonly Logger _logger;
-        private readonly IHttpClient _httpClient;
-        private readonly FileCache _fileCache;
+        private const string MusicBrainzBaseUrl = "https://musicbrainz.org/ws/2";
 
-        public ArrSoundtrackImportSettings Settings { get; set; }
+        // MusicBrainz requires 1 request per second
+        private static readonly SemaphoreSlim RateLimiter = new(1, 1);
+        private const int RateLimitDelayMs = 1100;
+        private const int SearchResultLimit = 5;
+        private const double SimilarityThreshold = 0.80;
 
-
-        private static readonly JsonSerializerOptions _jsonOptions = new()
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        private readonly Logger _logger;
+        private readonly IHttpClient _httpClient;
+        private readonly CacheService _cacheService;
+        public ArrSoundtrackImportSettings Settings { get; set; }
+
         public ArrSoundtrackImportParser(ArrSoundtrackImportSettings settings, IHttpClient httpClient)
         {
             Settings = settings;
-            _logger = NzbDroneLogger.GetLogger(this);
             _httpClient = httpClient;
-            _fileCache = new FileCache(Settings.CacheDirectory);
+            _logger = NzbDroneLogger.GetLogger(this);
+
+            _cacheService = new CacheService
+            {
+                CacheType = (CacheType)settings.RequestCacheType,
+                CacheDirectory = settings.CacheDirectory,
+                CacheDuration = TimeSpan.FromDays(settings.CacheRetentionDays)
+            };
         }
 
-        public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse) => ParseResponseAsync(importListResponse).Result;
+        public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse) => ParseResponseAsync(importListResponse).GetAwaiter().GetResult();
 
         public async Task<List<ImportListItemInfo>> ParseResponseAsync(ImportListResponse importListResponse)
         {
-            List<ImportListItemInfo> itemInfos = new();
+            List<ImportListItemInfo> results = new();
 
-            using MemoryStream stream = new(Encoding.UTF8.GetBytes(importListResponse.Content));
-
-            await foreach (ArrMedia? media in JsonSerializer.DeserializeAsyncEnumerable<ArrMedia>(stream, _jsonOptions))
+            if (string.IsNullOrWhiteSpace(importListResponse.Content))
             {
-                if (media == null)
-                    continue;
+                _logger.Warn("Empty response content received from Arr application");
+                return results;
+            }
 
-                try
+            try
+            {
+                await foreach (ArrMedia? media in DeserializeMediaItemsAsync(importListResponse.Content))
                 {
-                    string cacheKey = GenerateCacheKey(media.Title, media.Id);
-
-                    if (_fileCache.IsCacheValid(cacheKey, TimeSpan.FromDays(Settings.CacheRetentionDays)))
-                    {
-                        CachedData? cachedData = await _fileCache.GetAsync<CachedData>(cacheKey);
-                        if (cachedData != null)
-                        {
-                            itemInfos.AddRange(cachedData.ImportListItems);
-                            continue;
-                        }
-                    }
-
-                    List<MusicBrainzSearchItem> albumInfos = await FetchAlbumInfo(media.Title);
-                    await Task.Delay(1100);
-
-                    if (albumInfos == null || !albumInfos.Any())
+                    if (media == null || string.IsNullOrWhiteSpace(media.Title))
                         continue;
 
-                    List<MusicBrainzAlbumItem?> savedAlbumDetails = new();
-                    foreach (MusicBrainzSearchItem albumInfo in albumInfos)
-                    {
-                        if (albumInfo.AlbumId == null)
-                            continue;
-
-                        MusicBrainzAlbumItem? albumDetails = await FetchAlbumDetails(albumInfo.AlbumId);
-
-                        await Task.Delay(1500);
-
-                        if (albumDetails?.Title == null || albumDetails.Type?.ToLower() == "soundtrack")
-                            continue;
-
-                        savedAlbumDetails.Add(albumDetails);
-                        double similarity = Fuzz.Ratio(albumDetails.Title, media.Title);
-                        bool containsMovie = ContainsMovieNameAndSoundtrack(albumDetails.Title, media.Title);
-                        if (similarity > 0.80 || containsMovie)
-                        {
-                            ImportListItemInfo importItem = CreateImportItem(albumInfo, albumDetails);
-                            itemInfos.Add(importItem);
-                        }
-                        else
-                            _logger.Debug($"Not similar enough: {albumDetails?.Title ?? "Empty"} | {media.Title}");
-                    }
-
-                    CachedData cachedDataToSave = new()
-                    {
-                        ImportListItems = savedAlbumDetails
-                            .Where(a => a != null)
-                            .Select(a => CreateImportItem(albumInfos.First(ai => ai.AlbumId == a!.AlbumId), a!))
-                            .ToList(),
-                        MusicBrainzSearchItems = albumInfos,
-                        MusicBrainzAlbumItems = savedAlbumDetails,
-                        ArrMedia = media
-                    };
-
-                    await _fileCache.SetAsync(cacheKey, cachedDataToSave, TimeSpan.FromDays(Settings.CacheRetentionDays));
-                }
-                catch (Exception ex)
-                {
-                    if (ex.Message.Contains("503:ServiceUnavailable"))
-                    {
-                        _logger.Warn("Rate limit exceeded. Stopping further processing.");
-                        break;
-                    }
-                    _logger.Error(ex, "Failed fetching search");
+                    List<ImportListItemInfo> mediaResults = await ProcessMediaItem(media);
+                    results.AddRange(mediaResults);
                 }
             }
-            return itemInfos;
+            catch (JsonException ex)
+            {
+                _logger.Error(ex, "Failed to parse JSON response from Arr application");
+                throw new ImportListException(importListResponse, "Invalid JSON response from Arr application", ex);
+            }
+
+            _logger.Debug($"Soundtrack discovery completed. Found {results.Count} albums from {results.GroupBy(r => r.Artist).Count()} media items");
+            return results;
         }
 
-        private async Task<List<MusicBrainzSearchItem>> FetchAlbumInfo(string title)
+        private static async IAsyncEnumerable<ArrMedia?> DeserializeMediaItemsAsync(string content)
         {
-            string query = $"https://musicbrainz.org/ws/2/release?query={title} soundtrack&limit=5&offset=0";
+            await using MemoryStream stream = new(Encoding.UTF8.GetBytes(content));
+            await foreach (ArrMedia? item in JsonSerializer.DeserializeAsyncEnumerable<ArrMedia>(stream, JsonOptions))
+            {
+                yield return item;
+            }
+        }
+
+        private async Task<List<ImportListItemInfo>> ProcessMediaItem(ArrMedia media)
+        {
+            string cacheKey = GenerateMediaCacheKey(media);
+            MediaProcessingResult cachedResults = await _cacheService.FetchAndCacheAsync(cacheKey, async () => await FetchSoundtracksForMedia(media));
+
+            if (cachedResults?.ImportListItems?.Any() == true)
+            {
+                _logger.Trace($"Found {cachedResults.ImportListItems.Count} soundtracks for '{media.Title}'");
+                return cachedResults.ImportListItems;
+            }
+            return new List<ImportListItemInfo>();
+        }
+
+        private async Task<MediaProcessingResult> FetchSoundtracksForMedia(ArrMedia media)
+        {
+            MediaProcessingResult result = new() { Media = media };
+
+            try
+            {
+                List<MusicBrainzSearchItem> searchResults = await SearchMusicBrainzSoundtracks(media.Title);
+                if (!searchResults.Any())
+                {
+                    _logger.Debug("No soundtrack matches found for '{0}'", media.Title);
+                    return result;
+                }
+
+                result.SearchResults = searchResults;
+                List<MusicBrainzAlbumItem> validAlbums = new();
+                List<ImportListItemInfo> importItems = new();
+
+                foreach (MusicBrainzSearchItem searchItem in searchResults)
+                {
+                    if (string.IsNullOrWhiteSpace(searchItem.AlbumId))
+                        continue;
+
+                    MusicBrainzAlbumItem? albumDetails = await FetchAlbumDetails(searchItem.AlbumId);
+                    if (albumDetails == null)
+                        continue;
+
+                    validAlbums.Add(albumDetails);
+                    if (IsGoodMatch(albumDetails, media.Title))
+                    {
+                        ImportListItemInfo importItem = CreateImportItem(searchItem, albumDetails);
+                        importItems.Add(importItem);
+                        _logger.Trace($"Added soundtrack: '{albumDetails.Title}' by '{albumDetails.Artist}' for '{media.Title}'");
+                    }
+                }
+
+                result.AlbumDetails = validAlbums;
+                result.ImportListItems = importItems;
+            }
+            catch (HttpException ex) when (ex.Response?.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
+            {
+                _logger.Warn($"MusicBrainz rate limit exceeded for '{media.Title}'");
+                await Task.Delay(10 * RateLimitDelayMs);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to fetch soundtracks for media item '{0}'", media.Title);
+            }
+
+            return result;
+        }
+
+        private async Task<List<MusicBrainzSearchItem>> SearchMusicBrainzSoundtracks(string title)
+        {
+            await RateLimiter.WaitAsync();
+            try
+            {
+                await Task.Delay(RateLimitDelayMs);
+
+                string searchUrl = BuildSearchUrl(title);
+                _logger.Trace("Searching MusicBrainz: {0}", searchUrl);
+
+                HttpRequest request = new(searchUrl);
+                HttpResponse response = await _httpClient.GetAsync(request);
+
+                return ParseSearchResponse(response.Content);
+            }
+            finally
+            {
+                RateLimiter.Release();
+            }
+        }
+
+        private string BuildSearchUrl(string title)
+        {
+            string baseUrl = $"{MusicBrainzBaseUrl}/release";
 
             if (Settings.UseStrongMusicBrainzSearch)
             {
                 string normalizedTitle = NormalizeTitle(title);
                 string escapedTitle = EscapeLuceneQuery(normalizedTitle);
-                query = Uri.EscapeDataString($"https://musicbrainz.org/ws/2/release?query=release:\"{escapedTitle}\" AND release-group-type:soundtrack");
+                string query = $"release:\"{escapedTitle}\" AND release-group-type:soundtrack";
+                return $"{baseUrl}?query={HttpUtility.UrlEncode(query)}&limit={SearchResultLimit}";
             }
+            else
+            {
+                string query = $"{title} soundtrack";
+                return $"{baseUrl}?query={HttpUtility.UrlEncode(query)}&limit={SearchResultLimit}";
+            }
+        }
 
-            HttpRequest request = new(query);
-            HttpResponse response = await _httpClient.GetAsync(request);
+        private List<MusicBrainzSearchItem> ParseSearchResponse(string xmlContent)
+        {
+            try
+            {
+                XDocument doc = XDocument.Parse(xmlContent);
+                XNamespace ns = "http://musicbrainz.org/ns/mmd-2.0#";
+                List<XElement> releases = doc.Descendants(ns + "release").ToList();
+                return releases.Select(release => MusicBrainzSearchItem.FromXml(release, ns))
+                              .Where(item => item != null)
+                              .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to parse MusicBrainz search response");
+                return new List<MusicBrainzSearchItem>();
+            }
+        }
 
-            XDocument doc = XDocument.Parse(response.Content);
-            XNamespace ns = "http://musicbrainz.org/ns/mmd-2.0#";
-            List<XElement> releases = doc.Descendants(ns + "release").ToList();
+        private async Task<MusicBrainzAlbumItem?> FetchAlbumDetails(string albumId) => await _cacheService.FetchAndCacheAsync(GenerateAlbumDetailsCacheKey(albumId), async () =>
+            {
+                await RateLimiter.WaitAsync();
+                try
+                {
+                    await Task.Delay(RateLimitDelayMs);
 
-            return releases.Select(release => MusicBrainzSearchItem.FromXml(release, ns)).ToList();
+                    string detailsUrl = $"{MusicBrainzBaseUrl}/release-group/{albumId}";
+                    HttpRequest request = new(detailsUrl);
+                    HttpResponse response = await _httpClient.GetAsync(request);
+
+                    return ParseAlbumDetails(response.Content, albumId);
+                }
+                finally
+                {
+                    RateLimiter.Release();
+                }
+            });
+
+        private MusicBrainzAlbumItem? ParseAlbumDetails(string xmlContent, string albumId)
+        {
+            try
+            {
+                XDocument doc = XDocument.Parse(xmlContent);
+                XNamespace ns = "http://musicbrainz.org/ns/mmd-2.0#";
+                XElement? releaseGroup = doc.Descendants(ns + "release-group").FirstOrDefault();
+                if (releaseGroup == null)
+                    return null;
+
+                return MusicBrainzAlbumItem.FromXml(releaseGroup, ns);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to parse album details for ID: {0}", albumId);
+                return null;
+            }
+        }
+
+        private static bool IsGoodMatch(MusicBrainzAlbumItem album, string originalTitle)
+        {
+            if (string.IsNullOrWhiteSpace(album.Title))
+                return false;
+
+            // Skip if this is marked as soundtrack type (we want original soundtracks, not soundtrack compilations)
+            if (string.Equals(album.Type, "soundtrack", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            int similarity = Fuzz.Ratio(album.Title, originalTitle);
+            bool containsMovieAndSoundtrack = ContainsMovieNameAndSoundtrack(album.Title, originalTitle);
+            return similarity > SimilarityThreshold * 100 || containsMovieAndSoundtrack;
+        }
+
+        private static bool ContainsMovieNameAndSoundtrack(string releaseTitle, string movieTitle)
+        {
+            string lowerReleaseTitle = releaseTitle.ToLowerInvariant();
+            string lowerMovieTitle = movieTitle.ToLowerInvariant();
+            bool containsMovieName = lowerReleaseTitle.Contains(lowerMovieTitle);
+            bool containsSoundtrackTerm = SoundtrackTerms.Any(term => lowerReleaseTitle.Contains(term, StringComparison.OrdinalIgnoreCase));
+            return containsMovieName && containsSoundtrackTerm;
         }
 
         private static string NormalizeTitle(string title)
         {
             foreach (string term in SoundtrackTerms)
                 title = title.Replace(term, "", StringComparison.OrdinalIgnoreCase);
-
-            title = Regex.Replace(title, @"[^a-zA-Z0-9\s]", "").Trim().ToLower();
-            return title;
-        }
-
-        private static bool ContainsMovieNameAndSoundtrack(string releaseTitle, string movieTitle)
-        {
-            string lowercaseReleaseTitle = releaseTitle.ToLower();
-            string lowercaseMovieTitle = movieTitle.ToLower();
-            bool containsMovieName = lowercaseReleaseTitle.Contains(lowercaseMovieTitle);
-            bool containsSoundtrackTerm = SoundtrackTerms.Any(term => lowercaseReleaseTitle.Contains(term));
-
-            return containsMovieName && containsSoundtrackTerm;
+            title = Regex.Replace(title, @"[^a-zA-Z0-9\s]", "").Trim();
+            return Regex.Replace(title, @"\s+", " ");
         }
 
         private static string EscapeLuceneQuery(string query)
         {
-            string[] specialChars = { "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~", "*", "?", ":", "\\", "/" };
-            foreach (string ch in specialChars)
+            if (string.IsNullOrWhiteSpace(query))
+                return query;
+
+            // Escape Lucene special characters
+            foreach (string? ch in new[] { "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~", "*", "?", ":", "\\", "/" })
+            {
                 query = query.Replace(ch, $"\\{ch}");
+            }
+
             return query;
         }
 
-        private async Task<MusicBrainzAlbumItem?> FetchAlbumDetails(string albumId)
+        private static ImportListItemInfo CreateImportItem(MusicBrainzSearchItem searchItem, MusicBrainzAlbumItem albumDetails) => new()
         {
-            HttpRequest request = new($"https://musicbrainz.org/ws/2/release-group/{albumId}");
-            HttpResponse response = await _httpClient.GetAsync(request);
-
-            XDocument doc = XDocument.Parse(response.Content);
-            XNamespace ns = "http://musicbrainz.org/ns/mmd-2.0#";
-            XElement? releaseGroup = doc.Descendants(ns + "release-group").FirstOrDefault();
-
-            if (releaseGroup == null)
-            {
-                _logger.Warn($"No release-group found for album ID: {albumId}");
-                return null;
-            }
-            return MusicBrainzAlbumItem.FromXml(releaseGroup, ns);
-        }
-
-        private static ImportListItemInfo CreateImportItem(MusicBrainzSearchItem albumInfo, MusicBrainzAlbumItem albumDetails) => new()
-        {
-            Artist = albumDetails.Artist ?? albumInfo.Artist,
-            ArtistMusicBrainzId = albumDetails.ArtistId ?? albumInfo.ArtistId,
-            Album = albumDetails.Title ?? albumInfo.Title,
-            AlbumMusicBrainzId = albumDetails.AlbumId ?? albumInfo.AlbumId,
-            ReleaseDate = albumDetails.ReleaseDate != DateTime.MinValue ? albumDetails.ReleaseDate : albumInfo.ReleaseDate
+            Artist = albumDetails.Artist ?? searchItem.Artist ?? "Unknown Artist",
+            ArtistMusicBrainzId = albumDetails.ArtistId ?? searchItem.ArtistId,
+            Album = albumDetails.Title ?? searchItem.Title ?? "Unknown Album",
+            AlbumMusicBrainzId = albumDetails.AlbumId ?? searchItem.AlbumId,
+            ReleaseDate = albumDetails.ReleaseDate != DateTime.MinValue ? albumDetails.ReleaseDate : searchItem.ReleaseDate
         };
 
-        private class CachedData
+        private static string GenerateMediaCacheKey(ArrMedia media) => $"media_{media.Id}_{GenerateStringHash(media.Title)}";
+
+        private static string GenerateAlbumDetailsCacheKey(string albumId) => $"album_details_{albumId}";
+
+        private static string GenerateStringHash(string input)
         {
-            public List<ImportListItemInfo> ImportListItems { get; set; } = new();
-            public List<MusicBrainzSearchItem> MusicBrainzSearchItems { get; set; } = new();
-            public List<MusicBrainzAlbumItem?> MusicBrainzAlbumItems { get; set; } = new();
-            public ArrMedia? ArrMedia { get; set; }
+            if (string.IsNullOrEmpty(input))
+                return "empty";
+
+            HashCode hash = new();
+            hash.Add(input);
+            return hash.ToHashCode().ToString("x8");
         }
 
-        public static string GenerateCacheKey(string title, int id)
+        /// <summary>
+        /// Represents the complete processing result for a media item
+        /// </summary>
+        private class MediaProcessingResult
         {
-            HashCode hash = new();
-            hash.Add(title);
-            hash.Add(id);
-            return hash.ToHashCode().ToString("x8");
+            public ArrMedia? Media { get; set; }
+            public List<ImportListItemInfo> ImportListItems { get; set; } = new();
+            public List<MusicBrainzSearchItem> SearchResults { get; set; } = new();
+            public List<MusicBrainzAlbumItem> AlbumDetails { get; set; } = new();
         }
     }
 }

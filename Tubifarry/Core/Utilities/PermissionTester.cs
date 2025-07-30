@@ -12,7 +12,7 @@ namespace Tubifarry.Core.Utilities
             try
             {
                 File.WriteAllText(testFilePath, "This is a test file to check write permissions.");
-                logger.Info("Write permission test succeeded.");
+                logger.Trace("Write permission test succeeded.");
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -23,7 +23,7 @@ namespace Tubifarry.Core.Utilities
             try
             {
                 string content = File.ReadAllText(testFilePath);
-                logger.Info("Read permission test succeeded.");
+                logger.Trace("Read permission test succeeded.");
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -34,7 +34,7 @@ namespace Tubifarry.Core.Utilities
             try
             {
                 File.Delete(testFilePath);
-                logger.Info("Delete permission test succeeded.");
+                logger.Trace("Delete permission test succeeded.");
             }
             catch (UnauthorizedAccessException ex)
             {

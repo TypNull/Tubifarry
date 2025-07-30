@@ -1,4 +1,4 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
@@ -11,15 +11,18 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.ImportLists.ArrStack
 {
+    /// <summary>
+    /// Import list that discovers soundtracks from Arr applications (Radarr/Sonarr) using MusicBrainz.
+    /// </summary>
     public class ArrSoundtrackImport : HttpImportListBase<ArrSoundtrackImportSettings>
     {
         public override string Name => "Arr-Soundtracks";
 
         public override ProviderMessage Message => new(
-            "MusicBrainz only supports 1 request per second, so this import is rate-limited and may take some time depending on the size of your library. " +
-            "Additionally, MusicBrainz may not process all requests and only handles approximately 75% of them as per their rate-limiting policy. " +
-            "For more details, see: https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting. " +
-            "Important: Do not use this feature while updating metadata!",
+            "MusicBrainz enforces strict rate limiting (1 request/second). " +
+            "Large libraries may take considerable time to process. " +
+            "Approximately 75% of requests succeed due to MusicBrainz's rate limiting policy. " +
+            "See: https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting",
             ProviderMessageType.Warning
         );
 
@@ -30,7 +33,9 @@ namespace Tubifarry.ImportLists.ArrStack
         private ArrSoundtrackRequestGenerator? _generator;
         private ArrSoundtrackImportParser? _parser;
 
-        public ArrSoundtrackImport(IHttpClient httpClient, IImportListStatusService importListStatusService, IConfigService configService, IParsingService parsingService, Logger logger) : base(httpClient, importListStatusService, configService, parsingService, logger) { }
+        public ArrSoundtrackImport(IHttpClient httpClient, IImportListStatusService importListStatusService,
+            IConfigService configService, IParsingService parsingService, Logger logger)
+            : base(httpClient, importListStatusService, configService, parsingService, logger) { }
 
         public override IImportListRequestGenerator GetRequestGenerator() => _generator ??= new ArrSoundtrackRequestGenerator(Settings);
 
@@ -38,38 +43,63 @@ namespace Tubifarry.ImportLists.ArrStack
 
         protected override void Test(List<ValidationFailure> failures)
         {
-            failures!.AddIfNotNull(TestConnection());
-            failures!.AddIfNotNull(PermissionTester.TestExistance(Settings.CacheDirectory, _logger));
-            failures!.AddIfNotNull(PermissionTester.TestReadWritePermissions(Settings.CacheDirectory, _logger));
+            ValidationFailure? connectionFailure = TestArrConnection();
+            failures!.AddIfNotNull(connectionFailure);
+            ValidationFailure? cacheFailure = TestCacheDirectory();
+            failures!.AddIfNotNull(cacheFailure);
         }
 
-        private new ValidationFailure? TestConnection()
+        private ValidationFailure? TestArrConnection()
         {
             try
             {
-                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}{Settings.APIStatusEndpoint}")
+                _logger.Trace("Testing connection to Arr application at: {0}", Settings.BaseUrl);
+                HttpRequest request = new HttpRequestBuilder(Settings.BaseUrl + Settings.APIStatusEndpoint)
                     .AddQueryParam("apikey", Settings.ApiKey)
                     .Build();
+
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
+
                 HttpResponse response = _httpClient.Get(request);
-                if (response.StatusCode == HttpStatusCode.OK)
-                    return null;
-                else if (response.StatusCode == HttpStatusCode.Unauthorized)
-                    return new ValidationFailure("ApiKey", "Invalid API key");
-                else
-                    _logger.Warn($"Arr-App returned status code: {response.StatusCode}. Response: {response.Content}");
-                return new ValidationFailure("BaseUrl", $"Unable to connect to Arr-App. Status: {response.StatusCode}");
+
+                switch (response.StatusCode)
+                {
+                    case HttpStatusCode.OK:
+                        return null;
+                    case HttpStatusCode.Unauthorized:
+                        return new ValidationFailure("ApiKey", "Invalid API key");
+                    case HttpStatusCode.NotFound:
+                        return new ValidationFailure("BaseUrl", "Endpoint not found. Verify URL and API paths");
+                    default:
+                        _logger.Warn("Arr application returned unexpected status: {0}. Response: {1}",
+                            response.StatusCode, response.Content[..200]);
+                        return new ValidationFailure("BaseUrl", $"Connection failed with status: {response.StatusCode}");
+                }
             }
             catch (HttpException ex)
             {
-                _logger.Warn(ex, "Unable to connect to Arr-App");
-                return new ValidationFailure("BaseUrl", $"Unable to connect to Arr-App: {ex.Message}");
+                return new ValidationFailure("BaseUrl", $"Connection failed: {ex.Message}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Unexpected error while testing Arr-App connection");
+                _logger.Error(ex, "Unexpected error during connection test");
                 return new ValidationFailure(string.Empty, $"Unexpected error: {ex.Message}");
+            }
+        }
+
+        private ValidationFailure? TestCacheDirectory()
+        {
+            try
+            {
+                _logger.Trace("Testing cache directory: {0}", Settings.CacheDirectory);
+                ValidationFailure? existenceFailure = PermissionTester.TestExistance(Settings.CacheDirectory, _logger);
+                return existenceFailure ?? PermissionTester.TestReadWritePermissions(Settings.CacheDirectory, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error testing cache directory");
+                return new ValidationFailure("CacheDirectory", $"Cache directory test failed: {ex.Message}");
             }
         }
 
@@ -77,15 +107,22 @@ namespace Tubifarry.ImportLists.ArrStack
         {
             get
             {
-                yield return GetDefinition("Radarr", GetSettings("http://localhost:7878", "/api/v3/system/status", "/api/v3/movie"));
-                yield return GetDefinition("Sonarr", GetSettings("http://localhost:8989", "/api/v3/system/status", "/api/v3/series"));
+                yield return GetDefinition("Radarr", GetSettings(
+                    "http://localhost:7878",
+                    "/api/v3/system/status",
+                    "/api/v3/movie"));
+
+                yield return GetDefinition("Sonarr", GetSettings(
+                    "http://localhost:8989",
+                    "/api/v3/system/status",
+                    "/api/v3/series"));
             }
         }
 
         private ImportListDefinition GetDefinition(string name, ArrSoundtrackImportSettings settings) => new()
         {
             EnableAutomaticAdd = false,
-            Name = name + " Soundtracks",
+            Name = $"{name} Soundtracks",
             Implementation = GetType().Name,
             Settings = settings
         };

@@ -1,14 +1,16 @@
-﻿using NzbDrone.Common.Http;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.ImportLists;
 
 namespace Tubifarry.ImportLists.ArrStack
 {
+    /// <summary>
+    /// Generates HTTP requests for fetching media items from Arr applications.
+    /// </summary>
     internal class ArrSoundtrackRequestGenerator : IImportListRequestGenerator
     {
-        public ArrSoundtrackImportSettings Settings { get; set; }
+        private readonly ArrSoundtrackImportSettings _settings;
 
-        public ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings) => Settings = settings;
-
+        public ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings) => _settings = settings ?? throw new ArgumentNullException(nameof(settings));
 
         public ImportListPageableRequestChain GetListItems()
         {
@@ -19,7 +21,9 @@ namespace Tubifarry.ImportLists.ArrStack
 
         private IEnumerable<ImportListRequest> GetPagedRequests()
         {
-            yield return new ImportListRequest($"{Settings.BaseUrl}{Settings.APIItemEndpoint}?apikey={Settings.ApiKey}&excludeLocalCovers=true", HttpAccept.Json);
+            string url = _settings.BaseUrl.TrimEnd('/') + _settings.APIItemEndpoint;
+            string urlWithAuth = $"{url}?apikey={_settings.ApiKey}&excludeLocalCovers=true";
+            yield return new ImportListRequest(urlWithAuth, HttpAccept.Json);
         }
     }
 }
