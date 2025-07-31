@@ -41,21 +41,7 @@ namespace Tubifarry.Download.Clients.YouTube
         /// <summary>
         /// Sets authentication for the YouTube Music client.
         /// </summary>
-        public void SetAuth(YoutubeProviderSettings settings)
-        {
-            if (settings.CookiePath == null && settings.PoToken == null &&
-                settings.VisitorData == null && settings.TrustedSessionGeneratorUrl == null)
-                return;
-
-            _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(
-                    settings.TrustedSessionGeneratorUrl,
-                    settings.PoToken,
-                    settings.VisitorData,
-                    settings.CookiePath,
-                    logger: _logger
-                ).Result;
-        }
-
+        public void SetAuth(YoutubeProviderSettings settings) => _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.PoToken).Result;
 
         public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider)
         {

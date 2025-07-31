@@ -57,11 +57,6 @@ namespace Tubifarry.Download.Clients.YouTube
                 .LessThanOrEqualTo(2_500)
                 .WithMessage("Max download speed must be less than or equal to 20 Mbps (2,500 KB/s).");
 
-            // Validate poToken
-            RuleFor(x => x.PoToken)
-               .Length(10, 256).When(x => !string.IsNullOrEmpty(x.PoToken))
-               .WithMessage("Proof of Origin (poToken) must be between 10 and 128 characters if provided.");
-
             // Validate TrustedSessionGeneratorUrl (optional)
             RuleFor(x => x.TrustedSessionGeneratorUrl)
                 .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute))
@@ -100,13 +95,7 @@ namespace Tubifarry.Download.Clients.YouTube
         [FieldDefinition(8, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits the download speed per download.", Unit = "KB/s", Advanced = true)]
         public int MaxDownloadSpeed { get; set; }
 
-        [FieldDefinition(9, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
-        public string PoToken { get; set; } = string.Empty;
-
-        [FieldDefinition(10, Label = "Visitor Data", Type = FieldType.Textbox, HelpText = "YouTube session data.", Advanced = true)]
-        public string VisitorData { get; set; } = string.Empty;
-
-        [FieldDefinition(11, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
+        [FieldDefinition(9, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
         public string TrustedSessionGeneratorUrl { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

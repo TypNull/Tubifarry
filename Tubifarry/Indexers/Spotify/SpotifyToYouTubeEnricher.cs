@@ -50,7 +50,7 @@ namespace Tubifarry.Indexers.Spotify
 
             try
             {
-                _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.PoToken, settings.VisitorData, settings.CookiePath, logger: _logger).Result;
+                _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.CookiePath).Result;
                 _logger.Debug("Successfully created authenticated YouTube Music client for enrichment");
             }
             catch (Exception ex)

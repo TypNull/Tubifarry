@@ -49,28 +49,14 @@ namespace Tubifarry.Indexers.Spotify
             if (_requestGenerator.TokenIsExpired())
                 _requestGenerator.StartTokenRequest();
 
-            if (!string.IsNullOrEmpty(Settings.TrustedSessionGeneratorUrl))
+            try
             {
-                try
-                {
-                    (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
-
-                    if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
-                    {
-                        Settings.PoToken = poToken;
-                        Settings.VisitorData = visitorData;
-                    }
-                    else
-                    {
-                        failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
-                }
+                await TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath);
             }
-
+            catch (Exception)
+            {
+                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
+            }
             _parser.SetYouTubeAuth(Settings);
         }
 

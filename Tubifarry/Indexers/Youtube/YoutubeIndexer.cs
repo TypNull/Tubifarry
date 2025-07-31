@@ -5,6 +5,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.YouTube
@@ -45,33 +46,18 @@ namespace Tubifarry.Indexers.YouTube
 
         protected override async Task Test(List<ValidationFailure> failures)
         {
-            if (!string.IsNullOrEmpty(Settings.TrustedSessionGeneratorUrl))
+            try
             {
-                try
-                {
-                    (string? poToken, string? visitorData) = await TrustedSessionHelper.GetTrustedSessionTokensAsync(
-                        Settings.TrustedSessionGeneratorUrl, forceRefresh: true);
-
-                    if (!string.IsNullOrEmpty(poToken) && !string.IsNullOrEmpty(visitorData))
-                    {
-                        _requestGenerator.SetTrustedSessionData(poToken, visitorData);
-                        Settings.PoToken = poToken;
-                        Settings.VisitorData = visitorData;
-                    }
-                    else
-                        failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
-                }
-                catch (Exception ex)
-                {
-                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
-                }
+                SessionTokens session = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl);
+                if (session.IsValid)
+                    _requestGenerator.SetTrustedSessionData(session.PoToken, session.VisitorData);
+                else
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
-            else if (!string.IsNullOrEmpty(Settings.PoToken) && !string.IsNullOrEmpty(Settings.VisitorData))
+            catch (Exception ex)
             {
-                _requestGenerator.SetTrustedSessionData(Settings.PoToken, Settings.VisitorData);
-                _logger.Debug("Using manually provided tokens");
+                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
             }
-
             _requestGenerator.SetCookies(Settings.CookiePath);
             _parser.SetAuth(Settings);
         }

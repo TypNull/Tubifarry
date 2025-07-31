@@ -4,6 +4,7 @@
 		<ItemGroup>
 			<InputAssemblies Include="$(OutputPath)Lidarr.Plugin.$(MSBuildProjectName).dll" />
 			<InputAssemblies Include="$(OutputPath)YouTubeMusicAPI.dll" />
+			<InputAssemblies Include="$(OutputPath)YouTubeSessionGenerator.dll" />
 			<InputAssemblies Include="$(OutputPath)DownloadAssistant.dll" />
 			<InputAssemblies Include="$(OutputPath)Requests.dll" />
 			<InputAssemblies Include="$(OutputPath)Xabe.FFmpeg.dll" />

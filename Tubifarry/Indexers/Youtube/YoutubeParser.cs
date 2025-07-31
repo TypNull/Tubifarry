@@ -55,22 +55,9 @@ namespace Tubifarry.Indexers.YouTube
 
             _currentSettings = settings;
 
-            if (settings.CookiePath == null && settings.PoToken == null &&
-                settings.VisitorData == null && settings.TrustedSessionGeneratorUrl == null)
-            {
-                _ytClient = null;
-                return;
-            }
-
             try
             {
-                _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(
-                    settings.TrustedSessionGeneratorUrl,
-                    settings.PoToken,
-                    settings.VisitorData,
-                    settings.CookiePath,
-                    logger: _logger).Result;
-
+                _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.CookiePath).Result;
                 _logger.Debug("Successfully created authenticated YouTube Music client for additional metadata");
             }
             catch (Exception ex)

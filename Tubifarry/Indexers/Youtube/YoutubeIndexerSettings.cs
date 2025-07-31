@@ -17,12 +17,6 @@ namespace Tubifarry.Indexers.YouTube
                 .Must(path => string.IsNullOrEmpty(path) || CookieManager.ParseCookieFile(path).Any())
                 .WithMessage("Cookie file is invalid or contains no valid cookies.");
 
-            // Validate poToken (optional)
-            RuleFor(x => x.PoToken)
-                .Length(10, 256)
-                .When(x => !string.IsNullOrEmpty(x.PoToken))
-                .WithMessage("Proof of Origin (poToken) must be between 10 and 128 characters if provided.");
-
             // Validate TrustedSessionGeneratorUrl (optional)
             RuleFor(x => x.TrustedSessionGeneratorUrl)
                 .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute))
@@ -40,13 +34,7 @@ namespace Tubifarry.Indexers.YouTube
         [FieldDefinition(1, Label = "Cookie Path", Type = FieldType.FilePath, Hidden = HiddenType.Visible, Placeholder = "/path/to/cookies.txt", HelpText = "Specify the path to the YouTube cookies file. This is optional but helps with accessing restricted content.", Advanced = true)]
         public string CookiePath { get; set; } = string.Empty;
 
-        [FieldDefinition(2, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
-        public string PoToken { get; set; } = string.Empty;
-
-        [FieldDefinition(3, Label = "Visitor Data", Type = FieldType.Textbox, HelpText = "YouTube session data.", Advanced = true)]
-        public string VisitorData { get; set; } = string.Empty;
-
-        [FieldDefinition(4, Label = "Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
+        [FieldDefinition(3, Label = "Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
         public string TrustedSessionGeneratorUrl { get; set; } = string.Empty;
 
         public string BaseUrl { get; set; } = string.Empty;

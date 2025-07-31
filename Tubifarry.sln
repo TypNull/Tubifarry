@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Core", "Submodules\L
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Common", "Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj", "{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YouTubeSessionGenerator", "Submodules\SessionGenerator\YouTubeSessionGenerator\YouTubeSessionGenerator.csproj", "{ACB3B39E-B672-426F-BD30-011EB3E67092}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,10 @@ Global
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

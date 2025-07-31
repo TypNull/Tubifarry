@@ -1,69 +1,61 @@
 ﻿using NLog;
+using NzbDrone.Common.Instrumentation;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Tubifarry.Core.Model;
+using Tubifarry.Core.Records;
 using YouTubeMusicAPI.Client;
+using YouTubeSessionGenerator;
+using YouTubeSessionGenerator.Js.Environments;
 
 namespace Tubifarry.Core.Utilities
 {
-    /// <summary>
-    /// Exceptions specific to the YouTube trusted session authentication process
-    /// </summary>
-    public class TrustedSessionException : Exception
-    {
-        public TrustedSessionException(string message) : base(message) { }
-        public TrustedSessionException(string message, Exception innerException) : base(message, innerException) { }
-        public TrustedSessionException() { }
-    }
-
     /// <summary>
     /// A centralized helper for managing YouTube trusted session authentication
     /// </summary>
     public class TrustedSessionHelper
     {
         private static readonly HttpClient _httpClient = new();
-        private static readonly Logger _logger = NzbDrone.Common.Instrumentation.NzbDroneLogger.GetLogger(typeof(TrustedSessionHelper));
+        private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TrustedSessionHelper));
 
-        private static string? _poToken;
-        private static string? _visitorData;
-        private static DateTime _tokenExpiry = DateTime.MinValue;
+        private static SessionTokens? _cachedTokens;
         private static readonly SemaphoreSlim _semaphore = new(1, 1);
 
         // Constants for retry logic
         private const int MaxRetries = 3;
         private const int RetryDelayMs = 2000;
 
-        public static async Task<(string poToken, string visitorData)> GetTrustedSessionTokensAsync(string serviceUrl, bool forceRefresh = false, CancellationToken token = default)
+        /// <summary>
+        /// Gets trusted session tokens, using cache if available and valid
+        /// </summary>
+        public static async Task<SessionTokens> GetTrustedSessionTokensAsync(string? serviceUrl = null, bool forceRefresh = false, CancellationToken token = default)
         {
-            if (string.IsNullOrEmpty(serviceUrl))
-                throw new ArgumentNullException(nameof(serviceUrl), "Service URL cannot be null or empty");
-
             try
             {
                 await _semaphore.WaitAsync(token);
 
-                if (!forceRefresh && !string.IsNullOrEmpty(_poToken) && !string.IsNullOrEmpty(_visitorData) && DateTime.UtcNow < _tokenExpiry)
+                if (!forceRefresh && _cachedTokens?.IsValid == true)
                 {
-                    _logger.Trace("Using cached trusted session tokens");
-                    return (_poToken, _visitorData);
+                    _logger.Trace($"Using cached trusted session tokens from {_cachedTokens.Source}, expires in {_cachedTokens.TimeUntilExpiry:hh\\:mm\\:ss}");
+                    return _cachedTokens;
                 }
 
-                string baseUrl = serviceUrl.TrimEnd('/');
-                string endpoint = forceRefresh ? "/update" : "/token";
-                string url = $"{baseUrl}{endpoint}";
+                SessionTokens newTokens;
 
-                _logger.Trace($"Fetching trusted session tokens from {url}");
-
-                if (forceRefresh)
+                if (!string.IsNullOrEmpty(serviceUrl))
                 {
-                    // For update requests, use the retry mechanism
-                    return await GetTokenWithRetryAsync(baseUrl, token);
+                    _logger.Trace($"Using web service approach with URL: {serviceUrl}");
+                    newTokens = await GetTokensFromWebServiceAsync(serviceUrl, forceRefresh, token);
                 }
                 else
                 {
-                    // For regular token requests
-                    return await FetchAndParseTokenAsync(url, token);
+                    _logger.Trace("Using local YouTubeSessionGenerator");
+                    newTokens = await GetTokensFromLocalGeneratorAsync(token);
                 }
+
+                _cachedTokens = newTokens;
+                return newTokens;
             }
             catch (HttpRequestException ex)
             {
@@ -84,9 +76,134 @@ namespace Tubifarry.Core.Utilities
             }
         }
 
-        private static async Task<(string poToken, string visitorData)> GetTokenWithRetryAsync(string baseUrl, CancellationToken token)
+        /// <summary>
+        /// Creates session information based on the provided authentication configuration
+        /// </summary>
+        public static async Task<ClientSessionInfo> CreateSessionInfoAsync(string? trustedSessionGeneratorUrl = null, string? cookiePath = null, bool forceRefresh = false)
         {
-            // First, trigger the update
+            SessionTokens? effectiveTokens = null;
+            Cookie[]? cookies = null;
+            try
+            {
+                effectiveTokens = await GetTrustedSessionTokensAsync(trustedSessionGeneratorUrl, forceRefresh);
+                _logger.Trace($"Successfully retrieved tokens from {effectiveTokens.Source}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to retrieve tokens for session");
+            }
+            if (!string.IsNullOrEmpty(cookiePath))
+                cookies = LoadCookies(cookiePath);
+
+            return new ClientSessionInfo(effectiveTokens, cookies);
+        }
+
+        /// <summary>
+        /// Creates an authenticated YouTube Music client from session information
+        /// </summary>
+        public static YouTubeMusicClient CreateAuthenticatedClient(ClientSessionInfo sessionInfo)
+        {
+            YouTubeMusicClient client = new(
+                geographicalLocation: sessionInfo.GeographicalLocation,
+                visitorData: sessionInfo.Tokens?.VisitorData,
+                poToken: sessionInfo.Tokens?.PoToken,
+                cookies: sessionInfo.Cookies
+            );
+
+            _logger.Debug($"Created YouTube client with: {sessionInfo.AuthenticationSummary}");
+            return client;
+        }
+
+        /// <summary>
+        /// Creates an authenticated YouTube Music client with the specified configuration
+        /// </summary>
+        public static async Task<YouTubeMusicClient> CreateAuthenticatedClientAsync(string? trustedSessionGeneratorUrl = null, string? cookiePath = null, bool forceRefresh = false)
+        {
+            ClientSessionInfo sessionInfo = await CreateSessionInfoAsync(trustedSessionGeneratorUrl, cookiePath, forceRefresh);
+            return CreateAuthenticatedClient(sessionInfo);
+        }
+
+        private static Cookie[]? LoadCookies(string cookiePath)
+        {
+            _logger?.Debug($"Trying to parse cookies from {cookiePath}");
+            try
+            {
+                if (File.Exists(cookiePath))
+                {
+                    Cookie[] cookies = CookieManager.ParseCookieFile(cookiePath);
+                    if (cookies?.Length > 0)
+                    {
+                        _logger?.Trace($"Successfully parsed {cookies.Length} cookies");
+                        return cookies;
+                    }
+                }
+                else
+                {
+                    _logger?.Warn($"Cookie file not found: {cookiePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, $"Failed to parse cookies from {cookiePath}");
+            }
+            return null;
+        }
+
+        private static async Task<SessionTokens> GetTokensFromWebServiceAsync(string serviceUrl, bool forceRefresh, CancellationToken token)
+        {
+            if (string.IsNullOrEmpty(serviceUrl))
+                throw new ArgumentNullException(nameof(serviceUrl), "Service URL cannot be null or empty");
+
+            string baseUrl = serviceUrl.TrimEnd('/');
+            string endpoint = forceRefresh ? "/update" : "/token";
+            string url = baseUrl + endpoint;
+
+            _logger.Trace($"Fetching trusted session tokens from {url}");
+
+            if (forceRefresh)
+                return await GetTokenWithRetryAsync(baseUrl, token);
+            else
+                return await FetchAndParseTokenAsync(url, token);
+        }
+
+        private static async Task<SessionTokens> GetTokensFromLocalGeneratorAsync(CancellationToken token)
+        {
+            NodeEnvironment? nodeEnvironment = null;
+            try
+            {
+                _logger.Trace("Initializing Node.js environment for local token generation");
+                nodeEnvironment = new NodeEnvironment();
+
+                YouTubeSessionConfig config = new()
+                {
+                    JsEnvironment = nodeEnvironment,
+                    HttpClient = _httpClient
+                };
+
+                YouTubeSessionCreator creator = new(config);
+
+                _logger.Trace("Generating visitor data and proof of origin token....");
+                string visitorData = await creator.VisitorDataAsync(token);
+                string poToken = await creator.ProofOfOriginTokenAsync(visitorData, cancellationToken: token);
+                DateTime expiryTime = DateTime.UtcNow.AddHours(4);
+                SessionTokens sessionTokens = new(poToken, visitorData, expiryTime, "Local Generator");
+
+                _logger.Debug($"Successfully generated trusted session tokens locally. Expiry: {expiryTime}");
+                return sessionTokens;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to generate tokens using local YouTubeSessionGenerator");
+                throw new TrustedSessionException("Failed to generate tokens using local generator", ex);
+            }
+            finally
+            {
+                nodeEnvironment?.Dispose();
+            }
+        }
+
+        private static async Task<SessionTokens> GetTokenWithRetryAsync(string baseUrl, CancellationToken token)
+        {
             string updateUrl = $"{baseUrl}/update";
             HttpRequestMessage request = new(HttpMethod.Get, updateUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -104,15 +221,11 @@ namespace Tubifarry.Core.Utilities
             {
                 _logger.Trace("Token update initiated, waiting for completion...");
 
-                // Switch to the regular token endpoint for subsequent requests
                 string tokenUrl = $"{baseUrl}/token";
-
-                // Try to get the token with retries
                 for (int i = 0; i < MaxRetries; i++)
                 {
                     try
                     {
-                        // Wait before retrying
                         await Task.Delay(RetryDelayMs * (i + 1), token);
 
                         _logger.Trace($"Retry {i + 1}/{MaxRetries} to get updated token");
@@ -133,10 +246,9 @@ namespace Tubifarry.Core.Utilities
                 throw new TrustedSessionException("Failed to get token after multiple retries");
             }
 
-            // If we immediately got a token response, parse it
             try
             {
-                return ParseTokenResponse(responseContent);
+                return ParseTokenResponse(responseContent, "Web Service");
             }
             catch (JsonException)
             {
@@ -144,21 +256,18 @@ namespace Tubifarry.Core.Utilities
             }
         }
 
-        private static async Task<(string poToken, string visitorData)> FetchAndParseTokenAsync(string url, CancellationToken token)
+        private static async Task<SessionTokens> FetchAndParseTokenAsync(string url, CancellationToken token)
         {
             HttpRequestMessage request = new(HttpMethod.Get, url);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
             using HttpResponseMessage response = await _httpClient.SendAsync(request, token);
             response.EnsureSuccessStatusCode();
-
             string responseJson = await response.Content.ReadAsStringAsync(token);
-            _logger.Info(responseJson);
-
-            return ParseTokenResponse(responseJson);
+            _logger.Trace(responseJson);
+            return ParseTokenResponse(responseJson, "Web Service");
         }
 
-        private static (string poToken, string visitorData) ParseTokenResponse(string responseJson)
+        private static SessionTokens ParseTokenResponse(string responseJson, string source)
         {
             JsonDocument jsonDoc = JsonDocument.Parse(responseJson);
             JsonElement root = jsonDoc.RootElement;
@@ -170,149 +279,64 @@ namespace Tubifarry.Core.Utilities
                 throw new TrustedSessionException($"Invalid response format from trusted session generator: {responseJson}");
             }
 
-            string? newPoToken = poTokenElement.GetString();
-            string? newVisitorData = visitorDataElement.GetString();
+            string? poToken = poTokenElement.GetString();
+            string? visitorData = visitorDataElement.GetString();
 
-            if (string.IsNullOrEmpty(newPoToken) || string.IsNullOrEmpty(newVisitorData))
+            if (string.IsNullOrEmpty(poToken) || string.IsNullOrEmpty(visitorData))
                 throw new TrustedSessionException("Received empty token values from trusted session generator");
 
             long updatedTimestamp = updatedElement.GetInt64();
             DateTime updatedDateTime = DateTimeOffset.FromUnixTimeSeconds(updatedTimestamp).DateTime;
+            DateTime expiryDateTime = updatedDateTime.AddHours(4);
 
-            _poToken = newPoToken;
-            _visitorData = newVisitorData;
-            _tokenExpiry = updatedDateTime.AddHours(4);
+            SessionTokens sessionTokens = new(poToken, visitorData, expiryDateTime, source);
+            _logger.Trace($"Successfully fetched trusted session tokens from {source}. Expiry: {expiryDateTime}");
 
-            _logger.Trace($"Successfully fetched trusted session tokens. Expiry: {_tokenExpiry}");
-            return (newPoToken, newVisitorData);
+            return sessionTokens;
         }
 
-        public static async Task<YouTubeMusicClient> CreateAuthenticatedClientAsync(
-            string? trustedSessionGeneratorUrl = null,
-            string? poToken = null,
-            string? visitorData = null,
-            string? cookiePath = null,
-            bool forceRefresh = false,
-            Logger? logger = null)
+        /// <summary>
+        /// Validates authentication settings and connectivity
+        /// </summary>
+        public static async Task ValidateAuthenticationSettingsAsync(string? trustedSessionGeneratorUrl = null, string? cookiePath = null)
         {
-            logger ??= _logger;
-
-            string? effectivePoToken = poToken;
-            string? effectiveVisitorData = visitorData;
-            Cookie[]? cookies = null;
-
-            // If we have a trusted session generator URL, try to use it
-            if (!string.IsNullOrEmpty(trustedSessionGeneratorUrl))
+            if (string.IsNullOrEmpty(trustedSessionGeneratorUrl) && string.IsNullOrEmpty(cookiePath))
             {
-                logger.Trace($"Using trusted session generator at {trustedSessionGeneratorUrl}");
+                NodeEnvironment? testEnv = null;
                 try
                 {
-                    (string fetchedPoToken, string fetchedVisitorData) = await GetTrustedSessionTokensAsync(trustedSessionGeneratorUrl, forceRefresh);
-
-                    effectivePoToken = fetchedPoToken;
-                    effectiveVisitorData = fetchedVisitorData;
-                    logger.Trace("Successfully retrieved tokens from trusted session generator");
+                    testEnv = new NodeEnvironment();
+                    _logger.Trace("Node.js environment test successful");
                 }
                 catch (Exception ex)
                 {
-                    // Log the error but continue with other auth methods if available
-                    logger.Error(ex, "Failed to retrieve tokens from trusted session generator");
+                    throw new ArgumentException($"Node.js environment is not available for local token generation: {ex.Message}");
                 }
-            }
-
-            // If we have a cookie path, try to use it
-            if (!string.IsNullOrEmpty(cookiePath))
-            {
-                logger.Debug($"Trying to parse cookies from {cookiePath}");
-                try
+                finally
                 {
-                    if (File.Exists(cookiePath))
-                    {
-                        cookies = CookieManager.ParseCookieFile(cookiePath);
-                        if (cookies?.Length > 0)
-                            logger.Trace($"Successfully parsed {cookies.Length} cookies");
-                        else
-                            logger.Warn($"No valid cookies found in {cookiePath}");
-                    }
-                    else
-                    {
-                        logger.Warn($"Cookie file not found: {cookiePath}");
-                    }
+                    testEnv?.Dispose();
                 }
-                catch (Exception ex)
-                {
-                    // Log the error but continue
-                    logger.Error(ex, $"Failed to parse cookies from {cookiePath}");
-                }
-            }
 
-            // Create client with whatever authentication data we have
-            YouTubeMusicClient client = new(
-                geographicalLocation: "US",
-                visitorData: effectiveVisitorData,
-                poToken: effectivePoToken,
-                cookies: cookies
-            );
-
-            logger.Debug($"Created YouTube client with: cookies={cookies != null}, " +
-                $"poToken={!string.IsNullOrEmpty(effectivePoToken)}, " +
-                $"visitorData={!string.IsNullOrEmpty(effectiveVisitorData)}");
-
-            return client;
-        }
-
-        public static async Task ValidateAuthenticationSettingsAsync(
-            string? trustedSessionGeneratorUrl = null,
-            string? poToken = null,
-            string? visitorData = null,
-            string? cookiePath = null)
-        {
-            // If nothing is provided, validation should pass
-            if (string.IsNullOrEmpty(trustedSessionGeneratorUrl) &&
-                string.IsNullOrEmpty(poToken) &&
-                string.IsNullOrEmpty(visitorData) &&
-                string.IsNullOrEmpty(cookiePath))
-            {
-                _logger.Trace("No authentication settings provided, validation passed");
                 return;
             }
 
-            // Validate trusted session generator URL if provided
             if (!string.IsNullOrEmpty(trustedSessionGeneratorUrl))
             {
                 if (!Uri.TryCreate(trustedSessionGeneratorUrl, UriKind.Absolute, out _))
-                    throw new ArgumentException($"Invalid trusted session generator URL: {trustedSessionGeneratorUrl}", nameof(trustedSessionGeneratorUrl));
+                    throw new ArgumentException($"Invalid trusted session generator URL: {trustedSessionGeneratorUrl}");
 
                 try
                 {
-                    // Just check if we can connect, don't force refresh during validation
                     HttpRequestMessage request = new(HttpMethod.Get, $"{trustedSessionGeneratorUrl.TrimEnd('/')}/token");
                     request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
                     using HttpResponseMessage response = await _httpClient.SendAsync(request);
                     response.EnsureSuccessStatusCode();
-
-                    // We don't need to parse the response - just checking if the endpoint is available
                     _logger.Trace("Successfully connected to trusted session generator");
                 }
                 catch (Exception ex)
                 {
-                    throw new ArgumentException($"Error connecting to the trusted session generator: {ex.Message}", nameof(trustedSessionGeneratorUrl));
+                    throw new ArgumentException($"Error connecting to the trusted session generator: {ex.Message}");
                 }
-            }
-
-            // Validate poToken and visitorData consistency if either is provided
-            if (!string.IsNullOrEmpty(poToken))
-            {
-                if (poToken.Length < 32 || poToken.Length > 256)
-                    throw new ArgumentException("poToken length must be between 32 and 256 characters", nameof(poToken));
-
-                if (string.IsNullOrEmpty(visitorData))
-                    throw new ArgumentException("visitorData is required when poToken is provided", nameof(visitorData));
-            }
-            else if (!string.IsNullOrEmpty(visitorData))
-            {
-                throw new ArgumentException("poToken is required when visitorData is provided", nameof(poToken));
             }
 
             // Validate cookie path if provided
@@ -325,13 +349,21 @@ namespace Tubifarry.Core.Utilities
                 {
                     Cookie[]? cookies = CookieManager.ParseCookieFile(cookiePath);
                     if (cookies == null || cookies.Length == 0)
-                        throw new ArgumentException("No valid cookies found in the cookie file", nameof(cookiePath));
+                        throw new ArgumentException("No valid cookies found in the cookie file");
                 }
                 catch (Exception ex) when (ex is not ArgumentException && ex is not FileNotFoundException)
                 {
-                    throw new ArgumentException($"Error parsing cookie file: {ex.Message}", nameof(cookiePath));
+                    throw new ArgumentException($"Error parsing cookie file: {ex.Message}");
                 }
             }
         }
+
+        public static void ClearCache()
+        {
+            _cachedTokens = null;
+            _logger.Trace("Token cache cleared");
+        }
+
+        public static SessionTokens? GetCachedTokens() => _cachedTokens;
     }
 }
