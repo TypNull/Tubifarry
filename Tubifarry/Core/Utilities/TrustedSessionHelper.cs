@@ -20,6 +20,8 @@ namespace Tubifarry.Core.Utilities
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TrustedSessionHelper));
 
         private static SessionTokens? _cachedTokens;
+        private static bool? _nodeJsAvailable;
+        private static object _nodeJsCheckLock = new();
         private static readonly SemaphoreSlim _semaphore = new(1, 1);
 
         // Constants for retry logic
@@ -41,14 +43,14 @@ namespace Tubifarry.Core.Utilities
                     return _cachedTokens;
                 }
 
-                SessionTokens newTokens;
+                SessionTokens newTokens = new("", "", DateTime.UtcNow.AddHours(12));
 
                 if (!string.IsNullOrEmpty(serviceUrl))
                 {
                     _logger.Trace($"Using web service approach with URL: {serviceUrl}");
                     newTokens = await GetTokensFromWebServiceAsync(serviceUrl, forceRefresh, token);
                 }
-                else
+                else if (IsNodeJsAvailable())
                 {
                     _logger.Trace("Using local YouTubeSessionGenerator");
                     newTokens = await GetTokensFromLocalGeneratorAsync(token);
@@ -301,25 +303,8 @@ namespace Tubifarry.Core.Utilities
         /// </summary>
         public static async Task ValidateAuthenticationSettingsAsync(string? trustedSessionGeneratorUrl = null, string? cookiePath = null)
         {
-            if (string.IsNullOrEmpty(trustedSessionGeneratorUrl) && string.IsNullOrEmpty(cookiePath))
-            {
-                NodeEnvironment? testEnv = null;
-                try
-                {
-                    testEnv = new NodeEnvironment();
-                    _logger.Trace("Node.js environment test successful");
-                }
-                catch (Exception ex)
-                {
-                    throw new ArgumentException($"Node.js environment is not available for local token generation: {ex.Message}");
-                }
-                finally
-                {
-                    testEnv?.Dispose();
-                }
-
-                return;
-            }
+            if (string.IsNullOrEmpty(trustedSessionGeneratorUrl) && !IsNodeJsAvailable())
+                _logger.Warn("Node.js environment is not available for local token generation.");
 
             if (!string.IsNullOrEmpty(trustedSessionGeneratorUrl))
             {
@@ -355,6 +340,37 @@ namespace Tubifarry.Core.Utilities
                 catch (Exception ex) when (ex is not ArgumentException && ex is not FileNotFoundException)
                 {
                     throw new ArgumentException($"Error parsing cookie file: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Checks if Node.js is available for local token generation
+        /// </summary>
+        private static bool IsNodeJsAvailable()
+        {
+            lock (_nodeJsCheckLock)
+            {
+                if (_nodeJsAvailable.HasValue)
+                    return _nodeJsAvailable.Value;
+                NodeEnvironment? testEnv = null;
+                try
+                {
+                    _logger.Trace("Checking Node.js availability...");
+                    testEnv = new();
+                    _nodeJsAvailable = true;
+                    _logger.Debug("Node.js environment is available for local token generation");
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    _nodeJsAvailable = false;
+                    _logger.Warn(ex, "Node.js environment is not available for local token generation: {Message}", ex.Message);
+                    return false;
+                }
+                finally
+                {
+                    testEnv?.Dispose();
                 }
             }
         }
