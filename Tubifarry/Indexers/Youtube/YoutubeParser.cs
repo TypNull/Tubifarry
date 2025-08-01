@@ -161,14 +161,9 @@ namespace Tubifarry.Indexers.YouTube
                             .FirstOrDefault();
 
                         if (highestQualityStream != null)
-                        {
                             albumData.Bitrate = AudioFormatHelper.RoundToStandardBitrate(highestQualityStream.Bitrate / 1000);
-                            _logger.Trace($"Retrieved streaming info for album: '{albumData.AlbumName}' (Bitrate: {albumData.Bitrate}kbps)");
-                        }
                         else
-                        {
                             albumData.Bitrate = DEFAULT_BITRATE;
-                        }
                     }
                     catch (Exception ex)
                     {
@@ -198,6 +193,7 @@ namespace Tubifarry.Indexers.YouTube
         private static AlbumData ExtractAlbumInfo(AlbumSearchResult album) => new("Youtube", nameof(YoutubeDownloadProtocol))
         {
             AlbumId = album.Id,
+            InfoUrl = $"https://music.youtube.com/playlist?list={album.Id}",
             AlbumName = album.Name,
             ArtistName = album.Artists.FirstOrDefault()?.Name ?? "Unknown Artist",
             ReleaseDate = album.ReleaseYear > 0 ? album.ReleaseYear.ToString() : "0000-01-01",

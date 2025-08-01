@@ -104,11 +104,17 @@ namespace Tubifarry.Core.Model
             "-movflags +faststart"
         };
 
-        private static readonly Dictionary<string, byte[]> VideoSignatures = new()
+
+        private static readonly string[] VideoFormats = new[]
         {
-            { "MP4", new byte[] { 0x66, 0x74, 0x79, 0x70 } }, // MP4 (ftyp)
-            { "AVI", new byte[] { 0x52, 0x49, 0x46, 0x46 } }, // AVI (RIFF)
-            { "MKV", new byte[] { 0x1A, 0x45, 0xDF, 0xA3 } }, // MKV (EBML)
+            "matroska", "webm",           // Matroska/WebM containers
+            "mov", "mp4", "m4a",          // QuickTime/MP4 containers  
+            "avi",                        // AVI containers
+            "asf", "wmv", "wma",          // Windows Media containers
+            "flv", "f4v",                 // Flash containers
+            "3gp", "3g2",                 // 3GPP containers
+            "mxf",                        // Material Exchange Format
+            "ts", "m2ts"                  // Transport streams
         };
 
         /// <summary>
@@ -186,23 +192,10 @@ namespace Tubifarry.Core.Model
                 if (mediaInfo.VideoStreams.Any())
                     return true;
 
-                byte[] header = new byte[8];
-                await using (FileStream stream = new(TrackPath, FileMode.Open, FileAccess.Read))
-                {
-                    await stream.ReadAsync(header);
-                }
-
-                foreach (KeyValuePair<string, byte[]> kvp in VideoSignatures)
-                {
-                    string containerType = kvp.Key;
-                    byte[] signature = kvp.Value;
-                    if (header.Skip(4).Take(signature.Length).SequenceEqual(signature))
-                    {
-                        _logger?.Trace($"Detected {containerType} video container via signature");
-                        return true;
-                    }
-                }
-                return false;
+                string probeResult = await Probe.New().Start($"-v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 \"{TrackPath}\"");
+                string formatName = probeResult?.Trim().ToLower() ?? "";
+                _logger?.Trace($"Detected container format via ffprobe: '{formatName}'");
+                return VideoFormats.Any(container => formatName.Contains(container));
             }
             catch (Exception ex)
             {
@@ -218,7 +211,8 @@ namespace Tubifarry.Core.Model
 
             bool isVideo = await IsVideoContainerAsync();
             if (!isVideo)
-                return true;
+                return await EnsureFileExtAsync();
+
 
             _logger?.Trace($"Extracting audio from video file: {Path.GetFileName(TrackPath)}");
 
@@ -251,6 +245,7 @@ namespace Tubifarry.Core.Model
 
                 File.Move(tempOutputPath, finalOutputPath, true);
                 TrackPath = finalOutputPath;
+
                 _logger?.Trace($"Successfully extracted audio to {Path.GetFileName(TrackPath)}");
                 return true;
             }

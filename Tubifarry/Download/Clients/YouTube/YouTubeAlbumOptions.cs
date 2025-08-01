@@ -33,6 +33,10 @@ namespace Tubifarry.Download.Clients.YouTube
 
         public int MaxDownloadSpeed { get; set; }
 
+        public bool UseSponsorBlock { get; set; }
+
+        public string SponsorBlockApiEndpoint { get; set; } = "https://sponsor.ajay.app";
+
         public YouTubeAlbumOptions() { }
 
         protected YouTubeAlbumOptions(YouTubeAlbumOptions options) : base(options)
@@ -50,6 +54,8 @@ namespace Tubifarry.Download.Clients.YouTube
             RandomDelayMin = options.RandomDelayMin;
             RandomDelayMax = options.RandomDelayMax;
             MaxDownloadSpeed = options.MaxDownloadSpeed;
+            UseSponsorBlock = options.UseSponsorBlock;
+            SponsorBlockApiEndpoint = options.SponsorBlockApiEndpoint;
         }
     }
 }

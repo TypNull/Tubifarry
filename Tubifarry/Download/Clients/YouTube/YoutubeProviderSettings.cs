@@ -57,10 +57,19 @@ namespace Tubifarry.Download.Clients.YouTube
                 .LessThanOrEqualTo(2_500)
                 .WithMessage("Max download speed must be less than or equal to 20 Mbps (2,500 KB/s).");
 
-            // Validate TrustedSessionGeneratorUrl (optional)
+            // Validate TrustedSessionGeneratorUrl
             RuleFor(x => x.TrustedSessionGeneratorUrl)
                 .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute))
                 .WithMessage("Trusted Session Generator URL must be a valid URL if provided.");
+
+            // Validate SponsorBlock API endpoint
+            RuleFor(x => x.SponsorBlockApiEndpoint)
+                .NotEmpty()
+                .When(x => x.UseSponsorBlock)
+                .WithMessage("SponsorBlock API endpoint is required when SponsorBlock is enabled.")
+                .Must(url => Uri.IsWellFormedUriString(url, UriKind.Absolute))
+                .When(x => x.UseSponsorBlock && !string.IsNullOrEmpty(x.SponsorBlockApiEndpoint))
+                .WithMessage("SponsorBlock API endpoint must be a valid URL.");
         }
     }
 
@@ -97,6 +106,12 @@ namespace Tubifarry.Download.Clients.YouTube
 
         [FieldDefinition(9, Label = "Trusted Session Generator URL", Type = FieldType.Textbox, Placeholder = "http://localhost:8080", HelpText = "URL to the YouTube Trusted Session Generator service. When provided, PoToken and Visitor Data will be fetched automatically.", Advanced = true)]
         public string TrustedSessionGeneratorUrl { get; set; } = string.Empty;
+
+        [FieldDefinition(10, Label = "Use SponsorBlock", Type = FieldType.Checkbox, HelpText = "Enable SponsorBlock integration to automatically remove non-music segments (intros, outros, talking) from downloaded tracks.")]
+        public bool UseSponsorBlock { get; set; }
+
+        [FieldDefinition(11, Label = "SponsorBlock API Endpoint", Type = FieldType.Textbox, Placeholder = "https://sponsor.ajay.app", HelpText = "SponsorBlock API endpoint URL. Change only if using a custom SponsorBlock instance.", Advanced = true)]
+        public string SponsorBlockApiEndpoint { get; set; } = "https://sponsor.ajay.app";
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

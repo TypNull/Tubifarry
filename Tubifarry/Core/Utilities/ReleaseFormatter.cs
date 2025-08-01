@@ -23,7 +23,7 @@ namespace Tubifarry.Core.Utilities
             pattern ??= _namingConfig?.StandardTrackFormat ?? "{track:0} {Track Title}";
             Dictionary<string, Func<string>> tokenHandlers = GetTokenHandlers(track, album);
             string formattedString = ReplaceTokens(pattern, tokenHandlers);
-            return CleanFileName(formattedString);
+            return CleanFileName(Path.GetFileName(formattedString));
         }
 
         public string BuildAlbumFilename(string? pattern, Album album)

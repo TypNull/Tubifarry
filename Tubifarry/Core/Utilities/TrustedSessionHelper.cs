@@ -104,11 +104,12 @@ namespace Tubifarry.Core.Utilities
         public static YouTubeMusicClient CreateAuthenticatedClient(ClientSessionInfo sessionInfo)
         {
             YouTubeMusicClient client = new(
+                // logger: new YouTubeSessionGeneratorLogger(_logger),
                 geographicalLocation: sessionInfo.GeographicalLocation,
                 visitorData: sessionInfo.Tokens?.VisitorData,
                 poToken: sessionInfo.Tokens?.PoToken,
                 cookies: sessionInfo.Cookies
-            );
+                );
 
             _logger.Debug($"Created YouTube client with: {sessionInfo.AuthenticationSummary}");
             return client;
@@ -365,5 +366,39 @@ namespace Tubifarry.Core.Utilities
         }
 
         public static SessionTokens? GetCachedTokens() => _cachedTokens;
+
+        /// <summary>
+        /// Logger adapter to bridge NLog with Microsoft.Extensions.Logging for YouTubeSessionGenerator
+        /// </summary>
+        private class YouTubeSessionGeneratorLogger : Microsoft.Extensions.Logging.ILogger
+        {
+            private readonly Logger _nlogLogger;
+
+            public YouTubeSessionGeneratorLogger(Logger nlogLogger) => _nlogLogger = nlogLogger;
+
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+            public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (!IsEnabled(logLevel)) return;
+
+                string message = formatter(state, exception);
+
+                LogLevel nlogLevel = logLevel switch
+                {
+                    Microsoft.Extensions.Logging.LogLevel.Trace => LogLevel.Trace,
+                    Microsoft.Extensions.Logging.LogLevel.Debug => LogLevel.Trace,
+                    Microsoft.Extensions.Logging.LogLevel.Information => LogLevel.Trace,
+                    Microsoft.Extensions.Logging.LogLevel.Warning => LogLevel.Warn,
+                    Microsoft.Extensions.Logging.LogLevel.Error => LogLevel.Error,
+                    Microsoft.Extensions.Logging.LogLevel.Critical => LogLevel.Fatal,
+                    _ => LogLevel.Info
+                };
+
+                _nlogLogger.Log(nlogLevel, exception, message);
+            }
+        }
     }
 }

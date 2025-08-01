@@ -11,6 +11,7 @@ using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using Requests;
 using Tubifarry.Core.Model;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
 
@@ -56,13 +57,15 @@ namespace Tubifarry.Download.Clients.YouTube
             try
             {
                 TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath).Wait();
+                SessionTokens session = TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, true).Result;
+                if (!session.IsValid)
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
             catch (Exception ex)
             {
-                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Error connecting to the trusted session generator: {ex.Message}"));
+                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to valiate session generator service: {ex.Message}"));
             }
 
-            _dlManager.SetAuth(Settings);
             if (string.IsNullOrEmpty(Settings.DownloadPath))
                 failures.AddRange(PermissionTester.TestAllPermissions(Settings.FFmpegPath, _logger));
             failures.AddIfNotNull(TestFFmpeg().Result);
@@ -70,7 +73,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
         public async Task<ValidationFailure> TestFFmpeg()
         {
-            if (Settings.ReEncode != (int)ReEncodeOptions.Disabled)
+            if (Settings.ReEncode != (int)ReEncodeOptions.Disabled || Settings.UseSponsorBlock)
             {
                 string old = FFmpeg.ExecutablesPath;
                 FFmpeg.SetExecutablesPath(Settings.FFmpegPath);

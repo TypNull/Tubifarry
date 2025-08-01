@@ -4,6 +4,7 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using Requests;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
 
@@ -18,14 +19,14 @@ namespace Tubifarry.Download.Clients.YouTube
         public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider);
         public IEnumerable<DownloadClientItem> GetItems();
         public void RemoveItem(DownloadClientItem item);
-        public void SetAuth(YoutubeProviderSettings settings);
     }
 
     public class YoutubeDownloadManager : IYoutubeDownloadManager
     {
         private readonly RequestContainer<YouTubeAlbumRequest> _queue;
         private readonly Logger _logger;
-        private YouTubeMusicClient _ytClient;
+        private YouTubeMusicClient? _youTubeClient;
+        private SessionTokens? _sessionToken;
         private Task? _testTask;
 
         /// <summary>
@@ -35,21 +36,17 @@ namespace Tubifarry.Download.Clients.YouTube
         {
             _logger = logger;
             _queue = new();
-            _ytClient = new YouTubeMusicClient();
         }
 
-        /// <summary>
-        /// Sets authentication for the YouTube Music client.
-        /// </summary>
-        public void SetAuth(YoutubeProviderSettings settings) => _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.PoToken).Result;
-
-        public Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider)
+        public async Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, YoutubeClient provider)
         {
             _testTask ??= provider.TestFFmpeg();
             _testTask.Wait();
+            await UpdateClientAsync(provider);
+
             YouTubeAlbumRequest request = new(remoteAlbum, new()
             {
-                YouTubeMusicClient = _ytClient,
+                YouTubeMusicClient = _youTubeClient,
                 Handler = RequestHandler.MainRequestHandlers[1],
                 DownloadPath = provider.Settings.DownloadPath,
                 Chunks = provider.Settings.Chunks,
@@ -61,11 +58,13 @@ namespace Tubifarry.Download.Clients.YouTube
                 NameingConfig = namingConfig,
                 UseID3v2_3 = provider.Settings.UseID3v2_3,
                 ReEncodeOptions = (ReEncodeOptions)provider.Settings.ReEncode,
-                ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false)
+                ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),
+                UseSponsorBlock = provider.Settings.UseSponsorBlock,
+                SponsorBlockApiEndpoint = provider.Settings.SponsorBlockApiEndpoint,
             });
             _queue.Add(request);
             _logger.Trace($"Download request added to queue. Request ID: {request.ID}");
-            return Task.FromResult(request.ID);
+            return request.ID;
         }
 
         public IEnumerable<DownloadClientItem> GetItems() => _queue.Select(x => x.ClientItem);
@@ -78,6 +77,14 @@ namespace Tubifarry.Download.Clients.YouTube
             req.Dispose();
             _queue.Remove(req);
             _logger.Trace($"Item removed from queue. Download ID: {item.DownloadId}");
+        }
+
+        private async Task UpdateClientAsync(YoutubeClient provider)
+        {
+            if (_sessionToken?.IsValid == true)
+                return;
+            _sessionToken = await TrustedSessionHelper.GetTrustedSessionTokensAsync(provider.Settings.TrustedSessionGeneratorUrl);
+            _youTubeClient = await TrustedSessionHelper.CreateAuthenticatedClientAsync(provider.Settings.TrustedSessionGeneratorUrl, provider.Settings.CookiePath);
         }
     }
 }

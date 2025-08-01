@@ -13,7 +13,6 @@ using System.Text;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
-using YouTubeMusicAPI.Client;
 using YouTubeMusicAPI.Models;
 using YouTubeMusicAPI.Models.Info;
 using YouTubeMusicAPI.Models.Streaming;
@@ -57,13 +56,13 @@ namespace Tubifarry.Download.Clients.YouTube
 
         public YouTubeAlbumRequest(RemoteAlbum remoteAlbum, YouTubeAlbumOptions? options) : base(options)
         {
-            Options.YouTubeMusicClient ??= new YouTubeMusicClient();
+            Options.YouTubeMusicClient ??= TrustedSessionHelper.CreateAuthenticatedClientAsync().Result;
             _logger = NzbDroneLogger.GetLogger(this);
             _remoteAlbum = remoteAlbum;
             _albumData = remoteAlbum.Albums.FirstOrDefault() ?? new();
             _releaseFormatter = new(ReleaseInfo, remoteAlbum.Artist, Options.NameingConfig);
             _requestContainer.Add(_trackContainer);
-            _destinationPath = new(Path.Combine(Options.DownloadPath, _releaseFormatter.BuildArtistFolderName(null), _releaseFormatter.BuildAlbumFilename("{Album Title}", new Album() { Title = ReleaseInfo.Title })));
+            _destinationPath = new(Path.Combine(Options.DownloadPath, _releaseFormatter.BuildArtistFolderName(null), _releaseFormatter.BuildAlbumFilename("{Album Title}", new Album() { Title = ReleaseInfo.Album })));
             _clientItem = CreateClientItem();
             ProcessAlbum();
         }
@@ -148,7 +147,7 @@ namespace Tubifarry.Download.Clients.YouTube
             return await response.Content.ReadAsByteArrayAsync(token);
         }
 
-        private void AddTrackDownloadRequests(AlbumInfo albumInfo, AlbumSong trackInfo, AudioStreamInfo audioStreamInfo)
+        private void AddTrackDownloadRequests(AlbumInfo albumInfo, AlbumSong trackInfo, AudioStreamInfo audioStreamInfo, bool slow = false)
         {
             _albumData.Title = albumInfo.Name;
             Track musicInfo = new() { Title = trackInfo.Name, Artist = _remoteAlbum.Artist, Duration = (int)trackInfo.Duration.TotalSeconds, Explicit = trackInfo.IsExplicit, TrackNumber = trackInfo.SongNumber.ToString(), AbsoluteTrackNumber = trackInfo.SongNumber ?? 0 };
@@ -157,12 +156,13 @@ namespace Tubifarry.Download.Clients.YouTube
                 CancellationToken = Token,
                 CreateSpeedReporter = true,
                 SpeedReporterTimeout = 1,
-                Priority = RequestPriority.Normal,
+                Priority = slow ? RequestPriority.High : RequestPriority.Normal,
                 MaxBytesPerSecond = Options.MaxDownloadSpeed,
                 DelayBetweenAttemps = Options.DelayBetweenAttemps,
                 Filename = _releaseFormatter.BuildTrackFilename(null, musicInfo, _albumData) + ".m4a",
                 DestinationPath = _destinationPath.FullPath,
                 Handler = Options.Handler,
+                NumberOfAttempts = 3,
                 DeleteFilesOnFailure = true,
                 Chunks = Options.Chunks,
                 RequestFailed = (_, __) => LogAndAppendMessage($"Downloading track '{trackInfo.Name}' in album '{albumInfo.Name}' failed.", LogLevel.Debug),
@@ -212,6 +212,9 @@ namespace Tubifarry.Download.Clients.YouTube
                 await audioData.TryExtractAudioFromVideoAsync();
             else if (format != AudioFormat.Unknown)
                 await audioData.TryConvertToFormatAsync(format);
+
+            if (Options.UseSponsorBlock && !string.IsNullOrWhiteSpace(trackInfo.Id))
+                await new SponsorBlock(audioData.TrackPath, trackInfo.Id, Options.SponsorBlockApiEndpoint).LookupAndTrimAsync(token);
 
             if (!audioData.TryEmbedMetadata(albumInfo, trackInfo, ReleaseInfo))
                 return false;
