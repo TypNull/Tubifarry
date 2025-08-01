@@ -245,6 +245,7 @@ namespace Tubifarry.Core.Model
 
                 File.Move(tempOutputPath, finalOutputPath, true);
                 TrackPath = finalOutputPath;
+                await EnsureFileExtAsync();
 
                 _logger?.Trace($"Successfully extracted audio to {Path.GetFileName(TrackPath)}");
                 return true;

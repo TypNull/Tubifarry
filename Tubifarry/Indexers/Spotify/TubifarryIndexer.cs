@@ -54,7 +54,7 @@ namespace Tubifarry.Indexers.Spotify
             {
                 await TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath);
                 SessionTokens session = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, true);
-                if (!session.IsValid)
+                if (!session.IsValid && !session.IsEmpty)
                     failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
             catch (Exception ex)

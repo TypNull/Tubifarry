@@ -56,9 +56,7 @@ namespace Tubifarry.Notifications.QueueCleaner
             if (!trackedDownload.IsTrackable || trackedDownload.State != TrackedDownloadState.ImportFailed || !trackedDownload.DownloadItem.CanMoveFiles)
                 return;
 
-            ImportFailureReason failureReason = CheckImport(trackedDownload);
-
-            switch (failureReason)
+            switch (CheckImport(trackedDownload))
             {
                 case ImportFailureReason.FailedBecauseOfMissingTracks:
                     HandleFailure(trackedDownload, Settings.ImportCleaningOption, ImportCleaningOptions.WhenMissingTracks);
@@ -101,8 +99,7 @@ namespace Tubifarry.Notifications.QueueCleaner
         {
             if (!item.DownloadItem.CanBeRemoved)
                 return;
-            List<IFileInfo> filesOnDisk = _diskProvider.GetFileInfos(item.DownloadItem.OutputPath.FullPath, true);
-            foreach (IFileInfo file in filesOnDisk)
+            foreach (IFileInfo file in (List<IFileInfo>)_diskProvider.GetFileInfos(item.DownloadItem.OutputPath.FullPath, true))
                 _diskProvider.DeleteFile(file.FullName);
             _eventAggregator.PublishEvent(new DownloadCanBeRemovedEvent(item));
         }

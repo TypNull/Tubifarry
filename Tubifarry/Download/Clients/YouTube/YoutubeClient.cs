@@ -58,7 +58,7 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath).Wait();
                 SessionTokens session = TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, true).Result;
-                if (!session.IsValid)
+                if (!session.IsValid && !session.IsEmpty)
                     failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
             catch (Exception ex)

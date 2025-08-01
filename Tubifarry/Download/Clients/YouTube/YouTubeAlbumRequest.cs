@@ -198,6 +198,7 @@ namespace Tubifarry.Download.Clients.YouTube
         private async Task<bool> SongDownloadCompletedAsync(AlbumInfo albumInfo, AlbumSong trackInfo, LoadRequest req, CancellationToken token)
         {
             string trackPath = req.Destination;
+            await Task.Delay(100, token);
             if (!File.Exists(trackPath))
                 return false;
 
