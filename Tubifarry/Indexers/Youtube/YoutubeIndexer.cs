@@ -17,10 +17,13 @@ namespace Tubifarry.Indexers.YouTube
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
         public override int PageSize => 50;
+
+        public new YouTubeIndexerSettings Settings => base.Settings;
+
         public override TimeSpan RateLimit => TimeSpan.FromSeconds(2);
 
-        private readonly IYouTubeRequestGenerator _requestGenerator;
-        private readonly IYouTubeParser _parser;
+        private readonly YouTubeRequestGenerator _requestGenerator;
+        private readonly YouTubeParser _parser;
 
         public override ProviderMessage Message => new(
             "YouTube frequently blocks downloads to prevent unauthorized access. To confirm you're not a bot, you may need to provide additional verification. " +
@@ -30,36 +33,30 @@ namespace Tubifarry.Indexers.YouTube
             ProviderMessageType.Warning
         );
 
-        public YouTubeIndexer(
-            IYouTubeParser parser,
-            IYouTubeRequestGenerator generator,
-            IHttpClient httpClient,
+        public YouTubeIndexer(IHttpClient httpClient,
             IIndexerStatusService indexerStatusService,
             IConfigService configService,
             IParsingService parsingService,
             Logger logger)
             : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
-            _parser = parser;
-            _requestGenerator = generator;
+            _parser = new(this);
+            _requestGenerator = new(this);
         }
 
         protected override async Task Test(List<ValidationFailure> failures)
         {
             try
             {
-                SessionTokens session = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl);
-                if (session.IsValid)
-                    _requestGenerator.SetTrustedSessionData(session.PoToken, session.VisitorData);
-                else
+                await TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath);
+                SessionTokens session = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, true);
+                if (!session.IsValid)
                     failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
             catch (Exception ex)
             {
-                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to contact session generator service: {ex.Message}"));
+                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to valiate session generator service: {ex.Message}"));
             }
-            _requestGenerator.SetCookies(Settings.CookiePath);
-            _parser.SetAuth(Settings);
         }
 
         public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator() => _requestGenerator;

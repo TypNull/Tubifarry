@@ -5,6 +5,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify
@@ -52,18 +53,21 @@ namespace Tubifarry.Indexers.Spotify
             try
             {
                 await TrustedSessionHelper.ValidateAuthenticationSettingsAsync(Settings.TrustedSessionGeneratorUrl, Settings.CookiePath);
+                SessionTokens session = await TrustedSessionHelper.GetTrustedSessionTokensAsync(Settings.TrustedSessionGeneratorUrl, true);
+                if (!session.IsValid)
+                    failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", "Failed to retrieve valid tokens from the session generator service"));
+                failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to valiate session generator service: {ex.Message}"));
             }
-            _parser.SetYouTubeAuth(Settings);
+            UpdateComponentSettings();
         }
 
         private void UpdateComponentSettings()
         {
             _requestGenerator.UpdateSettings(Settings);
-            _parser.SetYouTubeAuth(Settings);
+            _parser.UpdateSettings(Settings);
         }
 
         public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator()

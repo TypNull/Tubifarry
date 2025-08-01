@@ -1,31 +1,32 @@
 using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Http;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using System.Net;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Internal;
 using YouTubeMusicAPI.Models.Search;
 
 namespace Tubifarry.Indexers.YouTube
 {
-    public interface IYouTubeRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
-    {
-        void SetCookies(string path);
-        void SetTrustedSessionData(string poToken, string visitorData);
-    }
 
-    internal class YouTubeRequestGenerator : IYouTubeRequestGenerator
+    internal class YouTubeRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
     {
         private const int MaxPages = 3;
 
         private readonly Logger _logger;
-        private string? _cookiePath;
-        private string? _poToken;
-        private string? _visitorData;
 
-        public YouTubeRequestGenerator(Logger logger) => _logger = logger;
+        private readonly YouTubeIndexer _youTubeIndexer;
+        private SessionTokens? _sessionToken;
+
+        public YouTubeRequestGenerator(YouTubeIndexer indexer)
+        {
+            _youTubeIndexer = indexer;
+            _logger = NzbDroneLogger.GetLogger(this);
+        }
 
         public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests()
         {
@@ -38,6 +39,8 @@ namespace Tubifarry.Indexers.YouTube
             _logger.Debug($"Generating search requests for album: '{searchCriteria.AlbumQuery}' by artist: '{searchCriteria.ArtistQuery}'");
 
             ExtendedIndexerPageableRequestChain chain = new(5);
+
+            UpdateTokens();
 
             // Primary search: album + artist
             if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery) && !string.IsNullOrEmpty(searchCriteria.ArtistQuery))
@@ -65,12 +68,20 @@ namespace Tubifarry.Indexers.YouTube
         {
             _logger.Debug($"Generating search requests for artist: '{searchCriteria.ArtistQuery}'");
 
+            UpdateTokens();
+
             ExtendedIndexerPageableRequestChain chain = new(5);
             if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
                 chain.Add(GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
 
-
             return chain;
+        }
+
+        private void UpdateTokens()
+        {
+            if (_sessionToken?.IsValid == true)
+                return;
+            _sessionToken = TrustedSessionHelper.GetTrustedSessionTokensAsync(_youTubeIndexer.Settings.TrustedSessionGeneratorUrl).Result;
         }
 
         private IEnumerable<IndexerRequest> GetRequests(string searchQuery, SearchCategory category)
@@ -79,8 +90,8 @@ namespace Tubifarry.Indexers.YouTube
             {
                 Dictionary<string, object> payload = Payload.WebRemix(
                     geographicalLocation: "US",
-                    visitorData: _visitorData,
-                    poToken: _poToken,
+                    visitorData: _sessionToken!.VisitorData,
+                    poToken: _sessionToken!.PoToken,
                     signatureTimestamp: null,
                     items: new (string key, object? value)[]
                     {
@@ -93,16 +104,16 @@ namespace Tubifarry.Indexers.YouTube
                 string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
 
                 HttpRequest request = new($"https://music.youtube.com/youtubei/v1/search?key={PluginKeys.YouTubeSecret}", HttpAccept.Json) { Method = HttpMethod.Post };
-                if (!string.IsNullOrEmpty(_cookiePath))
+                if (!string.IsNullOrEmpty(_youTubeIndexer.Settings.CookiePath))
                 {
                     try
                     {
-                        foreach (Cookie cookie in CookieManager.ParseCookieFile(_cookiePath))
+                        foreach (Cookie cookie in CookieManager.ParseCookieFile(_youTubeIndexer.Settings.CookiePath))
                             request.Cookies[cookie.Name] = cookie.Value;
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warn(ex, $"Failed to load cookies from {_cookiePath}");
+                        _logger.Warn(ex, $"Failed to load cookies from {_youTubeIndexer.Settings.CookiePath}");
                     }
                 }
                 request.SetContent(jsonPayload);
@@ -110,22 +121,6 @@ namespace Tubifarry.Indexers.YouTube
 
                 yield return new IndexerRequest(request);
             }
-        }
-
-        public void SetCookies(string path)
-        {
-            if (string.IsNullOrEmpty(path) || path == _cookiePath)
-                return;
-
-            _cookiePath = path;
-            _logger.Debug($"Cookie path set: {!string.IsNullOrEmpty(path)}");
-        }
-
-        public void SetTrustedSessionData(string poToken, string visitorData)
-        {
-            _poToken = poToken;
-            _visitorData = visitorData;
-            _logger.Debug($"Trusted session data set: poToken={!string.IsNullOrEmpty(poToken)}, visitorData={!string.IsNullOrEmpty(visitorData)}");
         }
 
         public static string? ToParams(SearchCategory? value) =>

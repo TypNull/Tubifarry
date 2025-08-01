@@ -1,4 +1,5 @@
-﻿using NLog;
+﻿using DownloadAssistant.Base;
+using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Net;
 using System.Net.Http.Headers;
@@ -16,7 +17,6 @@ namespace Tubifarry.Core.Utilities
     /// </summary>
     public class TrustedSessionHelper
     {
-        private static readonly HttpClient _httpClient = new();
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TrustedSessionHelper));
 
         private static SessionTokens? _cachedTokens;
@@ -123,7 +123,7 @@ namespace Tubifarry.Core.Utilities
             return CreateAuthenticatedClient(sessionInfo);
         }
 
-        private static Cookie[]? LoadCookies(string cookiePath)
+        public static Cookie[]? LoadCookies(string cookiePath)
         {
             _logger?.Debug($"Trying to parse cookies from {cookiePath}");
             try
@@ -177,7 +177,7 @@ namespace Tubifarry.Core.Utilities
                 YouTubeSessionConfig config = new()
                 {
                     JsEnvironment = nodeEnvironment,
-                    HttpClient = _httpClient
+                    HttpClient = HttpGet.HttpClient,
                 };
 
                 YouTubeSessionCreator creator = new(config);
@@ -208,7 +208,7 @@ namespace Tubifarry.Core.Utilities
             HttpRequestMessage request = new(HttpMethod.Get, updateUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            using HttpResponseMessage response = await _httpClient.SendAsync(request, token);
+            using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request, token);
             response.EnsureSuccessStatusCode();
 
             string responseContent = await response.Content.ReadAsStringAsync(token);
@@ -260,7 +260,7 @@ namespace Tubifarry.Core.Utilities
         {
             HttpRequestMessage request = new(HttpMethod.Get, url);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            using HttpResponseMessage response = await _httpClient.SendAsync(request, token);
+            using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request, token);
             response.EnsureSuccessStatusCode();
             string responseJson = await response.Content.ReadAsStringAsync(token);
             _logger.Trace(responseJson);
@@ -329,7 +329,7 @@ namespace Tubifarry.Core.Utilities
                 {
                     HttpRequestMessage request = new(HttpMethod.Get, $"{trustedSessionGeneratorUrl.TrimEnd('/')}/token");
                     request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-                    using HttpResponseMessage response = await _httpClient.SendAsync(request);
+                    using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request);
                     response.EnsureSuccessStatusCode();
                     _logger.Trace("Successfully connected to trusted session generator");
                 }

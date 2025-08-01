@@ -8,7 +8,7 @@ namespace Tubifarry.Indexers.Spotify
 {
     public interface ISpotifyParser : IParseIndexerResponse
     {
-        void SetYouTubeAuth(SpotifyIndexerSettings settings);
+        void UpdateSettings(SpotifyIndexerSettings settings);
     }
 
     /// <summary>
@@ -26,10 +26,10 @@ namespace Tubifarry.Indexers.Spotify
             _enricher = enricher;
         }
 
-        public void SetYouTubeAuth(SpotifyIndexerSettings settings)
+        public void UpdateSettings(SpotifyIndexerSettings settings)
         {
             _currentSettings = settings;
-            _enricher.SetAuth(settings);
+            _enricher.UpdateSettings(settings);
         }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)

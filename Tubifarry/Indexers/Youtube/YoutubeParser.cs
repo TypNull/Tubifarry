@@ -1,9 +1,11 @@
 using Newtonsoft.Json.Linq;
 using NLog;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
 using System.Reflection;
 using Tubifarry.Core.Model;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
 using YouTubeMusicAPI.Models.Info;
@@ -13,20 +15,17 @@ using YouTubeMusicAPI.Pagination;
 
 namespace Tubifarry.Indexers.YouTube
 {
-    public interface IYouTubeParser : IParseIndexerResponse
-    {
-        void SetAuth(YouTubeIndexerSettings settings);
-    }
-
     /// <summary>
     /// Parses YouTube Music API responses and converts them to releases.
     /// </summary>
-    public class YouTubeParser : IYouTubeParser
+    internal class YouTubeParser : IParseIndexerResponse
     {
         private const int DEFAULT_BITRATE = 128;
-        private YouTubeMusicClient? _ytClient;
         private readonly Logger _logger;
-        private YouTubeIndexerSettings? _currentSettings;
+        private readonly YouTubeIndexer _youTubeIndexer;
+        private YouTubeMusicClient? _youTubeClient;
+        private SessionTokens? _sessionToken;
+
 
         private static readonly Lazy<Func<JObject, Page<SearchResult>?>?> _getPageDelegate = new(() =>
         {
@@ -42,43 +41,10 @@ namespace Tubifarry.Indexers.YouTube
             catch { return null; }
         });
 
-        public YouTubeParser(Logger logger) => _logger = logger;
-
-        /// <summary>
-        /// Sets authentication for the YouTube Music client.
-        /// </summary>
-        /// <param name="settings">The settings containing authentication information.</param>
-        public void SetAuth(YouTubeIndexerSettings settings)
+        public YouTubeParser(YouTubeIndexer indexer)
         {
-            if (SettingsEqual(_currentSettings, settings))
-                return;
-
-            _currentSettings = settings;
-
-            try
-            {
-                _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.CookiePath).Result;
-                _logger.Debug("Successfully created authenticated YouTube Music client for additional metadata");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to create authenticated YouTube Music client, will parse without additional metadata");
-                _ytClient = null;
-            }
-        }
-
-        /// <summary>
-        /// Compare if two settings objects have the same auth-related properties
-        /// </summary>
-        private static bool SettingsEqual(YouTubeIndexerSettings? settings1, YouTubeIndexerSettings? settings2)
-        {
-            if (settings1 == null || settings2 == null)
-                return false;
-
-            return settings1.CookiePath == settings2.CookiePath &&
-                   settings1.PoToken == settings2.PoToken &&
-                   settings1.VisitorData == settings2.VisitorData &&
-                   settings1.TrustedSessionGeneratorUrl == settings2.TrustedSessionGeneratorUrl;
+            _youTubeIndexer = indexer;
+            _logger = NzbDroneLogger.GetLogger(this);
         }
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
@@ -145,17 +111,7 @@ namespace Tubifarry.Indexers.YouTube
                 {
                     AlbumData albumData = ExtractAlbumInfo(album);
                     albumData.ParseReleaseDate();
-
-                    if (_ytClient != null)
-                    {
-                        EnrichAlbumWithYouTubeDataAsync(albumData).Wait();
-                    }
-                    else
-                    {
-                        albumData.Bitrate = DEFAULT_BITRATE;
-                        albumData.Duration = albumData.TotalTracks * 180;
-                    }
-
+                    EnrichAlbumWithYouTubeDataAsync(albumData).Wait();
                     if (albumData.Bitrate > 0)
                     {
                         releases.Add(albumData.ToReleaseInfo());
@@ -175,13 +131,12 @@ namespace Tubifarry.Indexers.YouTube
 
         private async Task EnrichAlbumWithYouTubeDataAsync(AlbumData albumData)
         {
-            if (_ytClient == null)
-                return;
-
             try
             {
-                string browseId = await _ytClient.GetAlbumBrowseIdAsync(albumData.AlbumId);
-                AlbumInfo albumInfo = await _ytClient.GetAlbumInfoAsync(browseId);
+                UpdateClient();
+
+                string browseId = await _youTubeClient!.GetAlbumBrowseIdAsync(albumData.AlbumId);
+                AlbumInfo albumInfo = await _youTubeClient.GetAlbumInfoAsync(browseId);
 
                 if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
                 {
@@ -199,7 +154,7 @@ namespace Tubifarry.Indexers.YouTube
                 {
                     try
                     {
-                        StreamingData streamingData = await _ytClient.GetStreamingDataAsync(firstTrack.Id);
+                        StreamingData streamingData = await _youTubeClient.GetStreamingDataAsync(firstTrack.Id);
                         AudioStreamInfo? highestQualityStream = streamingData.StreamInfo
                             .OfType<AudioStreamInfo>()
                             .OrderByDescending(info => info.Bitrate)
@@ -231,6 +186,13 @@ namespace Tubifarry.Indexers.YouTube
                 _logger.Debug(ex, $"Failed to enrich album data for: '{albumData.AlbumName}'");
                 albumData.Bitrate = DEFAULT_BITRATE;
             }
+        }
+        private void UpdateClient()
+        {
+            if (_sessionToken?.IsValid == true)
+                return;
+            _sessionToken = TrustedSessionHelper.GetTrustedSessionTokensAsync(_youTubeIndexer.Settings.TrustedSessionGeneratorUrl).Result;
+            _youTubeClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(_youTubeIndexer.Settings.TrustedSessionGeneratorUrl, _youTubeIndexer.Settings.CookiePath).Result;
         }
 
         private static AlbumData ExtractAlbumInfo(AlbumSearchResult album) => new("Youtube", nameof(YoutubeDownloadProtocol))

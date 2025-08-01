@@ -1,6 +1,7 @@
 using FuzzySharp;
 using NLog;
 using Tubifarry.Core.Model;
+using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
 using YouTubeMusicAPI.Models.Info;
@@ -12,7 +13,7 @@ namespace Tubifarry.Indexers.Spotify
 {
     public interface ISpotifyToYouTubeEnricher
     {
-        void SetAuth(SpotifyIndexerSettings settings);
+        void UpdateSettings(SpotifyIndexerSettings settings);
         List<AlbumData> EnrichWithYouTubeData(List<AlbumData> albums);
         Task<AlbumData?> EnrichSingleAlbumAsync(AlbumData albumData);
     }
@@ -26,6 +27,7 @@ namespace Tubifarry.Indexers.Spotify
         private const int MAX_CONCURRENT_ENRICHMENTS = 3;
 
         private YouTubeMusicClient? _ytClient;
+        private SessionTokens? _sessionTokens;
         private readonly Logger _logger;
         private SpotifyIndexerSettings? _currentSettings;
 
@@ -34,22 +36,16 @@ namespace Tubifarry.Indexers.Spotify
             _logger = logger;
         }
 
-        public void SetAuth(SpotifyIndexerSettings settings)
+        public void UpdateSettings(SpotifyIndexerSettings settings)
         {
-            if (SettingsEqual(_currentSettings, settings))
+            if (SettingsEqual(_currentSettings, settings) && _sessionTokens?.IsValid == true)
                 return;
 
             _currentSettings = settings;
 
-            if (settings.CookiePath == null && settings.PoToken == null && settings.VisitorData == null && settings.TrustedSessionGeneratorUrl == null)
-            {
-                _ytClient = null;
-                _logger.Debug("No YouTube Music authentication configured");
-                return;
-            }
-
             try
             {
+                _sessionTokens = TrustedSessionHelper.GetTrustedSessionTokensAsync(settings.TrustedSessionGeneratorUrl).Result;
                 _ytClient = TrustedSessionHelper.CreateAuthenticatedClientAsync(settings.TrustedSessionGeneratorUrl, settings.CookiePath).Result;
                 _logger.Debug("Successfully created authenticated YouTube Music client for enrichment");
             }
@@ -272,8 +268,6 @@ namespace Tubifarry.Indexers.Spotify
                 return false;
 
             return settings1.CookiePath == settings2.CookiePath &&
-                   settings1.PoToken == settings2.PoToken &&
-                   settings1.VisitorData == settings2.VisitorData &&
                    settings1.TrustedSessionGeneratorUrl == settings2.TrustedSessionGeneratorUrl;
         }
     }
