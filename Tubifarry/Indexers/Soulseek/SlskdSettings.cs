@@ -56,6 +56,12 @@ namespace Tubifarry.Indexers.Soulseek
                 .GreaterThanOrEqualTo(2.0)
                 .WithMessage("Timeout must be at least 2 seconds.");
 
+            // TrackFallback validation
+            RuleFor(c => c.UseTrackFallback)
+                .Equal(false)
+                .When(c => !c.UseFallbackSearch)
+                .WithMessage("Track Fallback cannot be enabled without Fallback Search.");
+
             // Results validation
             RuleFor(c => c.MinimumResults)
               .GreaterThanOrEqualTo(0)
@@ -123,7 +129,6 @@ namespace Tubifarry.Indexers.Soulseek
         [FieldDefinition(13, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Timeout for search requests in seconds.", Advanced = true)]
         public double TimeoutInSeconds { get; set; } = 5;
 
-
         [FieldDefinition(14, Type = FieldType.Checkbox, Label = "Strip Punctuation", HelpText = "Remove punctuation from search terms to improve matching", Advanced = true)]
         public bool StripPunctuation { get; set; }
 
@@ -139,10 +144,13 @@ namespace Tubifarry.Indexers.Soulseek
         [FieldDefinition(18, Label = "Enable Fallback Search", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a secondary search using additional metadata.", Advanced = true)]
         public bool UseFallbackSearch { get; set; }
 
-        [FieldDefinition(19, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Minimum number of results required before stopping the search. If a Slskd finds fewer results than this, additional search strategies will be tried.", Advanced = true)]
+        [FieldDefinition(19, Label = "Track Fallback", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a tertiary search using track names.", Advanced = true)]
+        public bool UseTrackFallback { get; set; }
+
+        [FieldDefinition(20, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Minimum number of results required before stopping the search. If a Slskd finds fewer results than this, additional search strategies will be tried.", Advanced = true)]
         public int MinimumResults { get; set; }
 
-        [FieldDefinition(20, Type = FieldType.FilePath, Label = "Ignore List Path", HelpText = "Path to a file containing usernames to ignore (separated by new lines)", Advanced = true)]
+        [FieldDefinition(21, Type = FieldType.FilePath, Label = "Ignore List Path", HelpText = "Path to a file containing usernames to ignore (separated by new lines)", Advanced = true)]
         public string? IgnoreListPath { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

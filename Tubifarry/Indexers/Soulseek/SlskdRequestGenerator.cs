@@ -58,6 +58,7 @@ namespace Tubifarry.Indexers.Soulseek
             Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
             List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
+            List<string>? tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList();
             _processedSearches.Clear();
 
             ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
@@ -69,7 +70,8 @@ namespace Tubifarry.Indexers.Soulseek
                 searchCriteria.AlbumYear.ToString(),
                 searchCriteria.InteractiveSearch,
                 trackCount,
-                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>());
+                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
+                tracks ?? new List<string>());
 
             return chain;
         }
@@ -80,6 +82,7 @@ namespace Tubifarry.Indexers.Soulseek
             Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
             List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
+            List<string>? tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList();
             _processedSearches.Clear();
 
             ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
@@ -91,12 +94,13 @@ namespace Tubifarry.Indexers.Soulseek
                 null,
                 searchCriteria.InteractiveSearch,
                 trackCount,
-                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>());
+                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
+               tracks ?? new List<string>());
 
             return chain;
         }
 
-        private void AddSearchTiersToChain(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount, List<string> aliases)
+        private void AddSearchTiersToChain(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount, List<string> aliases, List<string> tracks)
         {
             _logger.Trace("Adding Tier 1: Base search with original terms");
             chain.AddTier(DeferredGetRequests(artist, album, interactive, trackCount));
@@ -114,7 +118,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             AddRomanNumeralVariationsTierIfEnabled(chain, artist, album, interactive, trackCount);
 
-            AddFallbackSearchTiersIfEnabled(chain, artist, album, interactive, trackCount, aliases);
+            AddFallbackSearchTiersIfEnabled(chain, artist, album, interactive, trackCount, aliases, tracks);
         }
 
         private bool AnyEnhancedSearchEnabled() =>
@@ -262,7 +266,7 @@ namespace Tubifarry.Indexers.Soulseek
                 chain.AddTier(DeferredGetRequests(artist, strippedVariation, interactive, trackCount));
         }
 
-        private void AddFallbackSearchTiersIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount, List<string> aliases)
+        private void AddFallbackSearchTiersIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount, List<string> aliases, List<string> tracks)
         {
             if (!Settings.UseFallbackSearch)
                 return;
@@ -279,6 +283,11 @@ namespace Tubifarry.Indexers.Soulseek
 
             if (album != null)
                 chain.AddTier(DeferredGetRequests(null, album, interactive, trackCount));
+
+            if (!Settings.UseTrackFallback)
+                return;
+            for (int i = 0; i < trackCount && i < 4; i++)
+                chain.AddTier(DeferredGetRequests(artist, album, interactive, trackCount, tracks[i].Trim()));
         }
 
         private void AddAliasTiers(ExtendedIndexerPageableRequestChain chain, List<string> aliases, string? album, bool interactive, int trackCount)
@@ -297,30 +306,32 @@ namespace Tubifarry.Indexers.Soulseek
             chain.AddTier(DeferredGetRequests(artist, halfAlbumTitle, interactive, trackCount));
         }
 
-        private IEnumerable<IndexerRequest> DeferredGetRequests(string? artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
+        private IEnumerable<IndexerRequest> DeferredGetRequests(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
         {
             _searchResultsRequest = null;
 
-            string searchKey = BuildSearchText(artist, album);
-            if (!string.IsNullOrWhiteSpace(searchKey) && _processedSearches.Contains(searchKey))
+            if (string.IsNullOrEmpty(searchText))
+                searchText = BuildSearchText(artist, album);
+            if (!string.IsNullOrWhiteSpace(searchText) && _processedSearches.Contains(searchText))
             {
-                _logger.Trace($"Skipping duplicate search: {searchKey}");
+                _logger.Trace($"Skipping duplicate search: {searchText}");
                 yield break;
             }
 
-            _processedSearches.Add(searchKey);
+            _processedSearches.Add(searchText);
 
-            IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, fullAlbum).Result;
+            IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, searchText).Result;
 
             if (request != null)
                 yield return request;
         }
 
-        private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, int trackCount, string? fullAlbum = null)
+        private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
         {
             try
             {
-                string searchText = BuildSearchText(artist, album);
+                if (string.IsNullOrEmpty(searchText))
+                    searchText = BuildSearchText(artist, album);
 
                 _logger.Debug($"Search: {searchText}");
 
@@ -329,7 +340,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                 await ExecuteSearchAsync(searchRequest, searchData.Id);
 
-                dynamic request = CreateResultRequest(searchData.Id, artist, album, fullAlbum, interactive, trackCount);
+                dynamic request = CreateResultRequest(searchData.Id, artist, album, interactive, trackCount);
                 return new IndexerRequest(request);
             }
             catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
@@ -380,7 +391,7 @@ namespace Tubifarry.Indexers.Soulseek
             _logger.Trace($"Generated search initiation request: {searchRequest.Url}");
         }
 
-        private HttpRequest CreateResultRequest(string searchId, string? artist, string? album, string? fullAlbum, bool interactive, int trackCount)
+        private HttpRequest CreateResultRequest(string searchId, string? artist, string? album, bool interactive, int trackCount)
         {
             HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
                 .AddQueryParam("includeResponses", true)
@@ -389,7 +400,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             request.ContentSummary = new
             {
-                Album = fullAlbum ?? album ?? "",
+                Album = album ?? "",
                 Artist = artist,
                 Interactive = interactive,
                 MimimumFiles = Math.Max(Settings.MinimumResponseFileCount, Settings.FilterLessFilesThanAlbum ? trackCount : 1)
