@@ -44,7 +44,7 @@ namespace Tubifarry
         {
             foreach (IDownloadProtocol protocol in downloadProtocols.Where(x => ProtocolTypes.Any(y => y == x.GetType())))
             {
-                _logger.Trace($"Checking Protokol: {protocol.GetType().Name}");
+                _logger.Trace($"Checking protocol: {protocol.GetType().Name}");
 
                 foreach (DelayProfile? profile in repo.All())
                 {

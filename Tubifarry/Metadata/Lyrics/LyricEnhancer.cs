@@ -15,11 +15,13 @@ namespace Tubifarry.Metadata.Lyrics
     {
         private readonly Logger _logger;
         private readonly HttpClient _httpClient;
+        private readonly IRootFolderWatchingService _rootFolderWatchingService;
 
-        public LyricsEnhancer(HttpClient httpClient, Logger logger)
+        public LyricsEnhancer(HttpClient httpClient, Logger logger, IRootFolderWatchingService rootFolderWatchingService)
         {
             _logger = logger;
             _httpClient = httpClient;
+            _rootFolderWatchingService = rootFolderWatchingService;
         }
 
         public override string Name => "Lyrics Enhancer";
@@ -77,9 +79,7 @@ namespace Tubifarry.Metadata.Lyrics
                 return false;
 
             string lrcPath = Path.ChangeExtension(trackFile.Path, ".lrc");
-            if (File.Exists(lrcPath) && !Settings.OverwriteExistingLrcFiles)
-                return false;
-            return true;
+            return !File.Exists(lrcPath) || Settings.OverwriteExistingLrcFiles;
         }
 
         private async Task<string?> ProcessTrackLyricsAsync(Artist artist, TrackFile trackFile)
@@ -88,20 +88,24 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (trackFile.Tracks?.Value == null || trackFile.Tracks.Value.Count == 0)
             {
+                _logger.Warn($"No tracks found for file: {trackFile.Path}");
+                return null;
+            }
+            Track? track = trackFile.Tracks.Value.FirstOrDefault(x => x != null);
+            if (track == null)
+            {
                 _logger.Warn($"No track information found for file: {trackFile.Path}");
                 return null;
             }
-
-            Track track = trackFile.Tracks.Value[0];
-
-            Album album = track.Album;
+            Album? album = track.Album;
 
             string trackTitle = track.Title;
             string artistName = artist.Name;
-            string albumName = album.Title;
+            string albumName = album?.Title ?? track?.AlbumRelease?.Value?.Album?.Value?.Title ??
+                trackFile.Tracks.Value.FirstOrDefault(x => !string.IsNullOrEmpty(x?.Album?.Title))?.Album?.Title ?? "";
             int trackDuration = 0;
 
-            if (track.Duration > 0)
+            if (track!.Duration > 0)
                 trackDuration = (int)Math.Round(TimeSpan.FromMilliseconds(track.Duration).TotalSeconds);
 
             Lyric? lyric = null;
@@ -120,7 +124,7 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (lyric.SyncedLyrics != null && Settings.CreateLrcFiles)
             {
-                string? lrcContent = CreateLrcContentAsync(lyric, artistName, trackTitle, albumName, trackDuration);
+                string? lrcContent = CreateLrcContent(lyric, artistName, trackTitle, albumName, trackDuration);
                 if (Settings.EmbedLyricsInAudioFiles && !string.IsNullOrWhiteSpace(lyric.PlainLyrics))
                     EmbedLyricsInAudioFile(trackFile.Path, lyric.PlainLyrics);
 
@@ -130,7 +134,7 @@ namespace Tubifarry.Metadata.Lyrics
             return null;
         }
 
-        private string? CreateLrcContentAsync(Lyric lyric, string artistName, string trackTitle, string albumName, int duration)
+        private string? CreateLrcContent(Lyric lyric, string artistName, string trackTitle, string albumName, int duration)
         {
             if (lyric.SyncedLyrics == null || lyric.SyncedLyrics.Count == 0)
                 return null;
@@ -140,7 +144,8 @@ namespace Tubifarry.Metadata.Lyrics
                 StringBuilder lrcContent = new();
 
                 lrcContent.AppendLine($"[ar:{artistName}]");
-                lrcContent.AppendLine($"[al:{albumName}]");
+                if (!string.IsNullOrEmpty(albumName))
+                    lrcContent.AppendLine($"[al:{albumName}]");
                 lrcContent.AppendLine($"[ti:{trackTitle}]");
 
                 if (duration > 0)
@@ -159,7 +164,7 @@ namespace Tubifarry.Metadata.Lyrics
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to create LRC content");
+                _logger.Error(ex, "Failed to create LRC content");
                 return null;
             }
         }
@@ -168,7 +173,7 @@ namespace Tubifarry.Metadata.Lyrics
         {
             try
             {
-                string requestUri = $"{Settings.LrcLibInstanceUrl}/api/get?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}&album_name={Uri.EscapeDataString(albumName)}{(duration != 0 ? $"&duration={duration}" : "")}";
+                string requestUri = $"{Settings.LrcLibInstanceUrl}/api/get?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}{(string.IsNullOrEmpty(albumName) ? "" : $"&album_name={Uri.EscapeDataString(albumName)}")}{(duration != 0 ? $"&duration={duration}" : "")}";
 
                 _logger.Trace($"Requesting lyrics from LRCLIB: {requestUri}");
 
@@ -387,6 +392,7 @@ namespace Tubifarry.Metadata.Lyrics
         {
             try
             {
+                _rootFolderWatchingService.ReportFileSystemChangeBeginning(filePath);
                 using (TagLib.File file = TagLib.File.Create(filePath))
                 {
                     file.Tag.Lyrics = lyrics;
