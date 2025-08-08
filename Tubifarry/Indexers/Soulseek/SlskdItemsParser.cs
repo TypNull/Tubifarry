@@ -26,49 +26,54 @@ namespace Tubifarry.Indexers.Soulseek
             { 'C', 100 }, { 'D', 500 }, { 'M', 1000 }
         };
 
-        private static readonly string[] _wordsToRemove =
-        {
-            "the", "a", "an", "feat", "featuring", "ft",
-            "presents", "pres", "with", "and"
-        };
         private static readonly string[] _nonArtistFolders = new[]
         {
             "music", "mp3", "flac", "audio", "compilations", "soundtracks",
             "pop", "rock", "jazz", "classical", "various", "downloads"
         };
 
-        private static readonly Regex RomanNumeralRegex = new(@"^[IVXLCDM]+$", RegexOptions.Compiled);
-        private static readonly Regex VolumeRangeRegex = new(@"(\d+)(?:-|to|\s?&\s?)", RegexOptions.Compiled);
-        private static readonly Regex RemoveSpecialCharsRegex = new(@"[^\w\s]", RegexOptions.Compiled);
+        private static readonly Regex NormalizeCharactersRegex = new(@"[._/]+", RegexOptions.Compiled);
+        private static readonly Regex RemoveNonAlphanumericRegex = new(@"[^\w\s$-]", RegexOptions.Compiled);
         private static readonly Regex ReduceWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
-        private static readonly Regex RemoveWordsRegex = new(
-            string.Join("|", _wordsToRemove.Select(word => $@"\b{word}\b")),
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        private static readonly Regex RomanNumeralRegex = new(@"^M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+        private static readonly Regex VolumeRangeRegex = new(@"(\d+)(?:[-to&]\s*\d+)?",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+        private static readonly Regex RemoveWordsRegex = new(@"\b(?:the|a|an|feat|featuring|ft|presents|pres|with|and)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+        private static readonly Regex YearExtractionRegex = new(@"(?<year>19\d{2}|20\d{2})",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex ArtistAlbumYearPattern = new(
-            @"^(?<artist>.+?)\s*-\s*(?<album>.+?)(?:\s*[\(\[]\s*(?<year>(?:19|20)\d{2})\s*[\)\]])?(?:\s*[\(\[].+?[\)\]])*$",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+            @"^(?<artist>[^-]+?)\s*-\s*(?<album>[^(\[]+?)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex YearArtistAlbumPattern = new(
-            @"^(?<year>(?:19|20)\d{2})\s*-\s*(?<artist>.+?)\s*-\s*(?<album>.+?)(?:\s*[\(\[].+?[\)\]])*$",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+            @"^(?<year>19\d{2}|20\d{2})\s*-\s*(?<artist>[^-]+?)\s*-\s*(?<album>.+?)(?:\s*[\(\[].+?[\)\]])*$",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex AlbumYearPattern = new(
-            @"^(?<album>.+?)(?:\s*[\(\[]\s*(?<year>(?:19|20)\d{2})\s*[\)\]])?(?:\s*[\(\[].+?[\)\]])*$",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex YearExtractionRegex = new(
-            @"[\(\[\s_](?<year>(?:19|20)\d{2})[\)\]\s_]",
-            RegexOptions.Compiled);
+            @"^(?<album>[^(\[]+?)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
+           RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 
         private static readonly Regex VolumeRegex = new(
-           @"(?ix)(?:
-            # Volume patterns with explicit indicator capture group
-            \b(volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)\b[\s.,\-_:]*(?:\#)?[\s.,\-_:]* |
-            # Match numbers at end of string
-            (?=\s*\d+$))
-            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:-\d+|\s?to\s?\d+|\s?&\s?\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)(?!\w)",
-           RegexOptions.Compiled);
+            @"(?ix)
+            \b(?:volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)
+            \s*[.,\-_:#]*\s*
+            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)
+            (?!\w)|
+            (\d+(?:\.\d+)?)(?=\s*$)", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+
+        private static readonly Regex CleanComponentRegex = new(
+            @"(?ix)
+            \[(?:FLAC|MP3|320|WEB|CD)[^\]]*\]|           # Audio format tags
+            \(\d{5,}\)|                                  # Long numbers in parentheses
+            \(\d+bit[\/\s]\d+[^\)]*\)|                   # Bit depth/sample rate
+            \((?:DELUXE_)?EDITION\)|                     # Edition markers
+            \s*\([^)]*edition[^)]*\)|                    # Any edition in parentheses
+            \((?:Album|Single|EP|LP)\)|                  # Release type
+            \s*\(remaster(?:ed)?\)|                      # Remaster tags
+            \s*[\(\[][^)\]]*(?:version|reissue)[^)\]]*[\)\]]| # Version/reissue in brackets/parens
+            \s*\d{4}\s*remaster|                        # Year remaster
+            \s-\s.*$", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 
         public static SlskdFolderData ParseFolderName(string folderPath)
         {
@@ -248,36 +253,56 @@ namespace Tubifarry.Indexers.Soulseek
             if (int.TryParse(volume, out int num))
                 return num.ToString();
 
-            if (!string.IsNullOrEmpty(volume))
+            string normalizedRoman = NormalizeRomanNumeral(volume);
+            if (RomanNumeralRegex.IsMatch(normalizedRoman))
             {
-                string roman = NormalizeRomanNumeral(volume);
-                if (RomanNumeralRegex.IsMatch(roman))
-                {
-                    int value = ConvertRomanToNumber(roman);
-                    if (value > 0 && value < 5000)
-                        return value.ToString();
-                }
+                int value = ConvertRomanToNumber(normalizedRoman);
+                if (value > 0)
+                    return value.ToString();
             }
             Match rangeMatch = VolumeRangeRegex.Match(volume);
             if (rangeMatch.Success && int.TryParse(rangeMatch.Groups[1].Value, out int firstNum))
                 return firstNum.ToString();
-            return volume.Trim().ToUpper();
+            return volume.Trim().ToUpperInvariant();
         }
 
-        private static string NormalizeRomanNumeral(string roman) => roman.Trim().ToUpper()
-                .Replace("IIII", "IV").Replace("VIIII", "IX")
-                .Replace("XXXX", "XL").Replace("LXXXX", "XC")
-                .Replace("CCCC", "CD").Replace("DCCCC", "CM");
+        private static string NormalizeRomanNumeral(string roman)
+        {
+            if (string.IsNullOrEmpty(roman))
+                return string.Empty;
+
+            return roman.Trim().ToUpperInvariant()
+                .Replace("IIII", "IV")    // 4
+                .Replace("VIIII", "IX")   // 9
+                .Replace("XXXX", "XL")    // 40
+                .Replace("LXXXX", "XC")   // 90
+                .Replace("CCCC", "CD")    // 400
+                .Replace("DCCCC", "CM");  // 900
+        }
 
         private static int ConvertRomanToNumber(string roman)
         {
-            int total = 0, prev = 0;
-            foreach (char c in roman.Reverse())
+            roman = roman.ToUpperInvariant();
+            int total = 0;
+            int prevValue = 0;
+
+            for (int i = roman.Length - 1; i >= 0; i--)
             {
-                int current = _romanNumerals[c];
-                total += (current < prev) ? -current : current;
-                prev = current;
+                if (!_romanNumerals.TryGetValue(roman[i], out int currentValue))
+                    return 0;
+
+                if (currentValue < prevValue)
+                    total -= currentValue;
+                else
+                    total += currentValue;
+
+                prevValue = currentValue;
             }
+
+            if (total <= 0 || total > 5000)
+                return 0;
+
+            Logger.Trace($"Roman numeral '{roman}' converted to: {total}");
             return total;
         }
 
@@ -285,25 +310,20 @@ namespace Tubifarry.Indexers.Soulseek
         {
             if (string.IsNullOrEmpty(input))
                 return string.Empty;
-
-            string normalized = RemoveSpecialCharsRegex.Replace(input, " ");
-            normalized = ReduceWhitespaceRegex.Replace(normalized, " ").Trim().ToLowerInvariant();
-            normalized = RemoveWordsRegex.Replace(normalized, " ");
+            string normalized = NormalizeCharactersRegex.Replace(input, " ");
+            normalized = RemoveNonAlphanumericRegex.Replace(normalized, "");
+            normalized = ReduceWhitespaceRegex.Replace(normalized.ToLowerInvariant(), " ").Trim();
+            normalized = RemoveWordsRegex.Replace(normalized, "");
             return ReduceWhitespaceRegex.Replace(normalized, " ").Trim();
         }
 
+
         private static string CleanComponent(string component)
         {
-            if (string.IsNullOrEmpty(component)) return string.Empty;
-
-            component = Regex.Replace(component, @"\[(FLAC|MP3|320|WEB|CD).*?\]", "", RegexOptions.IgnoreCase);
-            component = Regex.Replace(component, @"\(\d{5,}\)", ""); // Catalog numbers
-            component = Regex.Replace(component, @"\(\d+bit\/\d+.*?\)", "", RegexOptions.IgnoreCase); // Bit depth / sample rate
-            component = Regex.Replace(component, @"\(DELUXE_EDITION\)", "", RegexOptions.IgnoreCase); // Edition info
-            component = Regex.Replace(component, @"\(Album\)", "", RegexOptions.IgnoreCase); // Album indicator
-            component = Regex.Replace(component, @"\(Single\)", "", RegexOptions.IgnoreCase); // Single indicator
-
-            return component.Trim();
+            if (string.IsNullOrEmpty(component))
+                return string.Empty;
+            component = CleanComponentRegex.Replace(component, "");
+            return ReduceWhitespaceRegex.Replace(component.Trim(), " ");
         }
 
         private static string? ExtractYearFromPath(string path)
@@ -325,7 +345,6 @@ namespace Tubifarry.Indexers.Soulseek
         private static bool IsFuzzyAlbumMatch(string dirNameNorm, string searchAlbumNorm, bool volumeMatch) =>
             !string.IsNullOrEmpty(searchAlbumNorm) &&
             (volumeMatch || Fuzz.PartialRatio(dirNameNorm, searchAlbumNorm) > 85 || Fuzz.TokenSortRatio(dirNameNorm, searchAlbumNorm) > 80);
-
 
         private static string DetermineFinalArtist(bool isArtistMatch, SlskdFolderData folderData, SlskdSearchData searchData)
         {

@@ -43,10 +43,7 @@ namespace Tubifarry.Indexers.Soulseek
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
-        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetRecentRequests()
-        {
-            return new LazyIndexerPageableRequestChain(Settings.MinimumResults);
-        }
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetRecentRequests() => new LazyIndexerPageableRequestChain(Settings.MinimumResults);
 
         public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
