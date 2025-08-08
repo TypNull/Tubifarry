@@ -9,7 +9,7 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify
 {
-    public interface ISpotifyRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
+    public interface ISpotifyRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
         void StartTokenRequest();
         bool TokenIsExpired();
@@ -37,13 +37,13 @@ namespace Tubifarry.Indexers.Spotify
         private int PageSize => Math.Min(_settings?.MaxSearchResults ?? DefaultPageSize, 50);
         private int NewReleaseLimit => Math.Min(_settings?.MaxSearchResults ?? DefaultNewReleaseLimit, 50);
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests()
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetRecentRequests()
         {
-            ExtendedIndexerPageableRequestChain chain = new(10);
+            LazyIndexerPageableRequestChain chain = new(10);
 
             try
             {
-                chain.Add(GetRecentReleaseRequests());
+                chain.AddFactory(() => GetRecentReleaseRequests());
             }
             catch (Exception ex)
             {
@@ -66,11 +66,11 @@ namespace Tubifarry.Indexers.Spotify
             yield return req;
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
             _logger.Debug($"Generating search requests for album: '{searchCriteria.AlbumQuery}' by artist: '{searchCriteria.ArtistQuery}'");
 
-            ExtendedIndexerPageableRequestChain chain = new(3);
+            LazyIndexerPageableRequestChain chain = new(3);
 
             try
             {
@@ -78,24 +78,21 @@ namespace Tubifarry.Indexers.Spotify
                 if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery) && !string.IsNullOrEmpty(searchCriteria.ArtistQuery))
                 {
                     string primaryQuery = $"album:{searchCriteria.AlbumQuery} artist:{searchCriteria.ArtistQuery}";
-                    for (int page = 0; page < MaxPages; page++)
-                        chain.Add(GetRequests(primaryQuery, "album", page * PageSize), 10);
+                    chain.AddFactory(() => GetAllPagesForQuery(primaryQuery, "album"), 10);
                 }
 
                 // Fallback search: album only
                 if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery))
                 {
                     string albumQuery = $"album:{searchCriteria.AlbumQuery}";
-                    for (int page = 0; page < MaxPages; page++)
-                        chain.AddTier(GetRequests(albumQuery, "album", page * PageSize), 5);
+                    chain.AddTierFactory(() => GetAllPagesForQuery(albumQuery, "album"), 5);
                 }
 
                 // Last resort: artist only (albums by that artist)
                 if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
                 {
                     string artistQuery = $"artist:{searchCriteria.ArtistQuery}";
-                    for (int page = 0; page < MaxPages; page++)
-                        chain.AddTier(GetRequests(artistQuery, "album", page * PageSize), 3);
+                    chain.AddTierFactory(() => GetAllPagesForQuery(artistQuery, "album"), 3);
                 }
             }
             catch (Exception ex)
@@ -106,19 +103,18 @@ namespace Tubifarry.Indexers.Spotify
             return chain;
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
             _logger.Debug($"Generating search requests for artist: '{searchCriteria.ArtistQuery}'");
 
-            ExtendedIndexerPageableRequestChain chain = new(3);
+            LazyIndexerPageableRequestChain chain = new(3);
 
             try
             {
                 if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
                 {
                     string artistQuery = $"artist:{searchCriteria.ArtistQuery}";
-                    for (int page = 0; page < MaxPages; page++)
-                        chain.Add(GetRequests(artistQuery, "album", page * PageSize));
+                    chain.AddFactory(() => GetAllPagesForQuery(artistQuery, "album"));
                 }
             }
             catch (Exception ex)
@@ -127,6 +123,15 @@ namespace Tubifarry.Indexers.Spotify
             }
 
             return chain;
+        }
+
+        private IEnumerable<IndexerRequest> GetAllPagesForQuery(string searchQuery, string searchType)
+        {
+            for (int page = 0; page < MaxPages; page++)
+            {
+                foreach (IndexerRequest request in GetRequests(searchQuery, searchType, page * PageSize))
+                    yield return request;
+            }
         }
 
         private IEnumerable<IndexerRequest> GetRequests(string searchQuery, string searchType, int offset = 0)

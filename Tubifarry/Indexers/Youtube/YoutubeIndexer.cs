@@ -10,7 +10,7 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.YouTube
 {
-    internal class YouTubeIndexer : ExtendedHttpIndexerBase<YouTubeIndexerSettings, ExtendedIndexerPageableRequest>
+    internal class YouTubeIndexer : ExtendedHttpIndexerBase<YouTubeIndexerSettings, LazyIndexerPageableRequest>
     {
         public override string Name => "Youtube";
         public override string Protocol => nameof(YoutubeDownloadProtocol);
@@ -59,7 +59,7 @@ namespace Tubifarry.Indexers.YouTube
             }
         }
 
-        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator() => _requestGenerator;
+        public override IIndexerRequestGenerator<LazyIndexerPageableRequest> GetExtendedRequestGenerator() => _requestGenerator;
 
         public override IParseIndexerResponse GetParser() => _parser;
     }

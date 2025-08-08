@@ -286,8 +286,6 @@ namespace Tubifarry.Indexers.Soulseek
             if (string.IsNullOrEmpty(input))
                 return string.Empty;
 
-            Logger.Trace($"Normalizing: '{input}'");
-
             string normalized = RemoveSpecialCharsRegex.Replace(input, " ");
             normalized = ReduceWhitespaceRegex.Replace(normalized, " ").Trim().ToLowerInvariant();
             normalized = RemoveWordsRegex.Replace(normalized, " ");

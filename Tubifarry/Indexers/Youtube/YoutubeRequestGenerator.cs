@@ -13,7 +13,7 @@ using YouTubeMusicAPI.Models.Search;
 namespace Tubifarry.Indexers.YouTube
 {
 
-    internal class YouTubeRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
+    internal class YouTubeRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
         private const int MaxPages = 3;
 
@@ -28,51 +28,47 @@ namespace Tubifarry.Indexers.YouTube
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests()
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetRecentRequests()
         {
             // YouTube doesn't support RSS/recent releases functionality in a traditional sense
-            return new ExtendedIndexerPageableRequestChain();
+            return new LazyIndexerPageableRequestChain();
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
             _logger.Debug($"Generating search requests for album: '{searchCriteria.AlbumQuery}' by artist: '{searchCriteria.ArtistQuery}'");
 
-            ExtendedIndexerPageableRequestChain chain = new(5);
-
-            UpdateTokens();
+            LazyIndexerPageableRequestChain chain = new(5);
 
             // Primary search: album + artist
             if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery) && !string.IsNullOrEmpty(searchCriteria.ArtistQuery))
             {
                 string primaryQuery = $"{searchCriteria.AlbumQuery} {searchCriteria.ArtistQuery}";
-                chain.Add(GetRequests(primaryQuery, SearchCategory.Albums));
+                chain.AddFactory(() => GetRequests(primaryQuery, SearchCategory.Albums));
             }
 
             // Fallback search: album only
             if (!string.IsNullOrEmpty(searchCriteria.AlbumQuery))
             {
-                chain.AddTier(GetRequests(searchCriteria.AlbumQuery, SearchCategory.Albums));
+                chain.AddTierFactory(() => GetRequests(searchCriteria.AlbumQuery, SearchCategory.Albums));
             }
 
             // Last resort: artist only (still search for albums)
             if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
             {
-                chain.AddTier(GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
+                chain.AddTierFactory(() => GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
             }
 
             return chain;
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
             _logger.Debug($"Generating search requests for artist: '{searchCriteria.ArtistQuery}'");
 
-            UpdateTokens();
-
-            ExtendedIndexerPageableRequestChain chain = new(5);
+            LazyIndexerPageableRequestChain chain = new(5);
             if (!string.IsNullOrEmpty(searchCriteria.ArtistQuery))
-                chain.Add(GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
+                chain.AddFactory(() => GetRequests(searchCriteria.ArtistQuery, SearchCategory.Albums));
 
             return chain;
         }
@@ -86,6 +82,8 @@ namespace Tubifarry.Indexers.YouTube
 
         private IEnumerable<IndexerRequest> GetRequests(string searchQuery, SearchCategory category)
         {
+            UpdateTokens();
+
             for (int page = 0; page < MaxPages; page++)
             {
                 Dictionary<string, object> payload = Payload.WebRemix(

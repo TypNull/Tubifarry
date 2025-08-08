@@ -10,7 +10,7 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Spotify
 {
-    internal class TubifarryIndexer : ExtendedHttpIndexerBase<SpotifyIndexerSettings, ExtendedIndexerPageableRequest>
+    internal class TubifarryIndexer : ExtendedHttpIndexerBase<SpotifyIndexerSettings, LazyIndexerPageableRequest>
     {
         public override string Name => "Tubifarry";
         public override string Protocol => nameof(YoutubeDownloadProtocol);
@@ -70,7 +70,7 @@ namespace Tubifarry.Indexers.Spotify
             _parser.UpdateSettings(Settings);
         }
 
-        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator()
+        public override IIndexerRequestGenerator<LazyIndexerPageableRequest> GetExtendedRequestGenerator()
         {
             UpdateComponentSettings();
             return _requestGenerator;

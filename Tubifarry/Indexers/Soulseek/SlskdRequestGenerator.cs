@@ -14,19 +14,15 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    internal class SlskdRequestGenerator : IIndexerRequestGenerator<ExtendedIndexerPageableRequest>
+    internal class SlskdRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
-        private SlskdSettings Settings => _indexer.Settings;
         private readonly IHttpClient _client;
-
-        private HttpRequest? _searchResultsRequest;
-
-        // Track already processed searches to prevent duplicates
         private readonly HashSet<string> _processedSearches = new(StringComparer.OrdinalIgnoreCase);
 
-        // Dictionary of Roman numerals for conversions
+        private SlskdSettings Settings => _indexer.Settings;
+
         private static readonly Dictionary<string, int> RomanNumerals = new(StringComparer.OrdinalIgnoreCase)
         {
             { "I", 1 }, { "II", 2 }, { "III", 3 }, { "IV", 4 }, { "V", 5 },
@@ -35,10 +31,7 @@ namespace Tubifarry.Indexers.Soulseek
             { "XVI", 16 }, { "XVII", 17 }, { "XVIII", 18 }, { "XIX", 19 }, { "XX", 20 }
         };
 
-        // Volume variations for replacement
         private static readonly string[] VolumeFormats = { "Volume", "Vol.", "Vol", "v", "V" };
-
-        // Static regex patterns
         private static readonly Regex PunctuationPattern = new(@"[^\w\s-&]", RegexOptions.Compiled);
         private static readonly Regex VolumePattern = new(@"(Vol(?:ume)?\.?)\s*([0-9]+|[IVXLCDM]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex RomanNumeralPattern = new(@"\b([IVXLCDM]+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -50,280 +43,250 @@ namespace Tubifarry.Indexers.Soulseek
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetRecentRequests() => new ExtendedIndexerPageableRequestChain(Settings.MinimumResults);
-
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetRecentRequests()
         {
-            _logger.Trace($"Generating search requests for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
-            Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
-            List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
+            return new LazyIndexerPageableRequestChain(Settings.MinimumResults);
+        }
+
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(AlbumSearchCriteria searchCriteria)
+        {
+            _logger.Trace($"Setting up lazy search for album: {searchCriteria.AlbumQuery} by artist: {searchCriteria.ArtistQuery}");
+
+            Album? album = searchCriteria.Albums.FirstOrDefault();
+            List<AlbumRelease>? albumReleases = album?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
-            List<string>? tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList();
+            List<string> tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?
+                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? new List<string>();
+
             _processedSearches.Clear();
 
-            ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
-
-            AddSearchTiersToChain(
-                chain,
+            SearchParameters searchParams = new(
                 searchCriteria.ArtistQuery,
                 searchCriteria.ArtistQuery != searchCriteria.AlbumQuery ? searchCriteria.AlbumQuery : null,
                 searchCriteria.AlbumYear.ToString(),
                 searchCriteria.InteractiveSearch,
                 trackCount,
                 searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
-                tracks ?? new List<string>());
+                tracks);
 
-            return chain;
+            return CreateSearchChain(searchParams);
         }
 
-        public IndexerPageableRequestChain<ExtendedIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
+        public IndexerPageableRequestChain<LazyIndexerPageableRequest> GetSearchRequests(ArtistSearchCriteria searchCriteria)
         {
-            _logger.Debug($"Generating search requests for artist: {searchCriteria.CleanArtistQuery}");
-            Album? firstAlbum = searchCriteria.Albums.FirstOrDefault();
-            List<AlbumRelease>? albumReleases = firstAlbum?.AlbumReleases.Value;
+            _logger.Debug($"Setting up lazy search for artist: {searchCriteria.CleanArtistQuery}");
+
+            Album? album = searchCriteria.Albums.FirstOrDefault();
+            List<AlbumRelease>? albumReleases = album?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
-            List<string>? tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList();
+            List<string> tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?
+                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? new List<string>();
+
             _processedSearches.Clear();
 
-            ExtendedIndexerPageableRequestChain chain = new(Settings.MinimumResults);
-
-            AddSearchTiersToChain(
-                chain,
+            SearchParameters searchParams = new(
                 searchCriteria.CleanArtistQuery,
                 null,
                 null,
                 searchCriteria.InteractiveSearch,
                 trackCount,
                 searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
-               tracks ?? new List<string>());
+                tracks);
 
+            return CreateSearchChain(searchParams);
+        }
+
+        private LazyIndexerPageableRequestChain CreateSearchChain(SearchParameters searchParams)
+        {
+            LazyIndexerPageableRequestChain chain = new(Settings.MinimumResults);
+
+            // Tier 1: Base search
+            _logger.Trace($"Adding Tier 1: Base search for artist='{searchParams.Artist}', album='{searchParams.Album}'");
+            chain.AddTierFactory(SearchTierGenerator.CreateTier(
+                () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+
+            if (!AnyEnhancedSearchEnabled())
+            {
+                _logger.Trace("No enhanced search enabled, returning chain with base tier only");
+                return chain;
+            }
+
+            // Tier 2: Character normalization
+            if (Settings.NormalizeSpecialCharacters)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                    () => ShouldNormalizeCharacters(searchParams.Artist, searchParams.Album),
+                    () => ExecuteSearch(NormalizeSpecialCharacters(searchParams.Artist), NormalizeSpecialCharacters(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+            }
+
+            // Tier 3: Punctuation stripping
+            if (Settings.StripPunctuation)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                    () => ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
+                    () => ExecuteSearch(StripPunctuation(searchParams.Artist), StripPunctuation(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+
+                if (Settings.NormalizeSpecialCharacters)
+                {
+                    chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                        () => ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
+                        () => ExecuteSearch(NormalizeSpecialCharacters(StripPunctuation(searchParams.Artist)), NormalizeSpecialCharacters(StripPunctuation(searchParams.Album)), searchParams.Interactive, searchParams.TrackCount)));
+                }
+            }
+
+            // Tier 4: Various artists handling
+            if (Settings.HandleVariousArtists && searchParams.Artist != null && searchParams.Album != null)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                    () => IsVariousArtists(searchParams.Artist),
+                    () => ExecuteVariousArtistsSearches(searchParams.Album, searchParams.Year, searchParams.Interactive, searchParams.TrackCount)));
+            }
+
+            // Tier 5: Volume variations
+            if (Settings.HandleVolumeVariations && searchParams.Album != null)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                    () => ContainsVolumeReference(searchParams.Album),
+                    () => ExecuteVariationSearches(searchParams.Artist, GenerateVolumeVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+
+                chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
+                    () => ShouldGenerateRomanVariations(searchParams.Album),
+                    () => ExecuteVariationSearches(searchParams.Artist, GenerateRomanNumeralVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+            }
+
+            // Tier 6+: Fallback searches
+            if (Settings.UseFallbackSearch)
+            {
+                _logger.Trace("Adding fallback search tiers");
+                AddFallbackTiers(chain, searchParams);
+            }
+
+            _logger.Trace($"Final chain: {chain.Tiers} tiers");
             return chain;
         }
 
-        private void AddSearchTiersToChain(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount, List<string> aliases, List<string> tracks)
+        private void AddFallbackTiers(LazyIndexerPageableRequestChain chain, SearchParameters searchParams)
         {
-            _logger.Trace("Adding Tier 1: Base search with original terms");
-            chain.AddTier(DeferredGetRequests(artist, album, interactive, trackCount));
-
-            if (!AnyEnhancedSearchEnabled())
-                return;
-
-            AddCharacterNormalizationTierIfEnabled(chain, artist, album, interactive, trackCount);
-
-            AddPunctuationStrippingTierIfEnabled(chain, artist, album, interactive, trackCount);
-
-            AddVariousArtistsTierIfEnabled(chain, artist, album, year, interactive, trackCount);
-
-            AddVolumeVariationsTierIfEnabled(chain, artist, album, interactive, trackCount);
-
-            AddRomanNumeralVariationsTierIfEnabled(chain, artist, album, interactive, trackCount);
-
-            AddFallbackSearchTiersIfEnabled(chain, artist, album, interactive, trackCount, aliases, tracks);
-        }
-
-        private bool AnyEnhancedSearchEnabled() =>
-            Settings.UseFallbackSearch ||
-            Settings.NormalizeSpecialCharacters ||
-            Settings.StripPunctuation ||
-            Settings.HandleVariousArtists ||
-            Settings.HandleVolumeVariations;
-
-        private void AddCharacterNormalizationTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount)
-        {
-            if (!Settings.NormalizeSpecialCharacters)
-                return;
-
-            string? normalizedArtist = artist != null ? NormalizeSpecialCharacters(artist) : null;
-            string? normalizedAlbum = album != null ? NormalizeSpecialCharacters(album) : null;
-
-            if ((normalizedArtist != null && !string.Equals(normalizedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
-                (normalizedAlbum != null && !string.Equals(normalizedAlbum, album, StringComparison.OrdinalIgnoreCase)))
+            // Artist aliases (limit to 2)
+            for (int i = 0; i < Math.Min(2, searchParams.Aliases.Count); i++)
             {
-                _logger.Trace("Adding Tier: Special character normalization");
-                chain.AddTier(DeferredGetRequests(normalizedArtist, normalizedAlbum, interactive, trackCount));
+                string alias = searchParams.Aliases[i];
+                if (alias.Length > 3)
+                {
+                    chain.AddTierFactory(SearchTierGenerator.CreateTier(
+                        () => ExecuteSearch(alias, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+                }
+            }
+
+            // Partial album title for long albums
+            if (searchParams.Album?.Length > 20)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateTier(() =>
+                {
+                    string[] albumWords = searchParams.Album.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
+                    string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
+                    return ExecuteSearch(searchParams.Artist, halfAlbumTitle, searchParams.Interactive, searchParams.TrackCount);
+                }));
+            }
+
+            // Artist/Album only searches
+            if (searchParams.Artist != null)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateTier(
+                    () => ExecuteSearch(searchParams.Artist, null, searchParams.Interactive, searchParams.TrackCount)));
+            }
+
+            if (searchParams.Album != null)
+            {
+                chain.AddTierFactory(SearchTierGenerator.CreateTier(
+                    () => ExecuteSearch(null, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+            }
+
+            // Track fallback searches (limit to 4)
+            if (Settings.UseTrackFallback)
+            {
+                int trackLimit = Math.Min(4, searchParams.Tracks.Count);
+                for (int i = 0; i < trackLimit; i++)
+                {
+                    string track = searchParams.Tracks[i].Trim();
+                    chain.AddTierFactory(SearchTierGenerator.CreateTier(
+                        () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, searchParams.TrackCount, track)));
+                }
             }
         }
 
-        private void AddPunctuationStrippingTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount)
+        private IEnumerable<IndexerRequest> ExecuteSearch(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
         {
-            if (!Settings.StripPunctuation)
-                return;
+            if (string.IsNullOrEmpty(searchText))
+                searchText = BuildSearchText(artist, album);
 
-            string? strippedArtist = artist != null ? StripPunctuation(artist) : null;
-            string? strippedAlbum = album != null ? StripPunctuation(album) : null;
+            if (string.IsNullOrWhiteSpace(searchText) || _processedSearches.Contains(searchText))
+                return Enumerable.Empty<IndexerRequest>();
 
-            if ((strippedArtist != null && !string.Equals(strippedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
-                (strippedAlbum != null && !string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase)))
+            _processedSearches.Add(searchText);
+            _logger.Trace($"Added '{searchText}' to processed searches. Total processed: {_processedSearches.Count}");
+
+            try
             {
-                _logger.Trace("Adding Tier: Strip punctuation");
-                chain.AddTier(DeferredGetRequests(strippedArtist, strippedAlbum, interactive, trackCount));
-
-                if (Settings.NormalizeSpecialCharacters)
-                    AddCombinedNormalizationAndStrippingTier(chain, strippedArtist, strippedAlbum, interactive, trackCount);
+                IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, searchText).GetAwaiter().GetResult();
+                if (request != null)
+                {
+                    _logger.Trace($"Successfully generated request for search: {searchText}");
+                    return new[] { request };
+                }
+                else
+                {
+                    _logger.Trace($"GetRequestsAsync returned null for search: {searchText}");
+                }
             }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error executing search: {searchText}");
+            }
+
+            return Enumerable.Empty<IndexerRequest>();
         }
 
-        private void AddCombinedNormalizationAndStrippingTier(ExtendedIndexerPageableRequestChain chain, string? strippedArtist,
-            string? strippedAlbum, bool interactive, int trackCount)
+        private IEnumerable<IndexerRequest> ExecuteVariousArtistsSearches(string album, string? year, bool interactive, int trackCount)
         {
-            string? normalizedStrippedArtist = strippedArtist != null ?
-                NormalizeSpecialCharacters(strippedArtist) : null;
+            List<IndexerRequest> requests = new();
 
-            string? normalizedStrippedAlbum = strippedAlbum != null ?
-                NormalizeSpecialCharacters(strippedAlbum) : null;
-
-            if ((normalizedStrippedArtist != null && !string.Equals(normalizedStrippedArtist, strippedArtist, StringComparison.OrdinalIgnoreCase)) ||
-                (normalizedStrippedAlbum != null && !string.Equals(normalizedStrippedAlbum, strippedAlbum, StringComparison.OrdinalIgnoreCase)))
-            {
-                _logger.Trace("Adding Tier: Normalized + Stripped");
-                chain.AddTier(DeferredGetRequests(normalizedStrippedArtist, normalizedStrippedAlbum, interactive, trackCount));
-            }
-        }
-
-        private void AddVariousArtistsTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, string? year, bool interactive, int trackCount)
-        {
-            if (!Settings.HandleVariousArtists || artist == null || album == null)
-                return;
-
-            bool isVariousArtists = artist.Equals("Various Artists", StringComparison.OrdinalIgnoreCase) ||
-                                    artist.Equals("VA", StringComparison.OrdinalIgnoreCase);
-
-            if (!isVariousArtists)
-                return;
-
-            _logger.Trace("Adding Tier: Various Artists handling - search by album only");
-            chain.AddTier(DeferredGetRequests(null, $"{album} {year}", interactive, trackCount));
-            chain.AddTier(DeferredGetRequests(null, album, interactive, trackCount));
+            requests.AddRange(ExecuteSearch(null, $"{album} {year}", interactive, trackCount));
+            requests.AddRange(ExecuteSearch(null, album, interactive, trackCount));
 
             if (Settings.StripPunctuation)
             {
-                AddStrippedVariousArtistsTier(chain, $"{album} {year}", interactive, trackCount);
-                AddStrippedVariousArtistsTier(chain, album, interactive, trackCount);
+                string strippedAlbumWithYear = StripPunctuation($"{album} {year}");
+                string strippedAlbum = StripPunctuation(album);
+
+                if (!string.Equals(strippedAlbumWithYear, $"{album} {year}", StringComparison.OrdinalIgnoreCase))
+                    requests.AddRange(ExecuteSearch(null, strippedAlbumWithYear, interactive, trackCount));
+
+                if (!string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase))
+                    requests.AddRange(ExecuteSearch(null, strippedAlbum, interactive, trackCount));
             }
+
+            return requests;
         }
 
-        private void AddStrippedVariousArtistsTier(ExtendedIndexerPageableRequestChain chain, string album, bool interactive, int trackCount)
+        private IEnumerable<IndexerRequest> ExecuteVariationSearches(string? artist, IEnumerable<string> variations, bool interactive, int trackCount)
         {
-            string strippedAlbum = StripPunctuation(album);
-            if (!string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase))
+            List<IndexerRequest> requests = new();
+
+            foreach (string variation in variations)
             {
-                _logger.Trace("Adding Tier: Various Artists with stripped album");
-                chain.AddTier(DeferredGetRequests(null, strippedAlbum, interactive, trackCount));
-            }
-        }
+                requests.AddRange(ExecuteSearch(artist, variation, interactive, trackCount));
 
-        private void AddVolumeVariationsTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount)
-        {
-            if (!Settings.HandleVolumeVariations || album == null)
-                return;
-
-            bool containsVolumeReference = album.Contains("Volume", StringComparison.OrdinalIgnoreCase) ||
-                                           album.Contains("Vol", StringComparison.OrdinalIgnoreCase);
-
-            if (!containsVolumeReference)
-                return;
-
-            _logger.Trace("Adding Tier: Volume variations");
-            foreach (string variation in GenerateVolumeVariations(album))
-            {
-                chain.AddTier(DeferredGetRequests(artist, variation, interactive, trackCount));
                 if (Settings.StripPunctuation)
-                    AddStrippedVolumeVariationTier(chain, artist, variation, interactive, trackCount);
-            }
-        }
-
-        private void AddRomanNumeralVariationsTierIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount)
-        {
-            if (!Settings.HandleVolumeVariations || album == null)
-                return;
-            Match romanMatch = RomanNumeralPattern.Match(album);
-            if (!romanMatch.Success)
-                return;
-            Match volumeMatch = VolumePattern.Match(album);
-            if (volumeMatch.Success && volumeMatch.Groups[2].Value.Equals(romanMatch.Groups[1].Value, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            _logger.Trace("Adding Tier: Roman numeral variations");
-            foreach (string variation in GenerateRomanNumeralVariations(album))
-            {
-                chain.AddTier(DeferredGetRequests(artist, variation, interactive, trackCount));
-                if (Settings.StripPunctuation)
-                    AddStrippedRomanVariationTier(chain, artist, variation, interactive, trackCount);
-            }
-        }
-
-        private void AddStrippedVolumeVariationTier(ExtendedIndexerPageableRequestChain chain, string? artist, string variation, bool interactive, int trackCount)
-        {
-            string strippedVariation = StripPunctuation(variation);
-            if (!string.Equals(strippedVariation, variation, StringComparison.OrdinalIgnoreCase))
-                chain.AddTier(DeferredGetRequests(artist, strippedVariation, interactive, trackCount));
-        }
-
-        private void AddStrippedRomanVariationTier(ExtendedIndexerPageableRequestChain chain, string? artist, string variation, bool interactive, int trackCount)
-        {
-            string strippedVariation = StripPunctuation(variation);
-            if (!string.Equals(strippedVariation, variation, StringComparison.OrdinalIgnoreCase))
-                chain.AddTier(DeferredGetRequests(artist, strippedVariation, interactive, trackCount));
-        }
-
-        private void AddFallbackSearchTiersIfEnabled(ExtendedIndexerPageableRequestChain chain, string? artist, string? album, bool interactive, int trackCount, List<string> aliases, List<string> tracks)
-        {
-            if (!Settings.UseFallbackSearch)
-                return;
-
-            _logger.Trace("Adding Tier: Existing fallback search logic");
-
-            AddAliasTiers(chain, aliases, album, interactive, trackCount);
-
-            if (album?.Length > 20)
-                AddPartialAlbumTitleTier(chain, artist, album, interactive, trackCount);
-
-            if (artist != null)
-                chain.AddTier(DeferredGetRequests(artist, null, interactive, trackCount));
-
-            if (album != null)
-                chain.AddTier(DeferredGetRequests(null, album, interactive, trackCount));
-
-            if (!Settings.UseTrackFallback)
-                return;
-            for (int i = 0; i < trackCount && i < 4; i++)
-                chain.AddTier(DeferredGetRequests(artist, album, interactive, trackCount, tracks[i].Trim()));
-        }
-
-        private void AddAliasTiers(ExtendedIndexerPageableRequestChain chain, List<string> aliases, string? album, bool interactive, int trackCount)
-        {
-            for (int i = 0; i < 2 && i < aliases.Count; i++)
-                if (aliases[i].Length > 3)
-                    chain.AddTier(DeferredGetRequests(aliases[i], album, interactive, trackCount));
-        }
-
-        private void AddPartialAlbumTitleTier(ExtendedIndexerPageableRequestChain chain, string? artist, string album, bool interactive, int trackCount)
-        {
-            string[] albumWords = album.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
-            string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
-
-            chain.AddTier(DeferredGetRequests(artist, halfAlbumTitle, interactive, trackCount));
-        }
-
-        private IEnumerable<IndexerRequest> DeferredGetRequests(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
-        {
-            _searchResultsRequest = null;
-
-            if (string.IsNullOrEmpty(searchText))
-                searchText = BuildSearchText(artist, album);
-            if (!string.IsNullOrWhiteSpace(searchText) && _processedSearches.Contains(searchText))
-            {
-                _logger.Trace($"Skipping duplicate search: {searchText}");
-                yield break;
+                {
+                    string strippedVariation = StripPunctuation(variation);
+                    if (!string.Equals(strippedVariation, variation, StringComparison.OrdinalIgnoreCase))
+                        requests.AddRange(ExecuteSearch(artist, strippedVariation, interactive, trackCount));
+                }
             }
 
-            _processedSearches.Add(searchText);
-
-            IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, searchText).Result;
-
-            if (request != null)
-                yield return request;
+            return requests;
         }
 
         private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
@@ -336,11 +299,12 @@ namespace Tubifarry.Indexers.Soulseek
                 _logger.Debug($"Search: {searchText}");
 
                 dynamic searchData = CreateSearchData(searchText);
+                dynamic searchId = searchData.Id;
                 dynamic searchRequest = CreateSearchRequest(searchData);
 
-                await ExecuteSearchAsync(searchRequest, searchData.Id);
+                await ExecuteSearchAsync(searchRequest, searchId);
 
-                dynamic request = CreateResultRequest(searchData.Id, artist, album, interactive, trackCount);
+                dynamic request = CreateResultRequest(searchId, artist, album, interactive, trackCount);
                 return new IndexerRequest(request);
             }
             catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
@@ -350,14 +314,10 @@ namespace Tubifarry.Indexers.Soulseek
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"An error occurred while generating search request for artist: {artist}, album: {album}");
+                _logger.Error(ex, $"Error generating search request for artist: {artist}, album: {album}");
                 return null;
             }
         }
-
-        private static string BuildSearchText(string? artist, string? album) => string.Join(" ", new[] { album, artist }
-                .Where(term => !string.IsNullOrWhiteSpace(term))
-                .Select(term => term?.Trim()));
 
         private dynamic CreateSearchData(string searchText) => new
         {
@@ -388,7 +348,6 @@ namespace Tubifarry.Indexers.Soulseek
         {
             await _client.ExecuteAsync(searchRequest);
             await WaitOnSearchCompletionAsync(searchId, TimeSpan.FromSeconds(Settings.TimeoutInSeconds));
-            _logger.Trace($"Generated search initiation request: {searchRequest.Url}");
         }
 
         private HttpRequest CreateResultRequest(string searchId, string? artist, string? album, bool interactive, int trackCount)
@@ -437,22 +396,28 @@ namespace Tubifarry.Indexers.Soulseek
                     totalFilesFound = fileCount;
 
                 double progress = Math.Clamp(fileCount / (double)Settings.FileLimit, 0.0, 1.0);
-                double delay = CalculateDelay(hasTimedOut, timeoutEndTime, progress);
+                double delay = hasTimedOut && DateTime.UtcNow < timeoutEndTime ? 1.0 : CalculateQuadraticDelay(progress);
 
                 await Task.Delay(TimeSpan.FromSeconds(delay));
                 if (state != "InProgress")
                     break;
             }
-
-            _logger.Trace($"Search completed with state: {state}, Total files found: {totalFilesFound}");
         }
 
-        private static double CalculateDelay(bool hasTimedOut, DateTime timeoutEndTime, double progress)
+        private async Task<dynamic?> GetSearchResultsAsync(string searchId)
         {
-            if (hasTimedOut && DateTime.UtcNow < timeoutEndTime)
-                return 1;
-            else
-                return CalculateQuadraticDelay(progress);
+            HttpRequest searchResultsRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
+                     .SetHeader("X-API-KEY", Settings.ApiKey).Build();
+
+            HttpResponse response = await _client.ExecuteAsync(searchResultsRequest);
+
+            if (response.StatusCode != HttpStatusCode.OK)
+            {
+                _logger.Warn($"Failed to fetch search results for ID {searchId}. Status: {response.StatusCode}, Content: {response.Content}");
+                return null;
+            }
+
+            return JsonConvert.DeserializeObject<dynamic>(response.Content);
         }
 
         private static double CalculateQuadraticDelay(double progress)
@@ -465,38 +430,50 @@ namespace Tubifarry.Indexers.Soulseek
             return Math.Clamp(delay, 0.5, 5);
         }
 
-        private async Task<dynamic?> GetSearchResultsAsync(string searchId)
+        private static string BuildSearchText(string? artist, string? album) => string.Join(" ", new[] { album, artist }.Where(term => !string.IsNullOrWhiteSpace(term)).Select(term => term?.Trim()));
+
+        private static bool ShouldNormalizeCharacters(string? artist, string? album)
         {
-            _searchResultsRequest ??= new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
-                     .SetHeader("X-API-KEY", Settings.ApiKey).Build();
-
-            HttpResponse response = await _client.ExecuteAsync(_searchResultsRequest);
-
-            if (response.StatusCode != HttpStatusCode.OK)
-            {
-                _logger.Warn($"Failed to fetch search results. Status: {response.StatusCode}, Content: {response.Content}");
-                return null;
-            }
-
-            return JsonConvert.DeserializeObject<dynamic>(response.Content);
+            string? normalizedArtist = artist != null ? NormalizeSpecialCharacters(artist) : null;
+            string? normalizedAlbum = album != null ? NormalizeSpecialCharacters(album) : null;
+            return (normalizedArtist != null && !string.Equals(normalizedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
+                   (normalizedAlbum != null && !string.Equals(normalizedAlbum, album, StringComparison.OrdinalIgnoreCase));
         }
 
-        private string StripPunctuation(string input)
+        private static bool ShouldStripPunctuation(string? artist, string? album)
         {
-            if (string.IsNullOrEmpty(input))
-                return input;
+            string? strippedArtist = artist != null ? StripPunctuation(artist) : null;
+            string? strippedAlbum = album != null ? StripPunctuation(album) : null;
+            return (strippedArtist != null && !string.Equals(strippedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
+                   (strippedAlbum != null && !string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsVariousArtists(string artist) => artist.Equals("Various Artists", StringComparison.OrdinalIgnoreCase) || artist.Equals("VA", StringComparison.OrdinalIgnoreCase);
+
+        private static bool ContainsVolumeReference(string album) => album.Contains("Volume", StringComparison.OrdinalIgnoreCase) || album.Contains("Vol", StringComparison.OrdinalIgnoreCase);
+
+        private static bool ShouldGenerateRomanVariations(string album)
+        {
+            Match romanMatch = RomanNumeralPattern.Match(album);
+            if (!romanMatch.Success) return false;
+
+            Match volumeMatch = VolumePattern.Match(album);
+            return !(volumeMatch.Success && volumeMatch.Groups[2].Value.Equals(romanMatch.Groups[1].Value, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private bool AnyEnhancedSearchEnabled() => Settings.UseFallbackSearch || Settings.NormalizeSpecialCharacters || Settings.StripPunctuation || Settings.HandleVariousArtists || Settings.HandleVolumeVariations;
+
+        private static string StripPunctuation(string? input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
 
             string stripped = PunctuationPattern.Replace(input, "");
-            string result = Regex.Replace(stripped, @"\s+", " ").Trim();
-
-            _logger.Trace($"Stripped punctuation: '{input}' -> '{result}'");
-            return result;
+            return Regex.Replace(stripped, @"\s+", " ").Trim();
         }
 
-        private string NormalizeSpecialCharacters(string input)
+        private static string NormalizeSpecialCharacters(string? input)
         {
-            if (string.IsNullOrEmpty(input))
-                return input;
+            if (string.IsNullOrEmpty(input)) return string.Empty;
 
             string decomposed = input.Normalize(NormalizationForm.FormD);
             StringBuilder sb = new(decomposed.Length);
@@ -504,103 +481,61 @@ namespace Tubifarry.Indexers.Soulseek
             foreach (char c in decomposed)
             {
                 UnicodeCategory cat = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (cat != UnicodeCategory.NonSpacingMark &&
-                    cat != UnicodeCategory.SpacingCombiningMark &&
-                    cat != UnicodeCategory.EnclosingMark)
-                {
+                if (cat != UnicodeCategory.NonSpacingMark && cat != UnicodeCategory.SpacingCombiningMark && cat != UnicodeCategory.EnclosingMark)
                     sb.Append(c);
-                }
             }
 
-            string result = sb.ToString().Normalize(NormalizationForm.FormC);
-            _logger.Trace($"Normalized special characters: '{input}' -> '{result}'");
-            return result;
+            return sb.ToString().Normalize(NormalizationForm.FormC);
         }
 
         private static IEnumerable<string> GenerateVolumeVariations(string album)
         {
-            if (string.IsNullOrEmpty(album))
-                yield break;
+            if (string.IsNullOrEmpty(album)) yield break;
 
             Match volumeMatch = VolumePattern.Match(album);
-            if (!volumeMatch.Success)
-                yield break;
+            if (!volumeMatch.Success) yield break;
 
-            string volumeFormat = volumeMatch.Groups[1].Value; // e.g. "Volume", "Vol.", etc.
-            string volumeNumber = volumeMatch.Groups[2].Value; // e.g. "1", "IV", etc.
+            string volumeFormat = volumeMatch.Groups[1].Value;
+            string volumeNumber = volumeMatch.Groups[2].Value;
 
-            foreach (string variation in GenerateNumeralVariations(album, volumeMatch, volumeFormat, volumeNumber))
-                yield return variation;
-
-            foreach (string variation in GenerateFormatVariations(album, volumeMatch, volumeFormat, volumeNumber))
-                yield return variation;
-
-            string? potentialShortenedVersion = GenerateShortenedVersion(album, volumeMatch);
-            if (potentialShortenedVersion != null)
-                yield return potentialShortenedVersion;
-        }
-
-        private static IEnumerable<string> GenerateRomanNumeralVariations(string album)
-        {
-            if (string.IsNullOrEmpty(album))
-                yield break;
-
-            Match romanMatch = RomanNumeralPattern.Match(album);
-            if (!romanMatch.Success)
-                yield break;
-
-            string romanNumeral = romanMatch.Groups[1].Value;
-
-            if (RomanNumerals.TryGetValue(romanNumeral, out int arabicNumber))
-                yield return album.Replace(romanMatch.Value, arabicNumber.ToString());
-        }
-
-        private static IEnumerable<string> GenerateNumeralVariations(string album, Match volumeMatch, string volumeFormat, string volumeNumber)
-        {
             if (RomanNumerals.TryGetValue(volumeNumber, out int arabicNumber))
             {
                 yield return album.Replace(volumeMatch.Value, $"{volumeFormat} {arabicNumber}");
             }
-            else if (int.TryParse(volumeNumber, out arabicNumber))
+            else if (int.TryParse(volumeNumber, out arabicNumber) && arabicNumber > 0 && arabicNumber <= 20)
             {
-                if (arabicNumber > 0 && arabicNumber <= 20 && RomanNumerals.ContainsValue(arabicNumber))
-                {
-                    string romanNumeral = RomanNumerals.First(x => x.Value == arabicNumber).Key;
-                    yield return album.Replace(volumeMatch.Value, $"{volumeFormat} {romanNumeral}");
-                }
+                KeyValuePair<string, int> romanPair = RomanNumerals.FirstOrDefault(x => x.Value == arabicNumber);
+                if (!string.IsNullOrEmpty(romanPair.Key))
+                    yield return album.Replace(volumeMatch.Value, $"{volumeFormat} {romanPair.Key}");
             }
-        }
-
-        private static IEnumerable<string> GenerateFormatVariations(string album, Match volumeMatch, string volumeFormat, string volumeNumber)
-        {
             foreach (string format in VolumeFormats)
             {
                 if (!format.Equals(volumeFormat, StringComparison.OrdinalIgnoreCase))
-                {
                     yield return album.Replace(volumeMatch.Value, $"{format} {volumeNumber}");
-                }
             }
-
-            if (volumeFormat.EndsWith("."))
+            if (album.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 3)
             {
-                string formatWithoutDot = volumeFormat.TrimEnd('.');
-                yield return album.Replace(volumeMatch.Value, $"{formatWithoutDot}{volumeNumber}");
-            }
-            else
-            {
-                yield return album.Replace(volumeMatch.Value, $"{volumeFormat}{volumeNumber}");
+                string withoutVolume = album.Replace(volumeMatch.Value, "").Trim();
+                if (withoutVolume.Length > 10)
+                    yield return withoutVolume;
             }
         }
 
-        private static string? GenerateShortenedVersion(string album, Match volumeMatch)
+        private static IEnumerable<string> GenerateRomanNumeralVariations(string album)
         {
-            if (album.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length > 3)
-            {
-                string albumWithoutVolume = Regex.Replace(album, volumeMatch.Value, "", RegexOptions.IgnoreCase).Trim();
-                if (albumWithoutVolume.Length > 10)
-                    return albumWithoutVolume;
-            }
-            return null;
+            if (string.IsNullOrEmpty(album)) yield break;
+
+            Match romanMatch = RomanNumeralPattern.Match(album);
+            if (!romanMatch.Success) yield break;
+            Match volumeMatch = VolumePattern.Match(album);
+            if (volumeMatch.Success && volumeMatch.Groups[2].Value.Equals(romanMatch.Groups[1].Value, StringComparison.OrdinalIgnoreCase))
+                yield break;
+
+            string romanNumeral = romanMatch.Groups[1].Value;
+            if (RomanNumerals.TryGetValue(romanNumeral, out int arabicNumber))
+                yield return album.Replace(romanMatch.Value, arabicNumber.ToString());
         }
+
+        private record SearchParameters(string? Artist, string? Album, string? Year, bool Interactive, int TrackCount, List<string> Aliases, List<string> Tracks);
     }
 }

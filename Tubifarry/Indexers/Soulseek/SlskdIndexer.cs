@@ -11,7 +11,7 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    public class SlskdIndexer : ExtendedHttpIndexerBase<SlskdSettings, ExtendedIndexerPageableRequest>
+    public class SlskdIndexer : ExtendedHttpIndexerBase<SlskdSettings, LazyIndexerPageableRequest>
     {
         public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
@@ -34,7 +34,7 @@ namespace Tubifarry.Indexers.Soulseek
 
         protected override async Task Test(List<ValidationFailure> failures) => failures.AddIfNotNull(await TestConnection());
 
-        public override IIndexerRequestGenerator<ExtendedIndexerPageableRequest> GetExtendedRequestGenerator() => _indexerRequestGenerator;
+        public override IIndexerRequestGenerator<LazyIndexerPageableRequest> GetExtendedRequestGenerator() => _indexerRequestGenerator;
 
         public override IParseIndexerResponse GetParser() => _parseIndexerResponse;
 
