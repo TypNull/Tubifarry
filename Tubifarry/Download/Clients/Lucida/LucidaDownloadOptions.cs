@@ -51,19 +51,9 @@ namespace Tubifarry.Download.Clients.Lucida
         public bool IsTrack { get; set; }
 
         /// <summary>
-        /// The actual URL to download from after parsing type prefixes
+        /// The actual URL to download from
         /// </summary>
-        public string ActualUrl { get; set; } = string.Empty;
-
-        /// <summary>
-        /// Whether to extract album zip files automatically
-        /// </summary>
-        public bool ExtractAlbums { get; set; } = true;
-
-        /// <summary>
-        /// Whether to keep original archive files after extraction
-        /// </summary>
-        public bool KeepArchiveFiles { get; set; } = false;
+        public string ItemUrl { get; set; } = string.Empty;
 
         public LucidaDownloadOptions() { }
 
@@ -77,9 +67,7 @@ namespace Tubifarry.Download.Clients.Lucida
             ConnectionRetries = options.ConnectionRetries;
             NamingConfig = options.NamingConfig;
             IsTrack = options.IsTrack;
-            ActualUrl = options.ActualUrl;
-            ExtractAlbums = options.ExtractAlbums;
-            KeepArchiveFiles = options.KeepArchiveFiles;
+            ItemUrl = options.ItemUrl;
         }
     }
 }

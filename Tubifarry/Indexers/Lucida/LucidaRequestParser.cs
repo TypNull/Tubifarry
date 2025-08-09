@@ -1,5 +1,6 @@
 ﻿using Jint;
 using NLog;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
 using System.Text.Json;
@@ -125,6 +126,9 @@ namespace Tubifarry.Indexers.Lucida
 
             List<LucidaAlbum>? albums = null;
             List<LucidaTrack>? tracks = null;
+
+            NzbDroneLogger.GetLogger(nameof(LucidaParser)).Info(albumsJson);
+            NzbDroneLogger.GetLogger(nameof(LucidaParser)).Info(tracksJson);
 
             if (!string.IsNullOrEmpty(albumsJson) && albumsJson != "[]")
                 albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });

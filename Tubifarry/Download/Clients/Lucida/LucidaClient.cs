@@ -39,11 +39,9 @@ namespace Tubifarry.Download.Clients.Lucida
         public override string Protocol => nameof(LucidaDownloadProtocol);
         public new LucidaProviderSettings Settings => base.Settings;
 
-        public override Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer) =>
-            _downloadManager.Download(remoteAlbum, indexer, _namingService.GetConfig(), this);
+        public override Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer) => _downloadManager.Download(remoteAlbum, indexer, _namingService.GetConfig(), this);
 
-        public override IEnumerable<DownloadClientItem> GetItems() => 
-            _downloadManager.GetItems();
+        public override IEnumerable<DownloadClientItem> GetItems() => _downloadManager.GetItems();
 
         public override void RemoveItem(DownloadClientItem item, bool deleteData)
         {

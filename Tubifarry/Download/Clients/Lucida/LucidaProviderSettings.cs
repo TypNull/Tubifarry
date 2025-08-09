@@ -15,11 +15,6 @@ namespace Tubifarry.Download.Clients.Lucida
                 .IsValidPath()
                 .WithMessage("Download path must be a valid directory.");
 
-            // Validate BaseUrl (optional, but if provided must be valid)
-            RuleFor(x => x.BaseUrl)
-                .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute))
-                .WithMessage("Base URL must be a valid URL if provided.");
-
             // Validate RequestTimeout
             RuleFor(x => x.RequestTimeout)
                 .GreaterThanOrEqualTo(5)
@@ -54,39 +49,22 @@ namespace Tubifarry.Download.Clients.Lucida
     {
         private static readonly LucidaProviderSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "Download Path", Type = FieldType.Path, 
-            HelpText = "Directory where downloaded files will be saved")]
+        [FieldDefinition(0, Label = "Download Path", Type = FieldType.Path, HelpText = "Directory where downloaded files will be saved")]
         public string DownloadPath { get; set; } = string.Empty;
 
-        [FieldDefinition(1, Label = "Base URL", Type = FieldType.Textbox, 
-            Placeholder = "https://lucida.to", 
-            HelpText = "Base URL of the Lucida instance (leave empty to use default)", Advanced = true)]
-        public string BaseUrl { get; set; } = "https://lucida.to";
-
-        [FieldDefinition(2, Type = FieldType.Number, Label = "Request Timeout", Unit = "seconds", 
-            HelpText = "Timeout for HTTP requests to Lucida", Advanced = true)]
+        [FieldDefinition(2, Type = FieldType.Number, Label = "Request Timeout", Unit = "seconds", HelpText = "Timeout for HTTP requests to Lucida", Advanced = true)]
         public int RequestTimeout { get; set; } = 30;
 
-        [FieldDefinition(3, Type = FieldType.Number, Label = "Connection Retries", 
-            HelpText = "Number of times to retry failed connections", Advanced = true)]
+        [FieldDefinition(3, Type = FieldType.Number, Label = "Connection Retries", HelpText = "Number of times to retry failed connections", Advanced = true)]
         public int ConnectionRetries { get; set; } = 3;
 
-        [FieldDefinition(4, Type = FieldType.Number, Label = "Max Parallel Downloads", 
-            HelpText = "Maximum number of downloads that can run simultaneously")]
+        [FieldDefinition(4, Type = FieldType.Number, Label = "Max Parallel Downloads", HelpText = "Maximum number of downloads that can run simultaneously")]
         public int MaxParallelDownloads { get; set; } = 2;
 
-        [FieldDefinition(5, Label = "Max Download Speed", Type = FieldType.Number, 
-            HelpText = "Set to 0 for unlimited speed. Limits download speed per file.", 
-            Unit = "KB/s", Advanced = true)]
-        public int MaxDownloadSpeed { get; set; } = 0;
+        [FieldDefinition(5, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits download speed per file.", Unit = "KB/s", Advanced = true)]
+        public int MaxDownloadSpeed { get; set; }
 
-        [FieldDefinition(6, Label = "Extract Albums", Type = FieldType.Checkbox, 
-            HelpText = "Automatically extract album zip files after download")]
-        public bool ExtractAlbums { get; set; } = true;
-
-        [FieldDefinition(7, Label = "Keep Archive Files", Type = FieldType.Checkbox, 
-            HelpText = "Keep original zip files after extraction", Advanced = true)]
-        public bool KeepArchiveFiles { get; set; } = false;
+        public string? BaseUrl { get; set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

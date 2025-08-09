@@ -155,7 +155,7 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 CancellationToken = Token,
                 CreateSpeedReporter = true,
-                SpeedReporterTimeout = 1,
+                SpeedReporterTimeout = 1000,
                 Priority = slow ? RequestPriority.High : RequestPriority.Normal,
                 MaxBytesPerSecond = Options.MaxDownloadSpeed,
                 DelayBetweenAttemps = Options.DelayBetweenAttemps,

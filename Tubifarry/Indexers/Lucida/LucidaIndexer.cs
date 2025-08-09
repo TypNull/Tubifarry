@@ -21,7 +21,7 @@ namespace Tubifarry.Indexers.Lucida
         public override int PageSize => 100;
         public override TimeSpan RateLimit => TimeSpan.FromSeconds(2);
 
-        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36";
+        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
 
         public override ProviderMessage Message => new(
             "Lucida is an interface for searching music across streaming services. " +
