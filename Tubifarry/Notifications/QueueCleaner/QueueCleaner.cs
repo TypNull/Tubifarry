@@ -4,6 +4,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
 using NzbDrone.Core.History;
+using NzbDrone.Core.Indexers;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -26,6 +27,7 @@ namespace Tubifarry.Notifications.QueueCleaner
         private readonly IHistoryService _historyService;
         private readonly IEventAggregator _eventAggregator;
         private readonly INamingConfigService _namingConfig;
+        private readonly IIndexerFactory _indexerFactory;
 
         public override string Name => "Queue Cleaner";
 
@@ -33,9 +35,10 @@ namespace Tubifarry.Notifications.QueueCleaner
 
         public override ProviderMessage Message => new("Queue Cleaner automatically processes items that failed to import. It can rename, blocklist, or remove items based on your settings.", ProviderMessageType.Info);
 
-        public QueueCleaner(IDiskProvider diskProvider, IHistoryService historyService, INamingConfigService namingConfig, IEventAggregator eventAggregator, ICompletedDownloadService completedDownloadService, Logger logger)
+        public QueueCleaner(IDiskProvider diskProvider, IHistoryService historyService, INamingConfigService namingConfig, IEventAggregator eventAggregator, IIndexerFactory indexerFactory, ICompletedDownloadService completedDownloadService, Logger logger)
         {
             _logger = logger;
+            _indexerFactory = indexerFactory;
             _diskProvider = diskProvider;
             _eventAggregator = eventAggregator;
             _completedDownloadService = completedDownloadService;
@@ -55,6 +58,12 @@ namespace Tubifarry.Notifications.QueueCleaner
 
             if (!trackedDownload.IsTrackable || trackedDownload.State != TrackedDownloadState.ImportFailed || !trackedDownload.DownloadItem.CanMoveFiles)
                 return;
+
+            if (Settings.Indexers?.Any() == true && !Settings.Indexers.Contains(trackedDownload.Indexer))
+            {
+                _logger.Debug($"Skipping queue cleaning for download '{trackedDownload.DownloadItem.Title}'. Indexer '{trackedDownload.Indexer}' is not in list");
+                return;
+            }
 
             switch (CheckImport(trackedDownload))
             {
@@ -81,6 +90,7 @@ namespace Tubifarry.Notifications.QueueCleaner
         {
             if (importCleaningOption != (int)requiredOption && importCleaningOption != (int)ImportCleaningOptions.Always)
                 return;
+
 
             if (Settings.RenameOption != (int)RenameOptions.DoNotRename && Rename(trackedDownload))
             {
@@ -182,7 +192,7 @@ namespace Tubifarry.Notifications.QueueCleaner
             item.State = TrackedDownloadState.DownloadFailed;
 
             List<EntityHistory> grabbedItems = _historyService.Find(item.DownloadItem.DownloadId, EntityHistoryEventType.Grabbed).ToList();
-            EntityHistory historyItem = grabbedItems.Last();
+            EntityHistory historyItem = grabbedItems[^1];
 
             _ = Enum.TryParse(historyItem.Data.GetValueOrDefault(EntityHistory.RELEASE_SOURCE, ReleaseSourceType.Unknown.ToString()), out ReleaseSourceType releaseSource);
 
@@ -231,7 +241,26 @@ namespace Tubifarry.Notifications.QueueCleaner
 
         public override void OnImportFailure(AlbumDownloadMessage message) => base.OnImportFailure(message);
 
-        public override ValidationResult Test() => new();
+        public override ValidationResult Test()
+        {
+            ValidationResult result = new();
+            IEnumerable<string> validProviders = _indexerFactory.GetAvailableProviders().Select(x => x.Name);
+
+            if (Settings.Indexers?.Any() == true)
+            {
+                List<string> invalidProviders = Settings.Indexers
+                    .Where(indexer => !validProviders.Contains(indexer, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (invalidProviders.Any())
+                {
+                    string errorMessage = $"The following indexers are not valid or available: {string.Join(", ", invalidProviders)}";
+                    result.Errors.Add(new ValidationFailure(nameof(Settings.Indexers), errorMessage, Settings.Indexers));
+                }
+            }
+
+            return result;
+        }
 
         public enum ImportFailureReason
         {

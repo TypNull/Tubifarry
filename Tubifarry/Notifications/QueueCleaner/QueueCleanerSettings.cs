@@ -26,6 +26,9 @@ namespace Tubifarry.Notifications.Queue
         [FieldDefinition(4, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
         public bool RetryFindingRelease { get; set; } = true;
 
+        [FieldDefinition(5, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
+        public IEnumerable<string> Indexers { get; set; } = new List<string>();
+
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 
