@@ -55,7 +55,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                     RemoveItemAsync(item).Wait();
                 }
                 catch { }
-                return null!;
+                throw;
             }
             return item.ID;
         }
@@ -221,7 +221,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             SlskdFolderData folderData = dir.CreateFolderData(username);
 
-            SlskdSearchData searchData = new(null, null, false, 1);
+            SlskdSearchData searchData = new(null, null, false, false, 1);
 
             IGrouping<string, SlskdFileData> directory = dir.ToSlskdFileDataList().GroupBy(_ => dir.Directory).First();
 

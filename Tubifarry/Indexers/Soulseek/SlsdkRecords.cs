@@ -95,8 +95,19 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("artist")] string? Artist,
         [property: JsonPropertyName("album")] string? Album,
         [property: JsonPropertyName("interactive")] bool Interactive,
+        [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
         [property: JsonPropertyName("mimimumFiles")] int MinimumFiles)
     {
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, new JsonSerializerOptions() { PropertyNameCaseInsensitive = true })!;
     }
+
+    public record SlskdDirectoryApiResponse(
+      [property: JsonPropertyName("files")] List<SlskdDirectoryApiFile> Files
+  );
+
+    public record SlskdDirectoryApiFile(
+        [property: JsonPropertyName("filename")] string Filename,
+        [property: JsonPropertyName("size")] long Size,
+        [property: JsonPropertyName("code")] int Code
+    );
 }

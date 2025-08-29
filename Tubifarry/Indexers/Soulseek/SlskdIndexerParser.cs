@@ -1,4 +1,5 @@
-﻿using NLog;
+﻿using FuzzySharp;
+using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Download;
@@ -8,6 +9,7 @@ using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
 using System.Text.Json;
 using Tubifarry.Core.Model;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
@@ -45,7 +47,6 @@ namespace Tubifarry.Indexers.Soulseek
                 }
 
                 SlskdSearchData searchTextData = SlskdSearchData.FromJson(indexerResponse.HttpRequest.ContentSummary);
-
                 HashSet<string>? ignoredUsers = GetIgnoredUsers(Settings.IgnoreListPath);
 
                 foreach (SlskdFolderData response in searchResponse.Responses)
@@ -55,7 +56,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                     IEnumerable<SlskdFileData> filteredFiles = SlskdFileData.GetFilteredFiles(response.Files, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions);
 
-                    foreach (IGrouping<string, SlskdFileData> directoryGroup in filteredFiles.GroupBy(f => GetDirectoryFromFilename(f.Filename)))
+                    foreach (IGrouping<string, SlskdFileData> directoryGroup in filteredFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)))
                     {
                         if (string.IsNullOrEmpty(directoryGroup.Key))
                             continue;
@@ -72,9 +73,11 @@ namespace Tubifarry.Indexers.Soulseek
                             FileCount = response.FileCount
                         };
 
-                        AlbumData albumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, directoryGroup, searchTextData, folderData, Settings);
+                        if (searchTextData.ExpandDirectory && ShouldExpandDirectory(albumDatas, searchResponse, searchTextData, directoryGroup, folderData))
+                            continue;
 
-                        albumDatas.Add(albumData);
+                        AlbumData originalAlbumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, directoryGroup, searchTextData, folderData, Settings);
+                        albumDatas.Add(originalAlbumData);
                     }
                 }
 
@@ -88,12 +91,39 @@ namespace Tubifarry.Indexers.Soulseek
             return albumDatas.OrderByDescending(x => x.Priotity).Select(a => a.ToReleaseInfo()).ToList();
         }
 
-        private static string GetDirectoryFromFilename(string? filename)
+        private bool ShouldExpandDirectory(List<AlbumData> albumDatas, SlskdSearchResponse searchResponse, SlskdSearchData searchTextData, IGrouping<string, SlskdFileData> directoryGroup, SlskdFolderData folderData)
         {
-            if (string.IsNullOrEmpty(filename))
-                return "";
-            int lastBackslashIndex = filename.LastIndexOf('\\');
-            return lastBackslashIndex >= 0 ? filename[..lastBackslashIndex] : "";
+            if (string.IsNullOrEmpty(searchTextData.Artist) || string.IsNullOrEmpty(searchTextData.Album))
+                return false;
+
+            bool artistMatch = Fuzz.PartialRatio(folderData.Artist, searchTextData.Artist) > 85;
+            bool albumMatch = Fuzz.PartialRatio(folderData.Album, searchTextData.Album) > 85;
+
+            if (!artistMatch || !albumMatch)
+                return false;
+
+            SlskdFileData? originalTrack = directoryGroup.FirstOrDefault(x => AudioFormatHelper.GetAudioCodecFromExtension(x.Extension?.ToLowerInvariant() ?? Path.GetExtension(x.Filename) ?? "") != AudioFormat.Unknown);
+
+            if (originalTrack == null)
+                return false;
+
+            _logger.Trace($"Expanding directory for: {folderData.Username}:{directoryGroup.Key}");
+
+            SlskdRequestGenerator? requestGenerator = _indexer.GetExtendedRequestGenerator() as SlskdRequestGenerator;
+            IGrouping<string, SlskdFileData>? expandedGroup = requestGenerator?.ExpandDirectory(folderData.Username, directoryGroup.Key, originalTrack).Result;
+
+            if (expandedGroup != null)
+            {
+                _logger.Debug($"Successfully expanded directory to {expandedGroup.Count()} files");
+                AlbumData albumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, expandedGroup, searchTextData, folderData, Settings);
+                albumDatas.Add(albumData);
+                return true;
+            }
+            else
+            {
+                _logger.Warn($"Failed to expand directory for {folderData.Username}:{directoryGroup.Key}");
+            }
+            return false;
         }
 
         public void RemoveSearch(string searchId, bool delay = false)
@@ -172,7 +202,7 @@ namespace Tubifarry.Indexers.Soulseek
                     _logger.Trace($"Using cached ignore list from: {ignoreListPath} with {cached.IgnoredUsers.Count} users");
                     return cached.IgnoredUsers;
                 }
-                HashSet<string> ignoredUsers = ParseIgnoreListContent(File.ReadAllText(ignoreListPath));
+                HashSet<string> ignoredUsers = SlskdTextProcessor.ParseListContent(File.ReadAllText(ignoreListPath));
                 _ignoreListCache[ignoreListPath] = (ignoredUsers, fileSize);
                 _logger.Trace($"Loaded ignore list with {ignoredUsers.Count} users from: {ignoreListPath}");
                 return ignoredUsers;
@@ -183,18 +213,5 @@ namespace Tubifarry.Indexers.Soulseek
                 return null;
             }
         }
-
-        private static HashSet<string> ParseIgnoreListContent(string content)
-        {
-            if (string.IsNullOrWhiteSpace(content))
-                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            return content
-                .Split(new[] { '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Where(username => !string.IsNullOrWhiteSpace(username))
-                .Select(username => username.Trim())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-
     }
 }

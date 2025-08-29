@@ -1,15 +1,13 @@
-﻿using Newtonsoft.Json;
-using NLog;
+﻿using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.Music;
-using System.Globalization;
 using System.Net;
-using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Tubifarry.Core.Replacements;
 using Tubifarry.Core.Utilities;
 
@@ -23,19 +21,6 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly HashSet<string> _processedSearches = new(StringComparer.OrdinalIgnoreCase);
 
         private SlskdSettings Settings => _indexer.Settings;
-
-        private static readonly Dictionary<string, int> RomanNumerals = new(StringComparer.OrdinalIgnoreCase)
-        {
-            { "I", 1 }, { "II", 2 }, { "III", 3 }, { "IV", 4 }, { "V", 5 },
-            { "VI", 6 }, { "VII", 7 }, { "VIII", 8 }, { "IX", 9 }, { "X", 10 },
-            { "XI", 11 }, { "XII", 12 }, { "XIII", 13 }, { "XIV", 14 }, { "XV", 15 },
-            { "XVI", 16 }, { "XVII", 17 }, { "XVIII", 18 }, { "XIX", 19 }, { "XX", 20 }
-        };
-
-        private static readonly string[] VolumeFormats = { "Volume", "Vol.", "Vol", "v", "V" };
-        private static readonly Regex PunctuationPattern = new(@"[^\w\s-&]", RegexOptions.Compiled);
-        private static readonly Regex VolumePattern = new(@"(Vol(?:ume)?\.?)\s*([0-9]+|[IVXLCDM]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        private static readonly Regex RomanNumeralPattern = new(@"\b([IVXLCDM]+)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public SlskdRequestGenerator(SlskdIndexer indexer, IHttpClient client)
         {
@@ -101,7 +86,7 @@ namespace Tubifarry.Indexers.Soulseek
             // Tier 1: Base search
             _logger.Trace($"Adding Tier 1: Base search for artist='{searchParams.Artist}', album='{searchParams.Album}'");
             chain.AddTierFactory(SearchTierGenerator.CreateTier(
-                () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+                () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, false, searchParams.TrackCount)));
 
             if (!AnyEnhancedSearchEnabled())
             {
@@ -113,22 +98,22 @@ namespace Tubifarry.Indexers.Soulseek
             if (Settings.NormalizeSpecialCharacters)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                    () => ShouldNormalizeCharacters(searchParams.Artist, searchParams.Album),
-                    () => ExecuteSearch(NormalizeSpecialCharacters(searchParams.Artist), NormalizeSpecialCharacters(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+                    () => SlskdTextProcessor.ShouldNormalizeCharacters(searchParams.Artist, searchParams.Album),
+                    () => ExecuteSearch(SlskdTextProcessor.NormalizeSpecialCharacters(searchParams.Artist), SlskdTextProcessor.NormalizeSpecialCharacters(searchParams.Album), searchParams.Interactive, false, searchParams.TrackCount)));
             }
 
             // Tier 3: Punctuation stripping
             if (Settings.StripPunctuation)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                    () => ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
-                    () => ExecuteSearch(StripPunctuation(searchParams.Artist), StripPunctuation(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+                    () => SlskdTextProcessor.ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
+                    () => ExecuteSearch(SlskdTextProcessor.StripPunctuation(searchParams.Artist), SlskdTextProcessor.StripPunctuation(searchParams.Album), searchParams.Interactive, false, searchParams.TrackCount)));
 
                 if (Settings.NormalizeSpecialCharacters)
                 {
                     chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                        () => ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
-                        () => ExecuteSearch(NormalizeSpecialCharacters(StripPunctuation(searchParams.Artist)), NormalizeSpecialCharacters(StripPunctuation(searchParams.Album)), searchParams.Interactive, searchParams.TrackCount)));
+                        () => SlskdTextProcessor.ShouldStripPunctuation(searchParams.Artist, searchParams.Album),
+                        () => ExecuteSearch(SlskdTextProcessor.NormalizeSpecialCharacters(SlskdTextProcessor.StripPunctuation(searchParams.Artist)), SlskdTextProcessor.NormalizeSpecialCharacters(SlskdTextProcessor.StripPunctuation(searchParams.Album)), searchParams.Interactive, false, searchParams.TrackCount)));
                 }
             }
 
@@ -136,7 +121,7 @@ namespace Tubifarry.Indexers.Soulseek
             if (Settings.HandleVariousArtists && searchParams.Artist != null && searchParams.Album != null)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                    () => IsVariousArtists(searchParams.Artist),
+                    () => SlskdTextProcessor.IsVariousArtists(searchParams.Artist),
                     () => ExecuteVariousArtistsSearches(searchParams.Album, searchParams.Year, searchParams.Interactive, searchParams.TrackCount)));
             }
 
@@ -144,12 +129,12 @@ namespace Tubifarry.Indexers.Soulseek
             if (Settings.HandleVolumeVariations && searchParams.Album != null)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                    () => ContainsVolumeReference(searchParams.Album),
-                    () => ExecuteVariationSearches(searchParams.Artist, GenerateVolumeVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+                    () => SlskdTextProcessor.ContainsVolumeReference(searchParams.Album),
+                    () => ExecuteVariationSearches(searchParams.Artist, SlskdTextProcessor.GenerateVolumeVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
 
                 chain.AddTierFactory(SearchTierGenerator.CreateConditionalTier(
-                    () => ShouldGenerateRomanVariations(searchParams.Album),
-                    () => ExecuteVariationSearches(searchParams.Artist, GenerateRomanNumeralVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
+                    () => SlskdTextProcessor.ShouldGenerateRomanVariations(searchParams.Album),
+                    () => ExecuteVariationSearches(searchParams.Artist, SlskdTextProcessor.GenerateRomanNumeralVariations(searchParams.Album), searchParams.Interactive, searchParams.TrackCount)));
             }
 
             // Tier 6+: Fallback searches
@@ -172,7 +157,7 @@ namespace Tubifarry.Indexers.Soulseek
                 if (alias.Length > 3)
                 {
                     chain.AddTierFactory(SearchTierGenerator.CreateTier(
-                        () => ExecuteSearch(alias, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+                        () => ExecuteSearch(alias, searchParams.Album, searchParams.Interactive, false, searchParams.TrackCount)));
                 }
             }
 
@@ -184,7 +169,7 @@ namespace Tubifarry.Indexers.Soulseek
                     string[] albumWords = searchParams.Album.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                     int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
                     string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
-                    return ExecuteSearch(searchParams.Artist, halfAlbumTitle, searchParams.Interactive, searchParams.TrackCount);
+                    return ExecuteSearch(searchParams.Artist, halfAlbumTitle, searchParams.Interactive, false, searchParams.TrackCount);
                 }));
             }
 
@@ -192,13 +177,13 @@ namespace Tubifarry.Indexers.Soulseek
             if (searchParams.Artist != null)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateTier(
-                    () => ExecuteSearch(searchParams.Artist, null, searchParams.Interactive, searchParams.TrackCount)));
+                    () => ExecuteSearch(searchParams.Artist, null, searchParams.Interactive, false, searchParams.TrackCount)));
             }
 
             if (searchParams.Album != null)
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateTier(
-                    () => ExecuteSearch(null, searchParams.Album, searchParams.Interactive, searchParams.TrackCount)));
+                    () => ExecuteSearch(null, searchParams.Album, searchParams.Interactive, false, searchParams.TrackCount)));
             }
 
             // Track fallback searches (limit to 4)
@@ -209,15 +194,15 @@ namespace Tubifarry.Indexers.Soulseek
                 {
                     string track = searchParams.Tracks[i].Trim();
                     chain.AddTierFactory(SearchTierGenerator.CreateTier(
-                        () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, searchParams.TrackCount, track)));
+                        () => ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, true, searchParams.TrackCount, track)));
                 }
             }
         }
 
-        private IEnumerable<IndexerRequest> ExecuteSearch(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
+        private IEnumerable<IndexerRequest> ExecuteSearch(string? artist, string? album, bool interactive, bool expand, int trackCount, string? searchText = null)
         {
             if (string.IsNullOrEmpty(searchText))
-                searchText = BuildSearchText(artist, album);
+                searchText = SlskdTextProcessor.BuildSearchText(artist, album);
 
             if (string.IsNullOrWhiteSpace(searchText) || _processedSearches.Contains(searchText))
                 return Enumerable.Empty<IndexerRequest>();
@@ -227,7 +212,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             try
             {
-                IndexerRequest? request = GetRequestsAsync(artist, album, interactive, trackCount, searchText).GetAwaiter().GetResult();
+                IndexerRequest? request = GetRequestsAsync(artist, album, interactive, expand, trackCount, searchText).GetAwaiter().GetResult();
                 if (request != null)
                 {
                     _logger.Trace($"Successfully generated request for search: {searchText}");
@@ -250,19 +235,19 @@ namespace Tubifarry.Indexers.Soulseek
         {
             List<IndexerRequest> requests = new();
 
-            requests.AddRange(ExecuteSearch(null, $"{album} {year}", interactive, trackCount));
-            requests.AddRange(ExecuteSearch(null, album, interactive, trackCount));
+            requests.AddRange(ExecuteSearch(null, $"{album} {year}", interactive, false, trackCount));
+            requests.AddRange(ExecuteSearch(null, album, interactive, false, trackCount));
 
             if (Settings.StripPunctuation)
             {
-                string strippedAlbumWithYear = StripPunctuation($"{album} {year}");
-                string strippedAlbum = StripPunctuation(album);
+                string strippedAlbumWithYear = SlskdTextProcessor.StripPunctuation($"{album} {year}");
+                string strippedAlbum = SlskdTextProcessor.StripPunctuation(album);
 
                 if (!string.Equals(strippedAlbumWithYear, $"{album} {year}", StringComparison.OrdinalIgnoreCase))
-                    requests.AddRange(ExecuteSearch(null, strippedAlbumWithYear, interactive, trackCount));
+                    requests.AddRange(ExecuteSearch(null, strippedAlbumWithYear, interactive, false, trackCount));
 
                 if (!string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase))
-                    requests.AddRange(ExecuteSearch(null, strippedAlbum, interactive, trackCount));
+                    requests.AddRange(ExecuteSearch(null, strippedAlbum, interactive, false, trackCount));
             }
 
             return requests;
@@ -274,25 +259,25 @@ namespace Tubifarry.Indexers.Soulseek
 
             foreach (string variation in variations)
             {
-                requests.AddRange(ExecuteSearch(artist, variation, interactive, trackCount));
+                requests.AddRange(ExecuteSearch(artist, variation, interactive, false, trackCount));
 
                 if (Settings.StripPunctuation)
                 {
-                    string strippedVariation = StripPunctuation(variation);
+                    string strippedVariation = SlskdTextProcessor.StripPunctuation(variation);
                     if (!string.Equals(strippedVariation, variation, StringComparison.OrdinalIgnoreCase))
-                        requests.AddRange(ExecuteSearch(artist, strippedVariation, interactive, trackCount));
+                        requests.AddRange(ExecuteSearch(artist, strippedVariation, interactive, false, trackCount));
                 }
             }
 
             return requests;
         }
 
-        private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, int trackCount, string? searchText = null)
+        private async Task<IndexerRequest?> GetRequestsAsync(string? artist, string? album, bool interactive, bool expand, int trackCount, string? searchText = null)
         {
             try
             {
                 if (string.IsNullOrEmpty(searchText))
-                    searchText = BuildSearchText(artist, album);
+                    searchText = SlskdTextProcessor.BuildSearchText(artist, album);
 
                 _logger.Debug($"Search: {searchText}");
 
@@ -302,7 +287,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                 await ExecuteSearchAsync(searchRequest, searchId);
 
-                dynamic request = CreateResultRequest(searchId, artist, album, interactive, trackCount);
+                dynamic request = CreateResultRequest(searchId, artist, album, interactive, expand, trackCount);
                 return new IndexerRequest(request);
             }
             catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
@@ -338,7 +323,7 @@ namespace Tubifarry.Indexers.Soulseek
                 .Post()
                 .Build();
 
-            searchRequest.SetContent(JsonConvert.SerializeObject(searchData));
+            searchRequest.SetContent(JsonSerializer.Serialize(searchData));
             return searchRequest;
         }
 
@@ -348,7 +333,7 @@ namespace Tubifarry.Indexers.Soulseek
             await WaitOnSearchCompletionAsync(searchId, TimeSpan.FromSeconds(Settings.TimeoutInSeconds));
         }
 
-        private HttpRequest CreateResultRequest(string searchId, string? artist, string? album, bool interactive, int trackCount)
+        private HttpRequest CreateResultRequest(string searchId, string? artist, string? album, bool interactive, bool expand, int trackCount)
         {
             HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
                 .AddQueryParam("includeResponses", true)
@@ -360,6 +345,7 @@ namespace Tubifarry.Indexers.Soulseek
                 Album = album ?? "",
                 Artist = artist,
                 Interactive = interactive,
+                ExpandDirectory = expand,
                 MimimumFiles = Math.Max(Settings.MinimumResponseFileCount, Settings.FilterLessFilesThanAlbum ? trackCount : 1)
             }.ToJson();
 
@@ -386,10 +372,11 @@ namespace Tubifarry.Indexers.Soulseek
                 else if (hasTimedOut && timeoutEndTime < DateTime.UtcNow)
                     break;
 
-                dynamic? searchStatus = await GetSearchResultsAsync(searchId);
-                state = searchStatus?.state ?? "InProgress";
+                JsonNode? searchStatus = await GetSearchResultsAsync(searchId);
 
-                int fileCount = (int)(searchStatus?.fileCount ?? 0);
+                state = searchStatus?["state"]?.GetValue<string>() ?? "InProgress";
+                int fileCount = searchStatus?["fileCount"]?.GetValue<int>() ?? 0;
+
                 if (fileCount > totalFilesFound)
                     totalFilesFound = fileCount;
 
@@ -402,7 +389,7 @@ namespace Tubifarry.Indexers.Soulseek
             }
         }
 
-        private async Task<dynamic?> GetSearchResultsAsync(string searchId)
+        private async Task<JsonNode?> GetSearchResultsAsync(string searchId)
         {
             HttpRequest searchResultsRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
                      .SetHeader("X-API-KEY", Settings.ApiKey).Build();
@@ -415,7 +402,7 @@ namespace Tubifarry.Indexers.Soulseek
                 return null;
             }
 
-            return JsonConvert.DeserializeObject<dynamic>(response.Content);
+            return JsonSerializer.Deserialize<JsonNode>(response.Content);
         }
 
         private static double CalculateQuadraticDelay(double progress)
@@ -428,110 +415,68 @@ namespace Tubifarry.Indexers.Soulseek
             return Math.Clamp(delay, 0.5, 5);
         }
 
-        private static string BuildSearchText(string? artist, string? album) => string.Join(" ", new[] { album, artist }.Where(term => !string.IsNullOrWhiteSpace(term)).Select(term => term?.Trim()));
-
-        private static bool ShouldNormalizeCharacters(string? artist, string? album)
-        {
-            string? normalizedArtist = artist != null ? NormalizeSpecialCharacters(artist) : null;
-            string? normalizedAlbum = album != null ? NormalizeSpecialCharacters(album) : null;
-            return (normalizedArtist != null && !string.Equals(normalizedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
-                   (normalizedAlbum != null && !string.Equals(normalizedAlbum, album, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static bool ShouldStripPunctuation(string? artist, string? album)
-        {
-            string? strippedArtist = artist != null ? StripPunctuation(artist) : null;
-            string? strippedAlbum = album != null ? StripPunctuation(album) : null;
-            return (strippedArtist != null && !string.Equals(strippedArtist, artist, StringComparison.OrdinalIgnoreCase)) ||
-                   (strippedAlbum != null && !string.Equals(strippedAlbum, album, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static bool IsVariousArtists(string artist) => artist.Equals("Various Artists", StringComparison.OrdinalIgnoreCase) || artist.Equals("VA", StringComparison.OrdinalIgnoreCase);
-
-        private static bool ContainsVolumeReference(string album) => album.Contains("Volume", StringComparison.OrdinalIgnoreCase) || album.Contains("Vol", StringComparison.OrdinalIgnoreCase);
-
-        private static bool ShouldGenerateRomanVariations(string album)
-        {
-            Match romanMatch = RomanNumeralPattern.Match(album);
-            if (!romanMatch.Success) return false;
-
-            Match volumeMatch = VolumePattern.Match(album);
-            return !(volumeMatch.Success && volumeMatch.Groups[2].Value.Equals(romanMatch.Groups[1].Value, StringComparison.OrdinalIgnoreCase));
-        }
-
         private bool AnyEnhancedSearchEnabled() => Settings.UseFallbackSearch || Settings.NormalizeSpecialCharacters || Settings.StripPunctuation || Settings.HandleVariousArtists || Settings.HandleVolumeVariations;
 
-        private static string StripPunctuation(string? input)
+        public async Task<IGrouping<string, SlskdFileData>?> ExpandDirectory(string username, string directoryPath, SlskdFileData originalTrack)
         {
-            if (string.IsNullOrEmpty(input)) return string.Empty;
-
-            string stripped = PunctuationPattern.Replace(input, "");
-            return Regex.Replace(stripped, @"\s+", " ").Trim();
-        }
-
-        private static string NormalizeSpecialCharacters(string? input)
-        {
-            if (string.IsNullOrEmpty(input)) return string.Empty;
-
-            string decomposed = input.Normalize(NormalizationForm.FormD);
-            StringBuilder sb = new(decomposed.Length);
-
-            foreach (char c in decomposed)
+            try
             {
-                UnicodeCategory cat = CharUnicodeInfo.GetUnicodeCategory(c);
-                if (cat != UnicodeCategory.NonSpacingMark && cat != UnicodeCategory.SpacingCombiningMark && cat != UnicodeCategory.EnclosingMark)
-                    sb.Append(c);
+                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/users/{Uri.EscapeDataString(username)}/directory")
+                    .SetHeader("X-API-KEY", Settings.ApiKey)
+                    .SetHeader("Content-Type", "application/json")
+                    .Post()
+                    .Build();
+
+                request.SetContent(JsonSerializer.Serialize(new { directory = directoryPath }));
+
+                HttpResponse response = await _client.ExecuteAsync(request);
+
+                if (response.StatusCode == HttpStatusCode.OK)
+                {
+                    SlskdDirectoryApiResponse[]? directoryResponse = JsonSerializer.Deserialize<SlskdDirectoryApiResponse[]>(response.Content,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    if (directoryResponse?.Length > 0 && directoryResponse[0].Files?.Any() == true)
+                    {
+                        string originalExtension = originalTrack.Extension?.ToLowerInvariant() ?? "";
+
+                        List<SlskdFileData> directoryFiles = directoryResponse[0].Files
+                            .Where(f => AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(f.Filename)) != AudioFormat.Unknown)
+                            .Select(f =>
+                            {
+                                string fileExtension = Path.GetExtension(f.Filename)?.TrimStart('.').ToLowerInvariant() ?? "";
+                                bool sameExtension = fileExtension == originalExtension;
+
+                                return new SlskdFileData(
+                                    Filename: $"{directoryPath}\\{f.Filename}",
+                                    BitRate: sameExtension ? originalTrack.BitRate : null,
+                                    BitDepth: sameExtension ? originalTrack.BitDepth : null,
+                                    Size: f.Size,
+                                    Length: sameExtension ? originalTrack.Length : null,
+                                    Extension: fileExtension,
+                                    SampleRate: sameExtension ? originalTrack.SampleRate : null,
+                                    Code: f.Code,
+                                    IsLocked: false
+                                );
+                            }).ToList();
+
+                        if (directoryFiles.Any())
+                        {
+                            return directoryFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)).First();
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.Debug($"Directory API returned {response.StatusCode} for {username}:{directoryPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error expanding directory {username}:{directoryPath}");
             }
 
-            return sb.ToString().Normalize(NormalizationForm.FormC);
-        }
-
-        private static IEnumerable<string> GenerateVolumeVariations(string album)
-        {
-            if (string.IsNullOrEmpty(album)) yield break;
-
-            Match volumeMatch = VolumePattern.Match(album);
-            if (!volumeMatch.Success) yield break;
-
-            string volumeFormat = volumeMatch.Groups[1].Value;
-            string volumeNumber = volumeMatch.Groups[2].Value;
-
-            if (RomanNumerals.TryGetValue(volumeNumber, out int arabicNumber))
-            {
-                yield return album.Replace(volumeMatch.Value, $"{volumeFormat} {arabicNumber}");
-            }
-            else if (int.TryParse(volumeNumber, out arabicNumber) && arabicNumber > 0 && arabicNumber <= 20)
-            {
-                KeyValuePair<string, int> romanPair = RomanNumerals.FirstOrDefault(x => x.Value == arabicNumber);
-                if (!string.IsNullOrEmpty(romanPair.Key))
-                    yield return album.Replace(volumeMatch.Value, $"{volumeFormat} {romanPair.Key}");
-            }
-            foreach (string format in VolumeFormats)
-            {
-                if (!format.Equals(volumeFormat, StringComparison.OrdinalIgnoreCase))
-                    yield return album.Replace(volumeMatch.Value, $"{format} {volumeNumber}");
-            }
-            if (album.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length > 3)
-            {
-                string withoutVolume = album.Replace(volumeMatch.Value, "").Trim();
-                if (withoutVolume.Length > 10)
-                    yield return withoutVolume;
-            }
-        }
-
-        private static IEnumerable<string> GenerateRomanNumeralVariations(string album)
-        {
-            if (string.IsNullOrEmpty(album)) yield break;
-
-            Match romanMatch = RomanNumeralPattern.Match(album);
-            if (!romanMatch.Success) yield break;
-            Match volumeMatch = VolumePattern.Match(album);
-            if (volumeMatch.Success && volumeMatch.Groups[2].Value.Equals(romanMatch.Groups[1].Value, StringComparison.OrdinalIgnoreCase))
-                yield break;
-
-            string romanNumeral = romanMatch.Groups[1].Value;
-            if (RomanNumerals.TryGetValue(romanNumeral, out int arabicNumber))
-                yield return album.Replace(romanMatch.Value, arabicNumber.ToString());
+            return null;
         }
 
         private record SearchParameters(string? Artist, string? Album, string? Year, bool Interactive, int TrackCount, List<string> Aliases, List<string> Tracks);
