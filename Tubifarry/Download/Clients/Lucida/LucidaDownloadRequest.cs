@@ -271,9 +271,9 @@ namespace Tubifarry.Download.Clients.Lucida
 
         private async Task<bool> PollForCompletionAsync(string handoffId, string serverName, CancellationToken token)
         {
-            const int baseAttempts = 10;
+            const int baseAttempts = 15;
             int delayMs = 3000;
-            int serviceUnavailableExtensions = 0;
+            int serviceUnavailableExtensions = 1;
             const int maxServiceUnavailableExtensions = 20; // Up to 100 minutes total
 
             await Task.Delay(delayMs * 2, token);

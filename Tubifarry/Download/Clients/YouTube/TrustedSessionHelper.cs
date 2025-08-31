@@ -363,7 +363,7 @@ namespace Tubifarry.Download.Clients.YouTube
                 catch (Exception ex)
                 {
                     _nodeJsAvailable = false;
-                    _logger.Warn(ex, "Node.js environment is not available for local token generation: {Message}", ex.Message);
+                    _logger.Trace(ex, "Node.js environment is not available for local token generation: {Message}", ex.Message);
                     return false;
                 }
                 finally

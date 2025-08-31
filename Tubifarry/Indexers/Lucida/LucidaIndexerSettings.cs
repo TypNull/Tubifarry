@@ -47,13 +47,12 @@ namespace Tubifarry.Indexers.Lucida
 
         public LucidaIndexerSettings()
         {
-            BaseUrl = "https://lucida.to";
             CountryCode = "US";
             RequestTimeout = 60;
             _servicePriorities = _defaultPriorities.ToList();
         }
 
-        [FieldDefinition(0, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the Lucida instance")]
+        [FieldDefinition(0, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the Lucida instance", Placeholder = "https://lucida.to")]
         public string BaseUrl { get; set; }
 
         [FieldDefinition(1, Label = "Country Code", Type = FieldType.Textbox, HelpText = "Two-letter country code for service regions separated by ;")]
