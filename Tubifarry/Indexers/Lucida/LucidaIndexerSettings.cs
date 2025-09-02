@@ -49,6 +49,7 @@ namespace Tubifarry.Indexers.Lucida
         {
             CountryCode = "US";
             RequestTimeout = 60;
+            BaseUrl = "https://lucida.to";
             _servicePriorities = _defaultPriorities.ToList();
         }
 
