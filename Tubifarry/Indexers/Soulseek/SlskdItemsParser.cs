@@ -45,22 +45,20 @@ namespace Tubifarry.Indexers.Soulseek
         private static readonly Regex YearExtractionRegex = new(@"(?<year>19\d{2}|20\d{2})",
             RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex ArtistAlbumYearPattern = new(
-            @"^(?<artist>[^-]+?)\s*-\s*(?<album>[^(\[]+?)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
+            @"^(?<artist>[^-]+)\s*-\s*(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
             RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex YearArtistAlbumPattern = new(
-            @"^(?<year>19\d{2}|20\d{2})\s*-\s*(?<artist>[^-]+?)\s*-\s*(?<album>.+?)(?:\s*[\(\[].+?[\)\]])*$",
+            @"^(?<year>19\d{2}|20\d{2})\s*-\s*(?<artist>[^-]+)\s*-\s*(?<album>.+)(?:\s*[\(\[].+[\)\]])*$",
             RegexOptions.Compiled | RegexOptions.ExplicitCapture);
         private static readonly Regex AlbumYearPattern = new(
-            @"^(?<album>[^(\[]+?)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
-           RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+            @"^(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
+            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 
         private static readonly Regex VolumeRegex = new(
             @"(?ix)
-            \b(?:volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)
-            \s*[.,\-_:#]*\s*
-            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)
-            (?!\w)|
-            (\d+(?:\.\d+)?)(?=\s*$)", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+            (?<=\b(?:volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)\s*[.,\-_:#]*\s*)
+            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)(?!\w)|
+            (\d+(?:\.\d+)?|[IVXLCDM]+)(?=\s*$)", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
 
         private static readonly Regex CleanComponentRegex = new(
             @"(?ix)
@@ -231,8 +229,8 @@ namespace Tubifarry.Indexers.Soulseek
             if (!dirMatch.Success)
                 return false;
 
-            string? normSearchVol = NormalizeVolume(searchMatch.Groups[2].Value);
-            string? normDirVol = NormalizeVolume(dirMatch.Groups[2].Value);
+            string? normSearchVol = NormalizeVolume(searchMatch.Value);
+            string? normDirVol = NormalizeVolume(dirMatch.Value);
 
             string? searchBaseAlbum = VolumeRegex.Replace(searchAlbum, "").Trim();
             string? dirBaseAlbum = VolumeRegex.Replace(directoryPath, "").Trim();
@@ -241,7 +239,7 @@ namespace Tubifarry.Indexers.Soulseek
                 NormalizeString(dirBaseAlbum),
                 NormalizeString(searchBaseAlbum)) > 85;
 
-            return baseAlbumMatch && normSearchVol == normDirVol;
+            return baseAlbumMatch && normSearchVol.Equals(normDirVol, StringComparison.OrdinalIgnoreCase);
         }
 
         public static string NormalizeVolume(string volume)
