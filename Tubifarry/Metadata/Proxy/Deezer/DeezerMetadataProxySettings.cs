@@ -4,11 +4,9 @@ using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
 using Tubifarry.Core.Utilities;
-using Tubifarry.ImportLists.WantedList;
 
 namespace Tubifarry.Metadata.Proxy.Deezer
 {
-
     public class DeezerMetadataProxySettingsValidator : AbstractValidator<DeezerMetadataProxySettings>
     {
         public DeezerMetadataProxySettingsValidator()

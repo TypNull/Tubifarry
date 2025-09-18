@@ -1,70 +1,71 @@
-﻿using FluentValidation.Results;
-using NLog;
+﻿using NLog;
 using NzbDrone.Common.Cache;
 using NzbDrone.Common.Http;
-using NzbDrone.Core.Extras.Metadata;
-using NzbDrone.Core.Extras.Metadata.Files;
-using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Metadata;
-using NzbDrone.Core.ThingiProvider;
 using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.Core;
 using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.SkyHook
 {
-    public class SkyHookMetadataProxy : SkyHookProxy, IProxy, IMetadata, IProxyProvideArtistInfo, IProxySearchForNewArtist, IProxyProvideAlbumInfo, IProxySearchForNewAlbum, IProxySearchForNewEntity, ISupportMetadataMixing
+    [Proxy(ProxyMode.Public)]
+    [ProxyFor(typeof(IProvideArtistInfo), 100)]
+    [ProxyFor(typeof(IProvideAlbumInfo), 100)]
+    [ProxyFor(typeof(ISearchForNewArtist), 100)]
+    [ProxyFor(typeof(ISearchForNewAlbum), 100)]
+    [ProxyFor(typeof(ISearchForNewEntity), 100)]
+    public class SkyHookMetadataProxy : ProxyBase<SykHookMetadataProxySettings>, ISupportMetadataMixing
     {
-        public SkyHookMetadataProxy(IHttpClient httpClient, IMetadataRequestBuilder requestBuilder, IArtistService artistService, IAlbumService albumService, Logger logger, IMetadataProfileService metadataProfileService, ICacheManager cacheManager) : base(httpClient, requestBuilder, artistService, albumService, logger, metadataProfileService, cacheManager)
-        { }
+        private readonly SkyHookProxy _skyHookProxy;
 
-        public Type ConfigContract => typeof(SykHookMetadataProxySettings);
+        public override string Name => "Lidarr Default";
 
-        public virtual ProviderMessage? Message => null;
-
-        public IEnumerable<ProviderDefinition> DefaultDefinitions => new List<ProviderDefinition>();
-
-        public ProviderDefinition? Definition { get; set; }
-
-        public object RequestAction(string stage, IDictionary<string, string> query) => default!;
-
-        protected SykHookMetadataProxySettings Settings => (SykHookMetadataProxySettings)Definition!.Settings;
-
-        public string Name => "Lidarr Default";
-
-        public ProxyMode ProxyMode { get; set; }
-
-        public override string ToString() => GetType().Name;
-
-        public ValidationResult Test() => new();
-
-        public string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
+        public SkyHookMetadataProxy(
+            IHttpClient httpClient,
+            IMetadataRequestBuilder requestBuilder,
+            IArtistService artistService,
+            IAlbumService albumService,
+            Logger logger,
+            IMetadataProfileService metadataProfileService,
+            ICacheManager cacheManager)
         {
-            string existingFilename = Path.Combine(artist.Path, metadataFile.RelativePath);
-            string extension = Path.GetExtension(existingFilename).TrimStart('.');
-            return Path.ChangeExtension(trackFile.Path, extension);
+            _skyHookProxy = new SkyHookProxy(httpClient, requestBuilder, artistService, albumService, logger, metadataProfileService, cacheManager);
         }
 
-        public string GetFilenameAfterMove(Artist artist, string albumPath, MetadataFile metadataFile)
-        {
-            string existingFilename = Path.GetFileName(metadataFile.RelativePath);
-            string newFileName = Path.Combine(artist.Path, albumPath, existingFilename);
+        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) =>
+            _skyHookProxy.GetArtistInfo(lidarrId, metadataProfileId);
 
-            return newFileName;
-        }
+        public HashSet<string> GetChangedArtists(DateTime startTime) =>
+            _skyHookProxy.GetChangedArtists(startTime);
 
-        public MetadataFile FindMetadataFile(Artist artist, string path) => default!;
-        public MetadataFileResult ArtistMetadata(Artist artist) => default!;
-        public MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
-        public MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile) => default!;
-        public List<ImageFileResult> ArtistImages(Artist artist) => new();
-        public List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumPath) => new();
-        public List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
+        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string id) =>
+            _skyHookProxy.GetAlbumInfo(id);
 
-        public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
+        public HashSet<string> GetChangedAlbums(DateTime startTime) =>
+            _skyHookProxy.GetChangedAlbums(startTime);
+
+        public List<Artist> SearchForNewArtist(string title) =>
+            _skyHookProxy.SearchForNewArtist(title);
+
+        public List<Album> SearchForNewAlbum(string title, string artist) =>
+            _skyHookProxy.SearchForNewAlbum(title, artist);
+
+        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) =>
+            _skyHookProxy.SearchForNewAlbumByRecordingIds(recordingIds);
+
+        public List<object> SearchForNewEntity(string title) =>
+            _skyHookProxy.SearchForNewEntity(title);
+
+        // ISupportMetadataMixing implementation
+
+        /// <summary>
+        /// Checks if the given id is in MusicBrainz GUID format (and does not contain an '@').
+        /// Returns Supported if valid; otherwise, Unsupported.
+        /// </summary>
+        public MetadataSupportLevel CanHandleSearch(string? albumTitle = null, string? artistName = null)
         {
             if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true)
                 return MetadataSupportLevel.Supported;
@@ -75,14 +76,21 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
             return MetadataSupportLevel.Supported;
         }
 
-        public MetadataSupportLevel CanHandleIRecordingIds(params string[] recordingIds)
-        {
-            return MetadataSupportLevel.Supported;
-        }
+        public MetadataSupportLevel CanHandleIRecordingIds(params string[] recordingIds) =>
+            MetadataSupportLevel.Supported;
 
-        public MetadataSupportLevel CanHandleChanged()
+        public MetadataSupportLevel CanHandleChanged() =>
+            MetadataSupportLevel.Supported;
+
+        public MetadataSupportLevel CanHandleId(string id)
         {
-            return MetadataSupportLevel.Supported;
+            if (string.IsNullOrWhiteSpace(id) || id.Contains('@'))
+                return MetadataSupportLevel.Unsupported;
+
+            if (_guidRegex.IsMatch(id))
+                return MetadataSupportLevel.Supported;
+
+            return MetadataSupportLevel.Unsupported;
         }
 
         /// <summary>
@@ -107,21 +115,6 @@ namespace Tubifarry.Metadata.Proxy.SkyHook
                     return match.Groups[1].Value;
             }
             return null;
-        }
-
-        /// <summary>
-        /// Checks if the given id is in MusicBrainz GUID format (and does not contain an '@').
-        /// Returns Supported if valid; otherwise, Unsupported.
-        /// </summary>
-        public MetadataSupportLevel CanHandleId(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id) || id.Contains('@'))
-                return MetadataSupportLevel.Unsupported;
-
-            if (_guidRegex.IsMatch(id))
-                return MetadataSupportLevel.Supported;
-
-            return MetadataSupportLevel.Unsupported;
         }
 
         private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);

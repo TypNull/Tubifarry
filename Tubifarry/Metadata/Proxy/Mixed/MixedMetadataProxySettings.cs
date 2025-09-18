@@ -38,10 +38,10 @@ namespace Tubifarry.Metadata.Proxy.Mixed
 
         public MixedMetadataProxySettings()
         {
-            _priotities = ProxyServiceStarter.ProxyService?.ActiveProxys?
+            _priotities = ProxyServiceStarter.ProxyService?.ActiveProxies?
                 .Where(x => x is ISupportMetadataMixing)
-                .Where(x => x.ProxyMode != ProxyMode.Internal)
-                .Select(x => new KeyValuePair<string, string>(x.Definition.Name, x is SkyHookMetadataProxy ? "0" : "50"))
+                .Where(x => x.GetProxyMode() != ProxyMode.Internal)
+                .Select(x => new KeyValuePair<string, string>(x.Name, x is SkyHookMetadataProxy ? "0" : "50"))
                 .ToList() ?? Enumerable.Empty<KeyValuePair<string, string>>();
             _customConversion = _priotities.ToList();
             Instance = this;

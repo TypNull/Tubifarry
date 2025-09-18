@@ -1,7 +1,5 @@
-﻿
-using FluentValidation.Results;
-using NLog;
-using NzbDrone.Core.Extras.Metadata;
+﻿using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.Core;
@@ -9,35 +7,39 @@ using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.CustomLidarr
 {
-    public class CustomLidarrMetadataProxy : ConsumerProxyPlaceholder<CustomLidarrMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    [Proxy(ProxyMode.Public)]
+    [ProxyFor(typeof(IProvideArtistInfo))]
+    [ProxyFor(typeof(IProvideAlbumInfo))]
+    [ProxyFor(typeof(ISearchForNewArtist))]
+    [ProxyFor(typeof(ISearchForNewAlbum))]
+    [ProxyFor(typeof(ISearchForNewEntity))]
+    public class CustomLidarrMetadataProxy : ProxyBase<CustomLidarrMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly ICustomLidarrProxy _customLidarrProxy;
 
         public override string Name => "Lidarr Custom";
         private static CustomLidarrMetadataProxySettings ActiveSettings => CustomLidarrMetadataProxySettings.Instance!;
 
-        public CustomLidarrMetadataProxy(Lazy<IProxyService> proxyService, ICustomLidarrProxy customLidarrProxy) : base(proxyService)
+        public CustomLidarrMetadataProxy(ICustomLidarrProxy customLidarrProxy) : base()
         {
             _customLidarrProxy = customLidarrProxy;
         }
 
-        public override ValidationResult Test() => new();
+        public List<Album> SearchForNewAlbum(string title, string artist) => _customLidarrProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
-        public override List<Album> SearchForNewAlbum(string title, string artist) => _customLidarrProxy.SearchNewAlbum(ActiveSettings, title, artist);
+        public List<Artist> SearchForNewArtist(string title) => _customLidarrProxy.SearchNewArtist(ActiveSettings, title);
 
-        public override List<Artist> SearchForNewArtist(string title) => _customLidarrProxy.SearchNewArtist(ActiveSettings, title);
+        public List<object> SearchForNewEntity(string title) => _customLidarrProxy.SearchNewEntity(ActiveSettings, title);
 
-        public override List<object> SearchForNewEntity(string title) => _customLidarrProxy.SearchNewEntity(ActiveSettings, title);
+        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _customLidarrProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
 
-        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _customLidarrProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
+        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _customLidarrProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
 
-        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _customLidarrProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
+        public HashSet<string> GetChangedAlbums(DateTime startTime) => _customLidarrProxy.GetChangedAlbums(ActiveSettings, startTime);
 
-        public override HashSet<string> GetChangedAlbums(DateTime startTime) => _customLidarrProxy.GetChangedAlbums(ActiveSettings, startTime);
+        public HashSet<string> GetChangedArtists(DateTime startTime) => _customLidarrProxy.GetChangedArtists(ActiveSettings, startTime);
 
-        public override HashSet<string> GetChangedArtists(DateTime startTime) => _customLidarrProxy.GetChangedArtists(ActiveSettings, startTime);
-
-        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) => _customLidarrProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
+        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) => _customLidarrProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {

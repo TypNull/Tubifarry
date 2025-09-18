@@ -37,10 +37,10 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 }
                 else
                 {
-                    int threshold = _mixedProxy.CalculateThreshold(candidate.Proxy.Definition.Name, aggregatedItems.Count);
+                    int threshold = _mixedProxy.CalculateThreshold(candidate.Proxy.Name, aggregatedItems.Count);
                     if (candidate.Priority > bestPriority + threshold)
                     {
-                        _logger.Debug($"Stopping aggregation due to threshold. Candidate proxy {candidate.Proxy.Definition.Name} with priority {candidate.Priority} exceeds threshold (threshold={threshold}).");
+                        _logger.Debug($"Stopping aggregation due to threshold. Candidate proxy {candidate.Proxy.Name} with priority {candidate.Priority} exceeds threshold (threshold={threshold}).");
                         break;
                     }
                 }
@@ -54,15 +54,15 @@ namespace Tubifarry.Metadata.Proxy.Mixed
                 aggregatedItems.AddRange(newItems);
 
                 int newCount = newItems.Count;
-                _logger.Trace($"{candidate.Proxy.Definition.Name} returned {items.Count} items, {newCount} new.");
+                _logger.Trace($"{candidate.Proxy.Name} returned {items.Count} items, {newCount} new.");
 
                 bool queryValid = _isValidQuery();
                 bool success = !queryValid || newCount > 0;
-                _mixedProxy._adaptiveThreshold.UpdateMetrics(candidate.Proxy.Definition.Name, sw.Elapsed.TotalMilliseconds, newCount, success);
+                _mixedProxy._adaptiveThreshold.UpdateMetrics(candidate.Proxy.Name, sw.Elapsed.TotalMilliseconds, newCount, success);
 
                 if (newCount == 0 && aggregatedItems.Any())
                 {
-                    _logger.Trace($"No new items from proxy {candidate.Proxy.Definition.Name}, stopping further calls.");
+                    _logger.Trace($"No new items from proxy {candidate.Proxy.Name}, stopping further calls.");
                     break;
                 }
             }

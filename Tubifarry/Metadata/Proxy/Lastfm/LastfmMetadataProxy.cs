@@ -1,6 +1,6 @@
-﻿using FluentValidation.Results;
-using NLog;
+﻿using NLog;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.Core;
@@ -8,7 +8,13 @@ using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.Lastfm
 {
-    public class LastfmMetadataProxy : ConsumerProxyPlaceholder<LastfmMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    [Proxy(ProxyMode.Public)]
+    [ProxyFor(typeof(IProvideArtistInfo))]
+    [ProxyFor(typeof(IProvideAlbumInfo))]
+    [ProxyFor(typeof(ISearchForNewArtist))]
+    [ProxyFor(typeof(ISearchForNewAlbum))]
+    [ProxyFor(typeof(ISearchForNewEntity))]
+    public class LastfmMetadataProxy : ProxyBase<LastfmMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly ILastfmProxy _lastfmProxy;
         private readonly Logger _logger;
@@ -16,37 +22,35 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
         public override string Name => "Last.fm";
         private LastfmMetadataProxySettings ActiveSettings => Settings ?? LastfmMetadataProxySettings.Instance!;
 
-        public LastfmMetadataProxy(Lazy<IProxyService> proxyService, ILastfmProxy lastfmProxy, Logger logger) : base(proxyService)
+        public LastfmMetadataProxy(ILastfmProxy lastfmProxy, Logger logger)
         {
             _lastfmProxy = lastfmProxy;
             _logger = logger;
         }
 
-        public override ValidationResult Test() => new();
+        public List<Album> SearchForNewAlbum(string title, string artist) => _lastfmProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
-        public override List<Album> SearchForNewAlbum(string title, string artist) => _lastfmProxy.SearchNewAlbum(ActiveSettings, title, artist);
+        public List<Artist> SearchForNewArtist(string title) => _lastfmProxy.SearchNewArtist(ActiveSettings, title);
 
-        public override List<Artist> SearchForNewArtist(string title) => _lastfmProxy.SearchNewArtist(ActiveSettings, title);
+        public List<object> SearchForNewEntity(string title) => _lastfmProxy.SearchNewEntity(ActiveSettings, title);
 
-        public override List<object> SearchForNewEntity(string title) => _lastfmProxy.SearchNewEntity(ActiveSettings, title);
+        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _lastfmProxy.GetAlbumInfoAsync(ActiveSettings, foreignAlbumId).GetAwaiter().GetResult();
 
-        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _lastfmProxy.GetAlbumInfoAsync(ActiveSettings, foreignAlbumId).GetAwaiter().GetResult();
+        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _lastfmProxy.GetArtistInfoAsync(ActiveSettings, lidarrId, metadataProfileId).GetAwaiter().GetResult();
 
-        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _lastfmProxy.GetArtistInfoAsync(ActiveSettings, lidarrId, metadataProfileId).GetAwaiter().GetResult();
-
-        public override HashSet<string> GetChangedAlbums(DateTime startTime)
+        public HashSet<string> GetChangedAlbums(DateTime startTime)
         {
             _logger.Warn("GetChangedAlbums: Last.fm API does not support change tracking; returning empty set.");
             return new HashSet<string>();
         }
 
-        public override HashSet<string> GetChangedArtists(DateTime startTime)
+        public HashSet<string> GetChangedArtists(DateTime startTime)
         {
             _logger.Warn("GetChangedArtists: Last.fm API does not support change tracking; returning empty set.");
             return new HashSet<string>();
         }
 
-        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
+        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
         {
             _logger.Warn("SearchNewAlbumByRecordingIds: Last.fm API does not support fingerprint search; returning empty list.");
             return new List<Album>();
@@ -73,9 +77,7 @@ namespace Tubifarry.Metadata.Proxy.Lastfm
 
         public MetadataSupportLevel CanHandleIRecordingIds(params string[] recordingIds) => MetadataSupportLevel.Unsupported;
 
-
         public MetadataSupportLevel CanHandleChanged() => MetadataSupportLevel.Unsupported;
-
 
         public string? SupportsLink(List<Links> links)
         {

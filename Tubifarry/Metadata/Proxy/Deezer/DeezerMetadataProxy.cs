@@ -1,6 +1,6 @@
-﻿using FluentValidation.Results;
-using NLog;
+﻿using NLog;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.Core;
@@ -8,7 +8,13 @@ using Tubifarry.Metadata.Proxy.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.Deezer
 {
-    public class DeezerMetadataProxy : ConsumerProxyPlaceholder<DeezerMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    [Proxy(ProxyMode.Public)]
+    [ProxyFor(typeof(IProvideArtistInfo))]
+    [ProxyFor(typeof(IProvideAlbumInfo))]
+    [ProxyFor(typeof(ISearchForNewArtist))]
+    [ProxyFor(typeof(ISearchForNewAlbum))]
+    [ProxyFor(typeof(ISearchForNewEntity))]
+    public class DeezerMetadataProxy : ProxyBase<DeezerMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly IDeezerProxy _deezerProxy;
         private readonly Logger _logger;
@@ -16,37 +22,35 @@ namespace Tubifarry.Metadata.Proxy.Deezer
         public override string Name => "Deezer";
         private DeezerMetadataProxySettings ActiveSettings => Settings ?? DeezerMetadataProxySettings.Instance!;
 
-        public DeezerMetadataProxy(Lazy<IProxyService> proxyService, IDeezerProxy deezerProxy, Logger logger) : base(proxyService)
+        public DeezerMetadataProxy(IDeezerProxy deezerProxy, Logger logger)
         {
             _deezerProxy = deezerProxy;
             _logger = logger;
         }
 
-        public override ValidationResult Test() => new();
+        public List<Album> SearchForNewAlbum(string title, string artist) => _deezerProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
-        public override List<Album> SearchForNewAlbum(string title, string artist) => _deezerProxy.SearchNewAlbum(ActiveSettings, title, artist);
+        public List<Artist> SearchForNewArtist(string title) => _deezerProxy.SearchNewArtist(ActiveSettings, title);
 
-        public override List<Artist> SearchForNewArtist(string title) => _deezerProxy.SearchNewArtist(ActiveSettings, title);
+        public List<object> SearchForNewEntity(string title) => _deezerProxy.SearchNewEntity(ActiveSettings, title);
 
-        public override List<object> SearchForNewEntity(string title) => _deezerProxy.SearchNewEntity(ActiveSettings, title);
+        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _deezerProxy.GetAlbumInfoAsync(ActiveSettings, foreignAlbumId).GetAwaiter().GetResult();
 
-        public override Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _deezerProxy.GetAlbumInfoAsync(ActiveSettings, foreignAlbumId).GetAwaiter().GetResult();
+        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _deezerProxy.GetArtistInfoAsync(ActiveSettings, lidarrId, metadataProfileId).GetAwaiter().GetResult();
 
-        public override Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _deezerProxy.GetArtistInfoAsync(ActiveSettings, lidarrId, metadataProfileId).GetAwaiter().GetResult();
-
-        public override HashSet<string> GetChangedAlbums(DateTime startTime)
+        public HashSet<string> GetChangedAlbums(DateTime startTime)
         {
             _logger.Warn("GetChangedAlbums: Deezer API does not support change tracking; returning empty set.");
             return new HashSet<string>();
         }
 
-        public override HashSet<string> GetChangedArtists(DateTime startTime)
+        public HashSet<string> GetChangedArtists(DateTime startTime)
         {
             _logger.Warn("GetChangedArtists: Deezer API does not support change tracking; returning empty set.");
             return new HashSet<string>();
         }
 
-        public override List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
+        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
         {
             _logger.Warn("SearchNewAlbumByRecordingIds: Deezer API does not support fingerprint search; returning empty list.");
             return new List<Album>();
