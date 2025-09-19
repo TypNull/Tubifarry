@@ -11,15 +11,17 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private readonly Func<List<TResult>, TResult, bool> _containsItem;
         private readonly Func<bool> _isValidQuery;
         private readonly Func<ISupportMetadataMixing, MetadataSupportLevel> _supportSelector;
+        private readonly Type _interfaceType;
         private readonly Logger _logger;
 
-        public ProxyDecisionHandler(MixedMetadataProxy mixedProxy, Func<IProxy, List<TResult>> searchExecutor, Func<List<TResult>, TResult, bool> containsItem, Func<bool>? isValidQuery, Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector)
+        public ProxyDecisionHandler(MixedMetadataProxy mixedProxy, Func<IProxy, List<TResult>> searchExecutor, Func<List<TResult>, TResult, bool> containsItem, Func<bool>? isValidQuery, Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector, Type interfaceType)
         {
             _mixedProxy = mixedProxy;
             _searchExecutor = searchExecutor;
             _containsItem = containsItem;
             _isValidQuery = isValidQuery ?? (() => true);
             _supportSelector = supportSelector;
+            _interfaceType = interfaceType;
             _logger = NzbDroneLogger.GetLogger(this);
         }
 
@@ -28,7 +30,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             List<TResult> aggregatedItems = new();
             int bestPriority = int.MaxValue;
 
-            foreach (ProxyCandidate candidate in _mixedProxy.GetCandidateProxies(_supportSelector))
+            foreach (ProxyCandidate candidate in _mixedProxy.GetCandidateProxies(_supportSelector, _interfaceType))
             {
                 if (bestPriority == int.MaxValue)
                 {
@@ -49,7 +51,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 sw.Stop();
 
                 List<TResult> newItems = items.Where(item => !_containsItem(aggregatedItems, item)).ToList();
-
                 aggregatedItems.AddRange(newItems);
 
                 int newCount = newItems.Count;

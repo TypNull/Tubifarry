@@ -39,6 +39,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
         [FieldDefinition(0, Label = "Metadata Source", Type = FieldType.Url, Placeholder = "https://api.musicinfo.pro", Section = MetadataSectionType.Metadata, HelpText = "URL to a compatible MusicBrainz API instance.")]
         public string MetadataSource { get; set; } = string.Empty;
 
+        [FieldDefinition(1, Label = "Proxy Spotify", Type = FieldType.Checkbox, HelpText = "Enable if this metadata source can handle Spotify API requests.")]
+        public bool CanProxySpotify { get; set; }
+
         [FieldDefinition(99, Label = "Warning", Type = FieldType.Checkbox, HelpText = "Use at your own risk. This feature could void your Servarr support.")]
         public bool UseAtOwnRisk { get; set; }
 

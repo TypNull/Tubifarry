@@ -1,4 +1,5 @@
-﻿using NzbDrone.Core.MetadataSource;
+﻿using NzbDrone.Common.Http;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider
@@ -59,5 +60,15 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
                 typeof(ISearchForNewEntity),
                 nameof(SearchForNewEntity),
                 title);
+    }
+
+    public class MetadataRequestBuilderWrapper : ProxyWrapperBase, IMetadataRequestBuilder
+    {
+        public MetadataRequestBuilderWrapper(Lazy<IProxyService> proxyService) : base(proxyService) { }
+
+        public IHttpRequestBuilderFactory GetRequestBuilder() =>
+           InvokeProxyMethod<IHttpRequestBuilderFactory>(
+               typeof(IMetadataRequestBuilder),
+               nameof(GetRequestBuilder));
     }
 }

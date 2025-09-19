@@ -1,6 +1,9 @@
 ﻿using NLog;
 using NzbDrone.Common.Cache;
+using NzbDrone.Common.Cloud;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
+using NzbDrone.Core.Configuration;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.MetadataSource.SkyHook;
 using NzbDrone.Core.Music;
@@ -16,9 +19,12 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
     [ProxyFor(typeof(ISearchForNewArtist), 100)]
     [ProxyFor(typeof(ISearchForNewAlbum), 100)]
     [ProxyFor(typeof(ISearchForNewEntity), 100)]
+    [ProxyFor(typeof(IMetadataRequestBuilder), 100)]
     public class SkyHookMetadataProxy : ProxyBase<SykHookMetadataProxySettings>, ISupportMetadataMixing
     {
         private readonly SkyHookProxy _skyHookProxy;
+        private readonly IConfigService _configService;
+        private readonly ILidarrCloudRequestBuilder _defaultRequestFactory;
 
         public override string Name => "Lidarr Default";
 
@@ -27,11 +33,15 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
             IMetadataRequestBuilder requestBuilder,
             IArtistService artistService,
             IAlbumService albumService,
-            Logger logger,
+            IConfigService configService,
+            ILidarrCloudRequestBuilder defaultRequestBuilder,
             IMetadataProfileService metadataProfileService,
-            ICacheManager cacheManager)
+            ICacheManager cacheManager,
+            Logger logger)
         {
             _skyHookProxy = new SkyHookProxy(httpClient, requestBuilder, artistService, albumService, logger, metadataProfileService, cacheManager);
+            _configService = configService;
+            _defaultRequestFactory = defaultRequestBuilder;
         }
 
         public Artist GetArtistInfo(string lidarrId, int metadataProfileId) =>
@@ -57,6 +67,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
 
         public List<object> SearchForNewEntity(string title) =>
             _skyHookProxy.SearchForNewEntity(title);
+
+        public IHttpRequestBuilderFactory GetRequestBuilder()
+        {
+            return _configService.MetadataSource.IsNotNullOrWhiteSpace() ?
+            new HttpRequestBuilder(_configService.MetadataSource.TrimEnd("/") + "/{route}").KeepAlive().CreateFactory()
+            : _defaultRequestFactory.Search;
+        }
 
         // ISupportMetadataMixing implementation
 

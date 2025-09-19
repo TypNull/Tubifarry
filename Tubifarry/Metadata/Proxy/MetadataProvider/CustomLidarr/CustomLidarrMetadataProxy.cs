@@ -1,4 +1,8 @@
-﻿using NzbDrone.Core.Extras.Metadata;
+﻿using NzbDrone.Common.Cloud;
+using NzbDrone.Common.Extensions;
+using NzbDrone.Common.Http;
+using NzbDrone.Core.Configuration;
+using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
@@ -12,33 +16,62 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
     [ProxyFor(typeof(ISearchForNewArtist))]
     [ProxyFor(typeof(ISearchForNewAlbum))]
     [ProxyFor(typeof(ISearchForNewEntity))]
+    [ProxyFor(typeof(IMetadataRequestBuilder))]
     public class CustomLidarrMetadataProxy : ProxyBase<CustomLidarrMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly ICustomLidarrProxy _customLidarrProxy;
+        private readonly IConfigService _configService;
+        private readonly ILidarrCloudRequestBuilder _defaultRequestFactory;
 
         public override string Name => "Lidarr Custom";
         private static CustomLidarrMetadataProxySettings ActiveSettings => CustomLidarrMetadataProxySettings.Instance!;
 
-        public CustomLidarrMetadataProxy(ICustomLidarrProxy customLidarrProxy) : base()
+        public CustomLidarrMetadataProxy(IConfigService configService, ILidarrCloudRequestBuilder defaultRequestBuilder, ICustomLidarrProxy customLidarrProxy)
         {
             _customLidarrProxy = customLidarrProxy;
+            _configService = configService;
+            _defaultRequestFactory = defaultRequestBuilder;
         }
 
-        public List<Album> SearchForNewAlbum(string title, string artist) => _customLidarrProxy.SearchNewAlbum(ActiveSettings, title, artist);
+        public List<Album> SearchForNewAlbum(string title, string artist) =>
+            _customLidarrProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
-        public List<Artist> SearchForNewArtist(string title) => _customLidarrProxy.SearchNewArtist(ActiveSettings, title);
+        public List<Artist> SearchForNewArtist(string title) =>
+            _customLidarrProxy.SearchNewArtist(ActiveSettings, title);
 
-        public List<object> SearchForNewEntity(string title) => _customLidarrProxy.SearchNewEntity(ActiveSettings, title);
+        public List<object> SearchForNewEntity(string title) =>
+            _customLidarrProxy.SearchNewEntity(ActiveSettings, title);
 
-        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) => _customLidarrProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
+        public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string foreignAlbumId) =>
+            _customLidarrProxy.GetAlbumInfo(ActiveSettings, foreignAlbumId);
 
-        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) => _customLidarrProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
+        public Artist GetArtistInfo(string lidarrId, int metadataProfileId) =>
+            _customLidarrProxy.GetArtistInfo(ActiveSettings, lidarrId, metadataProfileId);
 
-        public HashSet<string> GetChangedAlbums(DateTime startTime) => _customLidarrProxy.GetChangedAlbums(ActiveSettings, startTime);
+        public HashSet<string> GetChangedAlbums(DateTime startTime) =>
+            _customLidarrProxy.GetChangedAlbums(ActiveSettings, startTime);
 
-        public HashSet<string> GetChangedArtists(DateTime startTime) => _customLidarrProxy.GetChangedArtists(ActiveSettings, startTime);
+        public HashSet<string> GetChangedArtists(DateTime startTime) =>
+            _customLidarrProxy.GetChangedArtists(ActiveSettings, startTime);
 
-        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) => _customLidarrProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
+        public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) =>
+            _customLidarrProxy.SearchNewAlbumByRecordingIds(ActiveSettings, recordingIds);
+
+        public IHttpRequestBuilderFactory GetRequestBuilder()
+        {
+            if (Settings?.MetadataSource?.IsNotNullOrWhiteSpace() == true && ActiveSettings.CanProxySpotify)
+            {
+                return new HttpRequestBuilder(Settings?.MetadataSource.TrimEnd("/") + "/{route}").KeepAlive().CreateFactory();
+            }
+            else if (_configService.MetadataSource.IsNotNullOrWhiteSpace())
+            {
+                return new HttpRequestBuilder(_configService.MetadataSource.TrimEnd("/") + "/{route}").KeepAlive().CreateFactory();
+            }
+            else
+            {
+                return _defaultRequestFactory.Search;
+            }
+        }
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {

@@ -1,8 +1,10 @@
 ﻿using FuzzySharp;
 using NLog;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
+using System.Reflection;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 {
@@ -12,6 +14,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
     [ProxyFor(typeof(ISearchForNewArtist))]
     [ProxyFor(typeof(ISearchForNewAlbum))]
     [ProxyFor(typeof(ISearchForNewEntity))]
+    [ProxyFor(typeof(IMetadataRequestBuilder))]
     public class MixedMetadataProxy : MixedProxyBase<MixedMetadataProxySettings>
     {
         public override string Name => "MetaMix";
@@ -36,7 +39,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
         public Tuple<string, Album, List<ArtistMetadata>> GetAlbumInfo(string id)
         {
-            List<ProxyCandidate> candidates = GetCandidateProxies(x => x.CanHandleId(id));
+            List<ProxyCandidate> candidates = GetCandidateProxies(x => x.CanHandleId(id), typeof(IProvideAlbumInfo));
 
             if (!candidates.Any())
                 throw new NotImplementedException($"No proxy available to handle album id: {id}");
@@ -72,8 +75,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 searchExecutor: proxy => InvokeProxyMethod<List<Artist>>(proxy, nameof(SearchForNewArtist), artistName),
                 containsItem: ContainsArtist,
                 isValidQuery: () => IsValidQuery(artistName),
-                supportSelector: s => s.CanHandleSearch(artistName: artistName)
-            ).ExecuteSearch();
+                supportSelector: s => s.CanHandleSearch(artistName: artistName),
+                interfaceType: typeof(ISearchForNewArtist)
+                ).ExecuteSearch();
 
         public List<Album> SearchForNewAlbum(string albumTitle, string artistName) =>
             new ProxyDecisionHandler<Album>(
@@ -81,7 +85,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 searchExecutor: proxy => InvokeProxyMethod<List<Album>>(proxy, nameof(SearchForNewAlbum), albumTitle, artistName),
                 containsItem: ContainsAlbum,
                 isValidQuery: () => IsValidQuery(albumTitle, artistName),
-                supportSelector: s => s.CanHandleSearch(albumTitle, artistName)
+                supportSelector: s => s.CanHandleSearch(albumTitle, artistName),
+                interfaceType: typeof(ISearchForNewAlbum)
             ).ExecuteSearch();
 
         public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds) =>
@@ -90,7 +95,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 searchExecutor: proxy => InvokeProxyMethod<List<Album>>(proxy, nameof(SearchForNewAlbumByRecordingIds), recordingIds),
                 containsItem: ContainsAlbum,
                 isValidQuery: () => true,
-                supportSelector: s => s.CanHandleIRecordingIds(recordingIds.ToArray())
+                supportSelector: s => s.CanHandleIRecordingIds(recordingIds.ToArray()),
+                interfaceType: typeof(ISearchForNewAlbum)
             ).ExecuteSearch();
 
         public List<object> SearchForNewEntity(string albumTitle) =>
@@ -99,8 +105,29 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 searchExecutor: proxy => InvokeProxyMethod<List<object>>(proxy, nameof(SearchForNewEntity), albumTitle),
                 containsItem: ContainsEntity,
                 isValidQuery: () => IsValidQuery(albumTitle),
-                supportSelector: s => s.CanHandleSearch(albumTitle: albumTitle)
+                supportSelector: s => s.CanHandleSearch(albumTitle: albumTitle),
+                interfaceType: typeof(ISearchForNewEntity)
             ).ExecuteSearch();
+
+        private List<Artist> ExecuteArtistSearch(string lidarrId, int metadataProfileId, Artist? baseArtist, HashSet<IProxy> usedProxies) =>
+            new ProxyDecisionHandler<Artist>(
+                mixedProxy: this,
+                searchExecutor: proxy => ExecuteSingleProxyArtistSearch(proxy, lidarrId, metadataProfileId, baseArtist, usedProxies),
+                containsItem: ContainsArtistInfo,
+                isValidQuery: null,
+                supportSelector: s => DetermineSupportLevel(s, lidarrId, baseArtist),
+                interfaceType: typeof(IProvideArtistInfo)
+                ).ExecuteSearch();
+
+        public IHttpRequestBuilderFactory GetRequestBuilder()
+        {
+            List<ProxyCandidate> candidates = GetCandidateProxies(_ => MetadataSupportLevel.Supported, typeof(IMetadataRequestBuilder));
+
+            if (!candidates.Any())
+                throw new InvalidOperationException("No proxy available to handle IMetadataRequestBuilder");
+
+            return InvokeProxyMethod<IHttpRequestBuilderFactory>(candidates[0].Proxy, nameof(GetRequestBuilder));
+        }
 
         #endregion
 
@@ -109,15 +136,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             if (MixedMetadataProxySettings.Instance?.DynamicThresholdMode == true)
                 _adaptiveThreshold.LoadConfig(MixedMetadataProxySettings.Instance?.WeightsPath);
         }
-
-        private List<Artist> ExecuteArtistSearch(string lidarrId, int metadataProfileId, Artist? baseArtist, HashSet<IProxy> usedProxies) =>
-            new ProxyDecisionHandler<Artist>(
-                mixedProxy: this,
-                searchExecutor: proxy => ExecuteSingleProxyArtistSearch(proxy, lidarrId, metadataProfileId, baseArtist, usedProxies),
-                containsItem: ContainsArtistInfo,
-                isValidQuery: null,
-                supportSelector: s => DetermineSupportLevel(s, lidarrId, baseArtist)
-            ).ExecuteSearch();
 
         private List<Artist> ExecuteSingleProxyArtistSearch(IProxy proxy, string lidarrId, int metadataProfileId, Artist? baseArtist, HashSet<IProxy> usedProxies)
         {
@@ -232,10 +250,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             validArtists.Where(a => a != mergedArtist).ToList()
             .ForEach(artist => MergeArtists(mergedArtist, artist));
 
-        internal List<ProxyCandidate> GetCandidateProxies(Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector)
+        internal List<ProxyCandidate> GetCandidateProxies(Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector, Type interfaceType)
         {
             List<ProxyCandidate> candidates = ProxyService.Value.ActiveProxies
-                .Where(p => p != this && p is ISupportMetadataMixing)
+                .Where(p => p != this && (p is ISupportMetadataMixing || SupportsInterface(p, interfaceType)))
                 .Select(p => CreateProxyCandidate(p, supportSelector))
                 .Where(c => c.Support != MetadataSupportLevel.Unsupported)
                 .ToList();
@@ -251,7 +269,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         {
             Proxy = proxy,
             Priority = GetPriority(proxy.Name ?? string.Empty),
-            Support = supportSelector((ISupportMetadataMixing)proxy)
+            Support = (proxy is ISupportMetadataMixing mixingProxy) ? supportSelector(mixingProxy) : MetadataSupportLevel.Supported
         };
 
         private static void BoostInternalProxyPriorities(List<ProxyCandidate> candidates)
@@ -264,7 +282,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private HashSet<string> GetChanged(Func<IProxy, HashSet<string>> func)
         {
             HashSet<string> result = new();
-            List<ProxyCandidate> candidates = GetCandidateProxies(x => x.CanHandleChanged());
+            List<ProxyCandidate> candidates = GetCandidateProxies(x => x.CanHandleChanged(), null!);
 
             foreach (IProxy? proxy in candidates.Select(c => c.Proxy))
             {
@@ -309,6 +327,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             < 50 => 3,
             _ => 1
         };
+
+        private static bool SupportsInterface(IProxy proxy, Type interfaceType) =>
+            proxy.GetType().GetCustomAttributes<ProxyForAttribute>()
+            .Any(attr => attr.OriginalInterface == interfaceType);
 
         private static bool HasValidAlbumData(Artist? artist) =>
             artist?.Albums?.Value != null && artist.Albums.Value.Count > 0;
@@ -356,7 +378,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private static void EnsureAlbumsCollection(Artist artist) =>
             artist.Albums ??= new LazyLoaded<List<Album>>(new List<Album>());
 
-
         private static void MergeLinks(Artist baseArtist, Artist newArtist)
         {
             List<Links>? newLinks = newArtist.Metadata?.Value?.Links?
@@ -384,7 +405,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             artist.Albums = artist.Albums.Value.Union(uniqueOldAlbums).ToList();
             return artist;
         }
-
         #endregion
     }
 }
