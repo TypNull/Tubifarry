@@ -1,4 +1,4 @@
-﻿using NzbDrone.Common.Http;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.ImportLists;
 
 namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
@@ -6,7 +6,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
     public class ListenBrainzCFRecommendationsRequestGenerator : IImportListRequestGenerator
     {
         private readonly ListenBrainzCFRecommendationsSettings _settings;
-        private const int MAX_ITEMS_PER_REQUEST = 100; // ListenBrainz API limit
+        private const int MaxItemsPerRequest = 100;
 
         public ListenBrainzCFRecommendationsRequestGenerator(ListenBrainzCFRecommendationsSettings settings)
         {
@@ -22,34 +22,30 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
 
         private IEnumerable<ImportListRequest> GetPagedRequests()
         {
-            int totalToFetch = _settings.Count;
-            int totalRequested = 0;
-            int offset = 0;
+            int requestsNeeded = (_settings.Count + MaxItemsPerRequest - 1) / MaxItemsPerRequest;
 
-            // Generate multiple paginated requests if count > MAX_ITEMS_PER_REQUEST
-            while (totalRequested < totalToFetch)
+            return Enumerable.Range(0, requestsNeeded)
+                .Select(page => CreateRequest(page * MaxItemsPerRequest, Math.Min(MaxItemsPerRequest, _settings.Count - (page * MaxItemsPerRequest))))
+                .Where(request => request != null);
+        }
+
+        private ImportListRequest CreateRequest(int offset, int count)
+        {
+            if (count <= 0)
+                return null!;
+
+            HttpRequestBuilder requestBuilder = new HttpRequestBuilder(_settings.BaseUrl)
+                .Accept(HttpAccept.Json);
+
+            if (!string.IsNullOrEmpty(_settings.UserToken))
             {
-                int currentPageSize = Math.Min(totalToFetch - totalRequested, MAX_ITEMS_PER_REQUEST);
-
-                HttpRequestBuilder requestBuilder = new HttpRequestBuilder(_settings.BaseUrl)
-                    .Accept(HttpAccept.Json);
-
-                if (!string.IsNullOrEmpty(_settings.UserToken))
-                {
-                    requestBuilder.SetHeader("Authorization", $"Token {_settings.UserToken}");
-                }
-
-                HttpRequest request = requestBuilder.Build();
-                request.Url = new HttpUri($"{_settings.BaseUrl}/1/cf/recommendation/user/{_settings.UserName}/recording?count={currentPageSize}&offset={offset}");
-
-                yield return new ImportListRequest(request);
-
-                totalRequested += currentPageSize;
-                offset += currentPageSize;
-
-                if (currentPageSize < MAX_ITEMS_PER_REQUEST)
-                    break;
+                requestBuilder.SetHeader("Authorization", $"Token {_settings.UserToken}");
             }
+
+            HttpRequest request = requestBuilder.Build();
+            request.Url = new HttpUri($"{_settings.BaseUrl}/1/cf/recommendation/user/{_settings.UserName}/recording?count={count}&offset={offset}");
+
+            return new ImportListRequest(request);
         }
     }
 }

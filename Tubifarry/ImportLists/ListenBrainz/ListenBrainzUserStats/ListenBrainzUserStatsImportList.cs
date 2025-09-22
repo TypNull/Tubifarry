@@ -1,4 +1,4 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Http;
@@ -16,7 +16,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
         public override string Name => "ListenBrainz User Stats";
         public override ImportListType ListType => ImportListType.Other;
         public override TimeSpan MinRefreshInterval => TimeSpan.FromDays(1);
-        public override int PageSize => 0; // No pagination
+        public override int PageSize => 0;
         public override TimeSpan RateLimit => TimeSpan.FromMilliseconds(200);
 
         public ListenBrainzUserStatsImportList(IHttpClient httpClient,
@@ -24,56 +24,51 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
                                    IConfigService configService,
                                    IParsingService parsingService,
                                    Logger logger)
-            : base(httpClient, importListStatusService, configService, parsingService, logger)
-        {
-        }
+            : base(httpClient, importListStatusService, configService, parsingService, logger) { }
 
-        public override IImportListRequestGenerator GetRequestGenerator()
-        {
-            return new ListenBrainzUserStatsRequestGenerator(Settings);
-        }
+        public override IImportListRequestGenerator GetRequestGenerator() =>
+            new ListenBrainzUserStatsRequestGenerator(Settings);
 
-        public override IParseImportListResponse GetParser()
-        {
-            return new ListenBrainzUserStatsParser(Settings);
-        }
+        public override IParseImportListResponse GetParser() =>
+            new ListenBrainzUserStatsParser(Settings);
 
-        protected override void Test(List<ValidationFailure> failures)
-        {
+        protected override bool IsValidRelease(ImportListItemInfo release) =>
+            release.AlbumMusicBrainzId.IsNotNullOrWhiteSpace() ||
+            release.ArtistMusicBrainzId.IsNotNullOrWhiteSpace() ||
+            (!release.Album.IsNullOrWhiteSpace() || !release.Artist.IsNullOrWhiteSpace());
+
+        protected override void Test(List<ValidationFailure> failures) =>
             failures.AddIfNotNull(TestConnection());
-        }
 
         protected override ValidationFailure TestConnection()
         {
             try
             {
-                IImportListRequestGenerator generator = GetRequestGenerator();
-                ImportListPageableRequest requests = generator.GetListItems().GetAllTiers().First();
+                ImportListRequest? firstRequest = GetRequestGenerator()
+                    .GetListItems()
+                    .GetAllTiers()
+                    .FirstOrDefault()?
+                    .FirstOrDefault();
 
-                if (!requests.Any())
+                if (firstRequest == null)
                 {
-                    return new ValidationFailure(string.Empty, "No requests generated. Check your configuration.");
+                    return new ValidationFailure(string.Empty, "No requests generated, check your configuration");
                 }
 
-                ImportListRequest firstRequest = requests.First();
                 ImportListResponse response = FetchImportListResponse(firstRequest);
 
                 if (response.HttpResponse.StatusCode == HttpStatusCode.NoContent)
                 {
-                    return new ValidationFailure(string.Empty, "No statistics available yet for this user and time range. Statistics are calculated periodically by ListenBrainz.");
+                    return new ValidationFailure(string.Empty, "No statistics available for this user and time range. Statistics are calculated periodically by ListenBrainz");
                 }
 
                 if (response.HttpResponse.StatusCode != HttpStatusCode.OK)
                 {
-                    return new ValidationFailure(string.Empty,
-                        $"Connection failed: HTTP {(int)response.HttpResponse.StatusCode} ({response.HttpResponse.StatusCode})");
+                    return new ValidationFailure(string.Empty, $"Connection failed with HTTP {(int)response.HttpResponse.StatusCode} ({response.HttpResponse.StatusCode})");
                 }
 
-                IParseImportListResponse parser = GetParser();
-                IList<ImportListItemInfo> items = parser.ParseResponse(response);
-
-                _logger.Info($"Test successful, found {items.Count} items");
-                return null;
+                IList<ImportListItemInfo> items = GetParser().ParseResponse(response);
+                return null!;
             }
             catch (ImportListException ex)
             {
@@ -83,7 +78,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
             catch (Exception ex)
             {
                 _logger.Error(ex, "Test connection failed");
-                return new ValidationFailure(string.Empty, "Configuration error - check logs for details");
+                return new ValidationFailure(string.Empty, "Configuration error, check logs for details");
             }
         }
     }

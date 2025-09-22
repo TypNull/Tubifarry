@@ -3,20 +3,15 @@ using NzbDrone.Core.Annotations;
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.Validation;
 
-namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylists
+namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
 {
-    public class ListenBrainzPlaylistsSettingsValidator : AbstractValidator<ListenBrainzPlaylistsSettings>
+    public class ListenBrainzCreatedForPlaylistSettingsValidator : AbstractValidator<ListenBrainzCreatedForPlaylistSettings>
     {
-        public ListenBrainzPlaylistsSettingsValidator()
+        public ListenBrainzCreatedForPlaylistSettingsValidator()
         {
             RuleFor(c => c.UserName)
                 .NotEmpty()
                 .WithMessage("ListenBrainz username is required");
-
-            RuleFor(c => c.MaxPlaylists)
-                .GreaterThan(0)
-                .LessThanOrEqualTo(500)
-                .WithMessage("Max playlists must be between 1 and 500");
 
             RuleFor(c => c.RefreshInterval)
                 .GreaterThanOrEqualTo(1)
@@ -24,16 +19,15 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylists
         }
     }
 
-    public class ListenBrainzPlaylistsSettings : IImportListSettings
+    public class ListenBrainzCreatedForPlaylistSettings : IImportListSettings
     {
-        private static readonly ListenBrainzPlaylistsSettingsValidator Validator = new();
+        private static readonly ListenBrainzCreatedForPlaylistSettingsValidator Validator = new();
 
-        public ListenBrainzPlaylistsSettings()
+        public ListenBrainzCreatedForPlaylistSettings()
         {
             BaseUrl = "https://api.listenbrainz.org";
             RefreshInterval = 7;
             PlaylistType = (int)ListenBrainzPlaylistType.DailyJams;
-            MaxPlaylists = 50; // Default to 50 playlists
         }
 
         public string BaseUrl { get; set; }
@@ -46,9 +40,6 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylists
 
         [FieldDefinition(2, Label = "Playlist Type", Type = FieldType.Select, SelectOptions = typeof(ListenBrainzPlaylistType), HelpText = "Type of created-for playlist to fetch")]
         public int PlaylistType { get; set; }
-
-        [FieldDefinition(3, Label = "Max Playlists", Type = FieldType.Number, HelpText = "Maximum number of playlists to fetch and process (1-500)")]
-        public int MaxPlaylists { get; set; }
 
         [FieldDefinition(4, Label = "Refresh Interval", Type = FieldType.Textbox, HelpText = "Interval between refreshes in days", Unit = "days", Advanced = true)]
         public double RefreshInterval { get; set; }

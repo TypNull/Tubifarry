@@ -1,5 +1,4 @@
-﻿// ListenBrainzCFRecommendationsSettings.cs
-using FluentValidation;
+﻿using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.Validation;
