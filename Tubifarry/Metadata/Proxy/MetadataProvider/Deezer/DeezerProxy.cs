@@ -175,6 +175,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 () => apiService.GetAlbumAsync(int.Parse(RemoveIdentifier(foreignAlbumId)))!)
                 ?? throw new Exception("Album not found from Deezer API.");
 
+            albumDetails = await EnsureAllTracksAsync(albumDetails, apiService);
+
             Artist? existingArtist = existingAlbum?.Artist?.Value ?? _artistService.FindById(albumDetails.Artist.Id + _identifier);
             if (existingArtist == null)
             {
@@ -187,6 +189,19 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
 
             _logger.Trace("Completed processing for AlbumId: {0}", foreignAlbumId);
             return new Tuple<string, Album, List<ArtistMetadata>>(existingArtist.ForeignArtistId, finalAlbum, new List<ArtistMetadata> { existingArtist.Metadata.Value });
+        }
+
+        private async Task<DeezerAlbum> EnsureAllTracksAsync(DeezerAlbum album, DeezerApiService apiService)
+        {
+            if (album.NumberOfTracks > 25 && (album.Tracks?.Data?.Count ?? 0) < album.NumberOfTracks)
+            {
+                string tracksCacheKey = $"album-tracks:{album.Id}" + _identifier;
+                List<DeezerTrack>? allTracks = await _cache.FetchAndCacheAsync<List<DeezerTrack>>(tracksCacheKey,
+                    () => apiService.GetAlbumDataAsync<DeezerTrack>(album.Id)!);
+                if (allTracks != null && allTracks.Count > (album.Tracks?.Data?.Count ?? 0))
+                    return album with { Tracks = new DeezerTrackWrapper(allTracks) };
+            }
+            return album;
         }
 
         public async Task<Artist> GetArtistInfoAsync(DeezerMetadataProxySettings settings, string foreignArtistId, int metadataProfileId)
