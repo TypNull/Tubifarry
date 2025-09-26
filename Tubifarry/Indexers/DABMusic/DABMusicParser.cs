@@ -1,6 +1,7 @@
 ﻿using NLog;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
+using System.Text;
 using System.Text.Json;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
@@ -41,7 +42,7 @@ namespace Tubifarry.Indexers.DABMusic
             return releases;
         }
 
-        private void ProcessItems<T>(IList<T>? items, Func<T, AlbumData> createData, List<ReleaseInfo> releases)
+        private static void ProcessItems<T>(IList<T>? items, Func<T, AlbumData> createData, List<ReleaseInfo> releases)
         {
             if ((items?.Count ?? 0) <= 0)
                 return;
@@ -57,15 +58,14 @@ namespace Tubifarry.Indexers.DABMusic
         private static AlbumData CreateAlbumData(DABMusicAlbum album)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQuality(album.AudioQuality);
-
             long estimatedSize = album.TrackCount * 50 * 1024 * 1024; // ~50MB per track estimate
 
             return new("DABMusic", nameof(QobuzDownloadProtocol))
             {
-                AlbumId = $"album:{album.Id}",
+                AlbumId = $"https://www.qobuz.com/us-en/album/{SanitizeForUrl(album.Title)}-{SanitizeForUrl(album.Artist)}/{album.Id}",
                 AlbumName = album.Title,
                 ArtistName = album.Artist,
-                InfoUrl = "https://dabmusic.xyz/",
+                InfoUrl = $"https://www.qobuz.com/us-en/album/{SanitizeForUrl(album.Title)}-{SanitizeForUrl(album.Artist)}/{album.Id}",
                 TotalTracks = album.TrackCount > 0 ? album.TrackCount : 1,
                 ReleaseDate = album.ReleaseDate ?? DateTime.Now.Year.ToString(),
                 ReleaseDatePrecision = "day",
@@ -80,16 +80,15 @@ namespace Tubifarry.Indexers.DABMusic
         private static AlbumData CreateTrackData(DABMusicTrack track)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQuality(track.AudioQuality);
-
             long estimatedSize = track.Duration * bitrate * 1000 / 8; // bitrate to bytes per second
             if (estimatedSize <= 0) estimatedSize = 50 * 1024 * 1024; // 50MB fallback
 
             return new("DABMusic", nameof(QobuzDownloadProtocol))
             {
-                AlbumId = $"album:{track.Id}",
+                AlbumId = $"https://www.qobuz.com/us-en/track/{SanitizeForUrl(track.DisplayAlbum)}-{SanitizeForUrl(track.Artist)}/{track.Id}",
                 AlbumName = track.DisplayAlbum,
                 ArtistName = track.Artist,
-                InfoUrl = "https://dabmusic.xyz/",
+                InfoUrl = $"https://www.qobuz.com/us-en/track/{SanitizeForUrl(track.DisplayAlbum)}-{SanitizeForUrl(track.Artist)}/{track.Id}",
                 TotalTracks = 1,
                 ReleaseDate = track.ReleaseDate ?? DateTime.Now.Year.ToString(),
                 ReleaseDatePrecision = "day",
@@ -101,6 +100,14 @@ namespace Tubifarry.Indexers.DABMusic
                 Size = estimatedSize
             };
         }
+
+        private static string SanitizeForUrl(string input) => input.ToLowerInvariant()
+                .Replace(" ", "-")
+                .Replace("&", "and")
+                .Where(c => char.IsLetterOrDigit(c) || c == '-')
+                .Aggregate(new StringBuilder(), (sb, c) => sb.Append(c))
+                .ToString()
+                .Trim('-');
 
         private static (AudioFormat Format, int Bitrate, int BitDepth) GetQuality(DABMusicAudioQuality? audioQuality)
         {

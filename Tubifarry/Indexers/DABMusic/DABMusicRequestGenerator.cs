@@ -27,14 +27,14 @@ namespace Tubifarry.Indexers.DABMusic
         {
             string query = string.Join(' ', new[] { searchCriteria.AlbumQuery, searchCriteria.ArtistQuery }.Where(s => !string.IsNullOrWhiteSpace(s)));
             bool isSingle = searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value?.Min(r => r.TrackCount) == 1;
-            return Generate(query, isSingle ? "track" : "album");
+            return Generate(query, isSingle);
         }
 
-        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria) => Generate(searchCriteria.ArtistQuery, "all");
+        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria) => Generate(searchCriteria.ArtistQuery, false);
 
         public void SetSetting(DABMusicIndexerSettings settings) => _settings = settings;
 
-        private IndexerPageableRequestChain Generate(string query, string searchType)
+        private IndexerPageableRequestChain Generate(string query, bool isSingle)
         {
             IndexerPageableRequestChain chain = new();
             if (string.IsNullOrWhiteSpace(query))
@@ -45,23 +45,16 @@ namespace Tubifarry.Indexers.DABMusic
 
             string baseUrl = _settings!.BaseUrl.TrimEnd('/');
 
-            string url = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type={searchType}&limit={_settings.SearchLimit}";
+            string url = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type=album&limit={_settings.SearchLimit}";
             _logger.Trace("Creating DABMusic search request: {Url}", url);
-            chain.Add(new[] { CreateRequest(url, baseUrl, searchType) });
+            chain.Add(new[] { CreateRequest(url, baseUrl, "album") });
 
-            if (searchType == "track")
-            {
-                string albumFallbackUrl = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type=album&limit={_settings.SearchLimit}";
-                _logger.Trace("Adding album fallback search request: {Url}", albumFallbackUrl);
-                chain.AddTier(new[] { CreateRequest(albumFallbackUrl, baseUrl, "album") });
-            }
-            else if (searchType == "album")
+            if (isSingle)
             {
                 string fallbackUrl = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type=all&limit={_settings.SearchLimit}";
                 _logger.Trace("Adding fallback search request: {Url}", fallbackUrl);
                 chain.AddTier(new[] { CreateRequest(fallbackUrl, baseUrl, "all") });
             }
-
             return chain;
         }
 

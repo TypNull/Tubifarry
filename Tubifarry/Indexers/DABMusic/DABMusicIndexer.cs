@@ -47,7 +47,7 @@ namespace Tubifarry.Indexers.DABMusic
 
             try
             {
-                HttpRequest req = new($"{baseUrl}");
+                HttpRequest req = new(baseUrl);
                 req.Headers["User-Agent"] = Tubifarry.UserAgent;
                 HttpResponse response = await _httpClient.ExecuteAsync(req);
 
