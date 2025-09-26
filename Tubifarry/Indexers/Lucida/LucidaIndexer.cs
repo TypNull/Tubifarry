@@ -21,8 +21,6 @@ namespace Tubifarry.Indexers.Lucida
         public override int PageSize => 100;
         public override TimeSpan RateLimit => TimeSpan.FromSeconds(2);
 
-        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
-
         public override ProviderMessage Message => new(
             "Lucida is an interface for searching music across streaming services. " +
             "Configure your service priorities and countries in settings.",
@@ -54,7 +52,7 @@ namespace Tubifarry.Indexers.Lucida
             try
             {
                 HttpRequest req = new(baseUrl);
-                req.Headers["User-Agent"] = UserAgent;
+                req.Headers["User-Agent"] = Tubifarry.UserAgent;
                 HttpResponse response = await _httpClient.ExecuteAsync(req);
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {

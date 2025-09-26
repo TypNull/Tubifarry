@@ -209,31 +209,15 @@ namespace Tubifarry.Download.Clients.YouTube
             }
         }
 
-        private record SponsorSegment
-        {
-            [JsonPropertyName("segment")]
-            public double[]? Segment { get; init; }
-
-            [JsonPropertyName("UUID")]
-            public string? UUID { get; init; }
-
-            [JsonPropertyName("category")]
-            public string? Category { get; init; }
-
-            [JsonPropertyName("videoDuration")]
-            public double VideoDuration { get; init; }
-
-            [JsonPropertyName("actionType")]
-            public string? ActionType { get; init; }
-
-            [JsonPropertyName("locked")]
-            public int Locked { get; init; }
-
-            [JsonPropertyName("votes")]
-            public int Votes { get; init; }
-
-            [JsonPropertyName("description")]
-            public string? Description { get; init; }
-        }
+        private record SponsorSegment(
+            [property: JsonPropertyName("segment")] double[]? Segment,
+            [property: JsonPropertyName("UUID")] string? UUID,
+            [property: JsonPropertyName("category")] string? Category,
+            [property: JsonPropertyName("videoDuration")] double VideoDuration,
+            [property: JsonPropertyName("actionType")] string? ActionType,
+            [property: JsonPropertyName("locked")] int Locked,
+            [property: JsonPropertyName("votes")] int Votes,
+            [property: JsonPropertyName("description")] string? Description
+        );
     }
 }

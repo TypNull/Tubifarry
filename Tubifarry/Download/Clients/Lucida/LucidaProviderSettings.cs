@@ -10,6 +10,12 @@ namespace Tubifarry.Download.Clients.Lucida
     {
         public LucidaProviderSettingsValidator()
         {
+            // Validate BaseUrl
+            RuleFor(x => x.BaseUrl)
+                .NotEmpty().WithMessage("Base URL is required.")
+                .Must(url => Uri.IsWellFormedUriString(url, UriKind.Absolute))
+                .WithMessage("Base URL must be a valid URL.");
+
             // Validate DownloadPath
             RuleFor(x => x.DownloadPath)
                 .IsValidPath()
@@ -52,6 +58,9 @@ namespace Tubifarry.Download.Clients.Lucida
         [FieldDefinition(0, Label = "Download Path", Type = FieldType.Path, HelpText = "Directory where downloaded files will be saved")]
         public string DownloadPath { get; set; } = string.Empty;
 
+        [FieldDefinition(1, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the Lucida instance", Placeholder = "https://lucida.to")]
+        public string BaseUrl { get; set; } = "https://lucida.to";
+
         [FieldDefinition(2, Type = FieldType.Number, Label = "Request Timeout", Unit = "seconds", HelpText = "Timeout for HTTP requests to Lucida", Advanced = true)]
         public int RequestTimeout { get; set; } = 30;
 
@@ -63,8 +72,6 @@ namespace Tubifarry.Download.Clients.Lucida
 
         [FieldDefinition(5, Label = "Max Download Speed", Type = FieldType.Number, HelpText = "Set to 0 for unlimited speed. Limits download speed per file.", Unit = "KB/s", Advanced = true)]
         public int MaxDownloadSpeed { get; set; }
-
-        public string? BaseUrl { get; set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

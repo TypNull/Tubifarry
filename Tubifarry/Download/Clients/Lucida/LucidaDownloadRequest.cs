@@ -1,17 +1,14 @@
 using DownloadAssistant.Options;
 using DownloadAssistant.Requests;
 using NLog;
-using NzbDrone.Common.Disk;
-using NzbDrone.Common.Instrumentation;
-using NzbDrone.Core.Download;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Download.Base;
 using Tubifarry.Indexers.Lucida;
 
 namespace Tubifarry.Download.Clients.Lucida
@@ -19,104 +16,45 @@ namespace Tubifarry.Download.Clients.Lucida
     /// <summary>
     /// Lucida download request handling track and album downloads
     /// </summary>
-    internal class LucidaDownloadRequest : Request<LucidaDownloadOptions, string, string>
+    public class LucidaDownloadRequest : BaseDownloadRequest<BaseDownloadOptions>
     {
-        #region Private Fields
+        private readonly BaseHttpClient _httpClient;
 
-        private readonly OsPath _destinationPath;
-        private readonly StringBuilder _message = new();
-        private readonly RequestContainer<IRequest> _requestContainer = new();
-        private readonly RequestContainer<LoadRequest> _trackContainer = new();
-        private readonly RemoteAlbum _remoteAlbum;
-        private readonly Album _albumData;
-        private readonly DownloadClientItem _clientItem;
-        private readonly ReleaseFormatter _releaseFormatter;
-        private readonly Logger _logger;
-        private readonly LucidaHttpClient _httpClient;
-        private int _expectedTrackCount;
-
-        // Regex pattern for sanitizing filenames
-        private static readonly Regex FileNameSanitizer = new(@"[\\/:\*\?""<>\|]", RegexOptions.Compiled);
-
-        // Progress tracking
-        private DateTime _lastUpdateTime = DateTime.MinValue;
-        private long _lastRemainingSize;
-
-        #endregion
-
-        #region Properties
-
-        private ReleaseInfo ReleaseInfo => _remoteAlbum.Release;
-        public override Task Task => _requestContainer.Task;
-        public override RequestState State => _requestContainer.State;
-        public string ID { get; } = Guid.NewGuid().ToString();
-
-        public DownloadClientItem ClientItem
+        public LucidaDownloadRequest(RemoteAlbum remoteAlbum, BaseDownloadOptions? options) : base(remoteAlbum, options)
         {
-            get
+            _httpClient = new BaseHttpClient(Options.BaseUrl, TimeSpan.FromSeconds(Options.RequestTimeout));
+
+            _requestContainer.Add(new OwnRequest(async (token) =>
             {
-                _clientItem.RemainingSize = GetRemainingSize();
-                _clientItem.Status = GetDownloadItemStatus();
-                _clientItem.RemainingTime = GetRemainingTime();
-                _clientItem.Message = GetDistinctMessages();
-                _clientItem.CanBeRemoved = HasCompleted();
-                _clientItem.CanMoveFiles = HasCompleted();
-                return _clientItem;
-            }
+                try
+                {
+                    await ProcessDownloadAsync(token);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    LogAndAppendMessage($"Error processing download: {ex.Message}", LogLevel.Error);
+                    throw;
+                }
+            }, new RequestOptions<VoidStruct, VoidStruct>()
+            {
+                CancellationToken = Token,
+                DelayBetweenAttemps = Options.DelayBetweenAttemps,
+                NumberOfAttempts = Options.NumberOfAttempts,
+                Priority = RequestPriority.Low,
+                Handler = Options.Handler
+            }));
         }
 
-        #endregion
-
-        #region Constructor
-
-        public LucidaDownloadRequest(RemoteAlbum remoteAlbum, LucidaDownloadOptions? options) : base(options)
+        protected override async Task ProcessDownloadAsync(CancellationToken token)
         {
-            _logger = NzbDroneLogger.GetLogger(this);
-            _remoteAlbum = remoteAlbum;
-            _albumData = remoteAlbum.Albums.FirstOrDefault() ?? new Album();
-            _releaseFormatter = new ReleaseFormatter(ReleaseInfo, remoteAlbum.Artist, Options.NamingConfig);
-            _requestContainer.Add(_trackContainer);
-            _expectedTrackCount = Options.IsTrack ? 1 : remoteAlbum.Albums.FirstOrDefault()?.AlbumReleases.Value?.FirstOrDefault()?.TrackCount ?? 0;
+            _logger.Trace($"Processing {(Options.IsTrack ? "track" : "album")}: {ReleaseInfo.Title}");
 
-            _httpClient = new LucidaHttpClient(Options.BaseUrl);
-
-            _destinationPath = new OsPath(Path.Combine(Options.DownloadPath, _releaseFormatter.BuildArtistFolderName(null), _releaseFormatter.BuildAlbumFilename("{Album Title}", new Album() { Title = ReleaseInfo.Title })));
-
-            _clientItem = CreateClientItem();
-            _logger.Debug($"Processing download - Type from Source: {ReleaseInfo.Source}, IsTrack: {Options.IsTrack}, URL: {Options.ItemUrl}");
-
-            ProcessDownload();
+            if (Options.IsTrack)
+                await ProcessSingleTrackAsync(Options.ItemId, token);
+            else
+                await ProcessAlbumAsync(Options.ItemId, token);
         }
-
-        #endregion
-
-        #region Main Processing Methods
-
-        private void ProcessDownload() => _requestContainer.Add(new OwnRequest(async (token) =>
-        {
-            try
-            {
-                _logger.Trace($"Processing {(Options.IsTrack ? "track" : "album")}: {ReleaseInfo.Title}");
-
-                if (Options.IsTrack)
-                    await ProcessSingleTrackAsync(Options.ItemUrl, token);
-                else
-                    await ProcessAlbumAsync(Options.ItemUrl, token);
-            }
-            catch (Exception ex)
-            {
-                LogAndAppendMessage($"Error processing download: {ex.Message}", LogLevel.Error);
-                throw;
-            }
-            return true;
-        }, new RequestOptions<VoidStruct, VoidStruct>()
-        {
-            CancellationToken = Token,
-            DelayBetweenAttemps = Options.DelayBetweenAttemps,
-            NumberOfAttempts = Options.NumberOfAttempts,
-            Priority = RequestPriority.Low,
-            Handler = Options.Handler
-        }));
 
         private async Task ProcessSingleTrackAsync(string downloadUrl, CancellationToken token)
         {
@@ -125,7 +63,28 @@ namespace Tubifarry.Download.Clients.Lucida
             if (!tokens.IsValid)
                 throw new Exception("Failed to extract authentication tokens");
 
-            string fileName = _releaseFormatter.BuildTrackFilename(null, new Track { Title = ReleaseInfo.Title, Artist = _remoteAlbum.Artist }, _albumData) + AudioFormatHelper.GetFileExtensionForCodec(_remoteAlbum.Release.Codec.ToLower());
+            Track trackMetadata = CreateTrackFromLucidaData(new LucidaTrackModel
+            {
+                Title = ReleaseInfo.Title,
+                TrackNumber = 1,
+                Artist = _remoteAlbum.Artist?.Name ?? "Unknown Artist",
+                DurationMs = 0
+            }, new LucidaAlbumModel
+            {
+                Title = ReleaseInfo.Album ?? ReleaseInfo.Title,
+                Artist = _remoteAlbum.Artist?.Name ?? "Unknown Artist",
+                ReleaseDate = ReleaseInfo.PublishDate.ToString("yyyy-MM-dd")
+            });
+
+            Album albumMetadata = CreateAlbumFromLucidaData(new LucidaAlbumModel
+            {
+                Title = ReleaseInfo.Album ?? ReleaseInfo.Title,
+                Artist = _remoteAlbum.Artist?.Name ?? "Unknown Artist",
+                ReleaseDate = ReleaseInfo.PublishDate.ToString("yyyy-MM-dd"),
+                TrackCount = 1
+            });
+
+            string fileName = BuildTrackFilename(trackMetadata, albumMetadata, AudioFormatHelper.GetFileExtensionForCodec(_remoteAlbum.Release.Codec.ToLower()));
             InitiateDownload(downloadUrl, tokens.Primary, tokens.Fallback, tokens.Expiry, fileName, token);
             _requestContainer.Add(_trackContainer);
         }
@@ -142,7 +101,11 @@ namespace Tubifarry.Download.Clients.Lucida
             for (int i = 0; i < album.Tracks.Count; i++)
             {
                 LucidaTrackModel track = album.Tracks[i];
-                string trackFileName = $"{track.TrackNumber:D2}. {SanitizeFileName(track.Title)}{AudioFormatHelper.GetFileExtensionForCodec(_remoteAlbum.Release.Codec.ToLower())}";
+
+                Track trackMetadata = CreateTrackFromLucidaData(track, album);
+                Album albumMetadata = CreateAlbumFromLucidaData(album);
+
+                string trackFileName = BuildTrackFilename(trackMetadata, albumMetadata, AudioFormatHelper.GetFileExtensionForCodec(_remoteAlbum.Release.Codec.ToLower()));
 
                 try
                 {
@@ -163,9 +126,7 @@ namespace Tubifarry.Download.Clients.Lucida
             }
             _requestContainer.Add(_trackContainer);
         }
-        #endregion
 
-        #region Download Workflow Methods
 
         private void InitiateDownload(string url, string primaryToken, string fallbackToken, long expiry, string fileName, CancellationToken token)
         {
@@ -175,8 +136,8 @@ namespace Tubifarry.Download.Clients.Lucida
                 string serverName = null!;
                 try
                 {
-                    (handoffId, serverName) = await InitiateDownloadAsync(url, primaryToken, fallbackToken, expiry, t);
-                    _logger.Trace($"Initiation completed - Handoff: {handoffId}, Server: {serverName}");
+                    (handoffId, serverName) = await InitiateDownloadRequestAsync(url, primaryToken, fallbackToken, expiry, t);
+                    _logger.Trace($"Initiation completed. Handoff: {handoffId}, Server: {serverName}");
                 }
                 catch (Exception ex)
                 {
@@ -235,7 +196,7 @@ namespace Tubifarry.Download.Clients.Lucida
             _requestContainer.Add(downloadRequestWrapper);
         }
 
-        private async Task<(string handoffId, string serverName)> InitiateDownloadAsync(string url, string primaryToken, string fallbackToken, long expiry, CancellationToken token)
+        private async Task<(string handoffId, string serverName)> InitiateDownloadRequestAsync(string url, string primaryToken, string fallbackToken, long expiry, CancellationToken token)
         {
             try
             {
@@ -244,7 +205,7 @@ namespace Tubifarry.Download.Clients.Lucida
 
                 const string apiEndpoint = "%2Fapi%2Ffetch%2Fstream%2Fv2";
                 string requestUrl = $"{_httpClient.BaseUrl}/api/load?url={apiEndpoint}";
-                _logger.Trace($"Initiating track download - URL: {url}, Request URL: {requestUrl}");
+                _logger.Trace($"Initiating track download from URL: {url}, Request URL: {requestUrl}");
 
                 HttpRequestMessage httpRequest = new(HttpMethod.Post, requestUrl);
                 httpRequest.Content = new StringContent(requestBody, Encoding.UTF8, "text/plain");
@@ -260,7 +221,7 @@ namespace Tubifarry.Download.Clients.Lucida
                     return (downloadResponse.Handoff, downloadResponse.Server ?? downloadResponse.Name ?? "hund");
 
                 string errorInfo = downloadResponse != null ? $"Success: {downloadResponse.Success}, Handoff: {downloadResponse.Handoff}, Server: {downloadResponse.Server}, Name: {downloadResponse.Name}, Error: {downloadResponse.Error}" : "Failed to deserialize response";
-                throw new Exception($"Failed to initiate download - {errorInfo ?? "no handoff ID received"}");
+                throw new Exception($"Failed to initiate download: {errorInfo ?? "no handoff ID received"}");
             }
             catch (Exception ex)
             {
@@ -287,7 +248,7 @@ namespace Tubifarry.Download.Clients.Lucida
                 try
                 {
                     string statusUrl = $"https://{serverName}.{ExtractDomainFromUrl(Options.BaseUrl)}/api/fetch/request/{handoffId}";
-                    string responseContent = await _httpClient.GetStringAsync(statusUrl);
+                    string responseContent = await _httpClient.GetStringAsync(statusUrl, token);
 
                     LucidaStatusResponse? status = JsonSerializer.Deserialize<LucidaStatusResponse>(responseContent, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
@@ -299,8 +260,8 @@ namespace Tubifarry.Download.Clients.Lucida
                 }
                 catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.InternalServerError)
                 {
-                    _logger.Error($"Polling failed with 500 Internal Server Error - handoff ID may be invalid: {httpEx.Message}");
-                    throw new Exception($"Server internal error - handoff ID invalid: {httpEx.Message}");
+                    _logger.Error($"Polling failed with 500 Internal Server Error. Handoff ID may be invalid: {httpEx.Message}");
+                    throw new Exception($"Server internal error. Handoff ID invalid: {httpEx.Message}");
                 }
                 catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
                 {
@@ -309,7 +270,7 @@ namespace Tubifarry.Download.Clients.Lucida
                     {
                         serviceUnavailableExtensions++;
                         totalAttempts = baseAttempts + (serviceUnavailableExtensions * 5);
-                        _logger.Warn($"Service unavailable - extending polling with 5-minute intervals (extension {serviceUnavailableExtensions}/{maxServiceUnavailableExtensions})");
+                        _logger.Warn($"Service unavailable. Extending polling with 5-minute intervals (extension {serviceUnavailableExtensions}/{maxServiceUnavailableExtensions})");
                         await Task.Delay(TimeSpan.FromMinutes(5), token);
                         continue;
                     }
@@ -326,10 +287,6 @@ namespace Tubifarry.Download.Clients.Lucida
             throw new Exception("Download did not complete within expected time");
         }
 
-        #endregion
-
-        #region Utility Methods
-
         /// <summary>
         /// Extracts the domain name from a URL (removes protocol)
         /// </summary>
@@ -340,85 +297,44 @@ namespace Tubifarry.Download.Clients.Lucida
             return url.Replace("https://", "").Replace("http://", "").TrimEnd('/');
         }
 
-        /// <summary>
-        /// Sanitizes a filename by removing invalid characters
-        /// </summary>
-        private static string SanitizeFileName(string fileName) => string.IsNullOrEmpty(fileName) ? "Unknown" : FileNameSanitizer.Replace(fileName, "_").Trim();
-
-        private void LogAndAppendMessage(string message, LogLevel logLevel)
+        private Album CreateAlbumFromLucidaData(LucidaAlbumModel? albumInfo)
         {
-            _message.AppendLine(message);
-            _logger?.Log(logLevel, message);
-        }
+            DateTime releaseDate = ReleaseInfo.PublishDate;
+            if (!string.IsNullOrEmpty(albumInfo?.ReleaseDate) && DateTime.TryParse(albumInfo.ReleaseDate, out DateTime parsedDate))
+                releaseDate = parsedDate;
 
-        private DownloadClientItem CreateClientItem() => new()
-        {
-            DownloadId = ID,
-            Title = ReleaseInfo.Title,
-            TotalSize = ReleaseInfo.Size,
-            DownloadClientInfo = Options.ClientInfo,
-            OutputPath = _destinationPath,
-        };
-
-        private TimeSpan? GetRemainingTime()
-        {
-            long remainingSize = GetRemainingSize();
-            if (_lastUpdateTime != DateTime.MinValue && _lastRemainingSize != 0)
+            return new Album
             {
-                TimeSpan timeElapsed = DateTime.UtcNow - _lastUpdateTime;
-                long bytesDownloaded = _lastRemainingSize - remainingSize;
-
-                if (timeElapsed.TotalSeconds > 0 && bytesDownloaded > 0)
+                Title = albumInfo?.Title ?? ReleaseInfo.Album,
+                ReleaseDate = releaseDate,
+                Artist = new NzbDrone.Core.Datastore.LazyLoaded<NzbDrone.Core.Music.Artist>(new Artist
                 {
-                    double bytesPerSecond = bytesDownloaded / timeElapsed.TotalSeconds;
-                    double remainingSeconds = remainingSize / bytesPerSecond;
-                    return remainingSeconds < 0 ? TimeSpan.FromSeconds(10) : TimeSpan.FromSeconds(remainingSeconds);
-                }
-            }
-
-            _lastUpdateTime = DateTime.UtcNow;
-            _lastRemainingSize = remainingSize;
-            return null;
-        }
-
-        private string GetDistinctMessages() => string.Join(Environment.NewLine, _message.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Distinct());
-
-        private long GetRemainingSize()
-        {
-            long totalDownloaded = _trackContainer.Sum(t => t.BytesDownloaded);
-            IEnumerable<LoadRequest> knownSizes = _trackContainer.Where(t => t.ContentLength > 0);
-            int knownCount = knownSizes.Count();
-
-            return (_expectedTrackCount, knownCount) switch
-            {
-                (0, _) => ReleaseInfo.Size - totalDownloaded,
-                (var expected, var count) when count == expected => knownSizes.Sum(t => t.ContentLength) - totalDownloaded,
-                (var expected, var count) when count > 2 => (long)(knownSizes.Average(t => t.ContentLength) * expected) - totalDownloaded,
-                (var expected, var count) when count > 0 => Math.Max((long)(knownSizes.Average(t => t.ContentLength) * expected), ReleaseInfo.Size) - totalDownloaded,
-                _ => ReleaseInfo.Size - totalDownloaded
+                    Name = albumInfo?.Artist ?? ReleaseInfo.Artist,
+                }),
+                AlbumReleases = new NzbDrone.Core.Datastore.LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease>
+                {
+                    new() {
+                        TrackCount = albumInfo?.TrackCount ?? 0,
+                        Title = albumInfo?.Title ?? ReleaseInfo.Album,
+                        Duration = (int)(albumInfo?.GetTotalDurationMs() ?? 0)
+                    }
+                }),
+                Genres = _remoteAlbum.Albums?.FirstOrDefault()?.Genres,
             };
         }
 
-        public DownloadItemStatus GetDownloadItemStatus() => State switch
+        private Track CreateTrackFromLucidaData(LucidaTrackModel trackInfo, LucidaAlbumModel? albumInfo) => new()
         {
-            RequestState.Idle => DownloadItemStatus.Queued,
-            RequestState.Paused => DownloadItemStatus.Paused,
-            RequestState.Running => DownloadItemStatus.Downloading,
-            RequestState.Compleated => DownloadItemStatus.Completed,
-            RequestState.Failed => _requestContainer.Count(x => x.State == RequestState.Failed) >= _requestContainer.Count / 2
-                                   ? DownloadItemStatus.Failed
-                                   : _requestContainer.All(x => x.HasCompleted()) ? DownloadItemStatus.Completed : DownloadItemStatus.Failed,
-            _ => DownloadItemStatus.Warning,
+            Title = trackInfo.Title,
+            TrackNumber = trackInfo.TrackNumber.ToString(),
+            AbsoluteTrackNumber = trackInfo.TrackNumber,
+            Duration = (int)trackInfo.DurationMs,
+            Explicit = trackInfo.IsExplicit,
+            Artist = new NzbDrone.Core.Datastore.LazyLoaded<Artist>(new Artist
+            {
+                Name = trackInfo.Artist ?? albumInfo?.Artist ?? ReleaseInfo.Artist ?? _remoteAlbum.Artist?.Name,
+            }),
+            MediumNumber = trackInfo.DiscNumber
         };
-
-        #endregion
-
-        #region Abstract Method Implementations
-
-        protected override Task<RequestReturn> RunRequestAsync() => throw new NotImplementedException();
-        public override void Start() => throw new NotImplementedException();
-        public override void Pause() => throw new NotImplementedException();
-
-        #endregion
     }
 }

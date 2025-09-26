@@ -1,11 +1,10 @@
 ﻿using NLog;
 using NzbDrone.Common.Instrumentation;
-using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Music;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
 using Xabe.FFmpeg.Downloader;
-using YouTubeMusicAPI.Models.Info;
 
 namespace Tubifarry.Core.Model
 {
@@ -311,10 +310,9 @@ namespace Tubifarry.Core.Model
             }
         }
 
-        public bool TryEmbedMetadata(AlbumInfo albumInfo, AlbumSong trackInfo, ReleaseInfo releaseInfo)
+        public bool TryEmbedMetadata(Album albumInfo, Track trackInfo)
         {
-            _logger?.Trace($"Embedding metadata for track: {trackInfo.Name}");
-
+            _logger?.Trace($"Embedding metadata for track: {trackInfo?.Title}");
             try
             {
                 using TagLib.File file = TagLib.File.Create(TrackPath);
@@ -330,42 +328,69 @@ namespace Tubifarry.Core.Model
                     TagLib.Id3v2.Tag.ForceDefaultVersion = false;
                 }
 
-                if (!string.IsNullOrEmpty(trackInfo.Name))
-                    file.Tag.Title = trackInfo.Name;
+                if (!string.IsNullOrEmpty(trackInfo?.Title))
+                    file.Tag.Title = trackInfo.Title;
 
-                if (trackInfo.SongNumber.HasValue)
-                    file.Tag.Track = (uint)trackInfo.SongNumber.Value;
+                if (trackInfo?.AbsoluteTrackNumber > 0)
+                    file.Tag.Track = (uint)trackInfo.AbsoluteTrackNumber;
 
-                if (albumInfo.SongCount > 0)
-                    file.Tag.TrackCount = (uint)albumInfo.SongCount;
+                if (!string.IsNullOrEmpty(albumInfo?.Title))
+                    file.Tag.Album = albumInfo.Title;
 
-                if (!string.IsNullOrEmpty(releaseInfo.Album))
-                    file.Tag.Album = releaseInfo.Album;
+                if (albumInfo?.ReleaseDate?.Year > 0)
+                    file.Tag.Year = (uint)albumInfo.ReleaseDate.Value.Year;
 
-                if (releaseInfo.PublishDate.Year > 0)
-                    file.Tag.Year = (uint)releaseInfo.PublishDate.Year;
+                if (albumInfo?.AlbumReleases?.Value?.FirstOrDefault()?.TrackCount > 0)
+                    file.Tag.TrackCount = (uint)albumInfo.AlbumReleases.Value[0].TrackCount;
 
-                if (!string.IsNullOrEmpty(releaseInfo.Artist))
+                if (trackInfo?.MediumNumber > 0)
+                    file.Tag.Disc = (uint)trackInfo.MediumNumber;
+
+                string? albumArtistName = albumInfo?.Artist?.Value?.Name;
+                string? trackArtistName = trackInfo?.Artist?.Value?.Name;
+
+                if (!string.IsNullOrEmpty(albumArtistName))
+                    file.Tag.AlbumArtists = new[] { albumArtistName };
+
+                if (!string.IsNullOrEmpty(trackArtistName))
+                    file.Tag.Performers = new[] { trackArtistName };
+
+                if (albumInfo?.AlbumReleases?.Value?.FirstOrDefault()?.Label?.Any() == true)
+                    file.Tag.Copyright = albumInfo.AlbumReleases.Value[0].Label.FirstOrDefault();
+
+                if (albumInfo?.Genres?.Any() == true)
                 {
-                    file.Tag.AlbumArtists = albumInfo.Artists.Select(x => x.Name).ToArray();
-                    file.Tag.Performers = new[] { releaseInfo.Artist };
+                    string[] validGenres = albumInfo.Genres.Where(g => !string.IsNullOrEmpty(g)).ToArray();
+                    if (validGenres.Length > 0)
+                        file.Tag.Genres = validGenres;
                 }
 
-                if (trackInfo.IsExplicit)
+                if (trackInfo?.Explicit == true)
                     file.Tag.Comment = "EXPLICIT";
+
+                if (!string.IsNullOrEmpty(trackInfo?.ForeignRecordingId) &&
+                    file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3v2Tag)
+                {
+                    TagLib.Id3v2.UserTextInformationFrame mbFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "MusicBrainz Recording Id", true);
+                    mbFrame.Text = new[] { trackInfo.ForeignRecordingId };
+                }
 
                 try
                 {
-                    if (AlbumCover != null)
-                        file.Tag.Pictures = new TagLib.IPicture[] { new TagLib.Picture(new TagLib.ByteVector(AlbumCover)) };
+                    if (AlbumCover?.Length > 0)
+                    {
+                        TagLib.Picture picture = new(new TagLib.ByteVector(AlbumCover))
+                        {
+                            Type = TagLib.PictureType.FrontCover,
+                            Description = "Album Cover"
+                        };
+                        file.Tag.Pictures = new TagLib.IPicture[] { picture };
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger?.Error(ex, "Failed to embed album cover");
                 }
-
-                if (!string.IsNullOrEmpty(Lyric?.PlainLyrics))
-                    file.Tag.Lyrics = Lyric.PlainLyrics;
 
                 file.Save();
                 return true;

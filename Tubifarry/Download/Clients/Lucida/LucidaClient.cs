@@ -8,7 +8,6 @@ using NzbDrone.Core.Localization;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
-using Requests;
 
 namespace Tubifarry.Download.Clients.Lucida
 {
@@ -58,13 +57,6 @@ namespace Tubifarry.Download.Clients.Lucida
 
         protected override void Test(List<ValidationFailure> failures)
         {
-            // Test download path access
-            if (string.IsNullOrWhiteSpace(Settings.DownloadPath))
-            {
-                failures.Add(new ValidationFailure("DownloadPath", "Download path is required"));
-                return;
-            }
-
             if (!_diskProvider.FolderExists(Settings.DownloadPath))
             {
                 failures.Add(new ValidationFailure("DownloadPath", "Download path does not exist"));
@@ -76,34 +68,6 @@ namespace Tubifarry.Download.Clients.Lucida
                 failures.Add(new ValidationFailure("DownloadPath", "Download path is not writable"));
                 return;
             }
-
-            // Test Lucida base URL if provided
-            if (!string.IsNullOrWhiteSpace(Settings.BaseUrl))
-            {
-                try
-                {
-                    Uri baseUri = new(Settings.BaseUrl);
-                    if (baseUri.Scheme != "http" && baseUri.Scheme != "https")
-                    {
-                        failures.Add(new ValidationFailure("BaseUrl", "Base URL must use HTTP or HTTPS protocol"));
-                    }
-                }
-                catch (UriFormatException)
-                {
-                    failures.Add(new ValidationFailure("BaseUrl", "Base URL is not a valid URL"));
-                }
-            }
-
-            // Test connection limits
-            if (Settings.MaxParallelDownloads <= 0 || Settings.MaxParallelDownloads > 10)
-            {
-                failures.Add(new ValidationFailure("MaxParallelDownloads", "Max parallel downloads must be between 1 and 10"));
-            }
-
-            // Update request handler parallelism
-            RequestHandler.MainRequestHandlers[1].MaxParallelism = Settings.MaxParallelDownloads;
-
-            _logger.Debug($"Lucida client test completed. Using {Settings.MaxParallelDownloads} parallel downloads");
         }
     }
 }

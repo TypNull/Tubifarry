@@ -121,7 +121,7 @@ namespace Tubifarry.Indexers.Lucida
                     try
                     {
                         HttpRequest req = new(url);
-                        req.Headers["User-Agent"] = LucidaIndexer.UserAgent;
+                        req.Headers["User-Agent"] = Tubifarry.UserAgent;
                         HttpResponse response = await httpClient.ExecuteAsync(req);
                         if (response.StatusCode != HttpStatusCode.OK)
                         {

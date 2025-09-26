@@ -22,6 +22,8 @@ namespace Tubifarry
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IPluginSettings _pluginSettings;
 
+        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"; //$"{PluginInfo.Name}/{PluginInfo.AssemblyVersion} ({PluginInfo.Framework} {PluginInfo.Branch})";
+
         public override string Name => PluginInfo.Name;
         public override string Owner => PluginInfo.Author;
         public override string GithubUrl => PluginInfo.RepoUrl;

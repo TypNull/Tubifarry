@@ -1,14 +1,13 @@
-using NzbDrone.Core.Download;
+﻿using NzbDrone.Core.Download;
 using NzbDrone.Core.Organizer;
 using Requests.Options;
 
-namespace Tubifarry.Download.Clients.Lucida
+namespace Tubifarry.Download.Base
 {
     /// <summary>
-    /// Options for Lucida download requests
-    /// Contains all configuration needed for a download operation
+    /// Base options for download requests containing common configuration
     /// </summary>
-    internal record LucidaDownloadOptions : RequestOptions<string, string>
+    public record BaseDownloadOptions : RequestOptions<string, string>
     {
         /// <summary>
         /// Client info for tracking the download in Lidarr
@@ -21,19 +20,25 @@ namespace Tubifarry.Download.Clients.Lucida
         public string DownloadPath { get; set; } = string.Empty;
 
         /// <summary>
-        /// Base URL of the Lucida instance
+        /// Base URL of the service instance
         /// </summary>
-        public string BaseUrl { get; set; } = "https://lucida.to";
+        public string BaseUrl { get; set; } = string.Empty;
 
         /// <summary>
         /// Timeout for HTTP requests in seconds
         /// </summary>
-        public int RequestTimeout { get; set; } = 30;
+        public int RequestTimeout { get; set; } = 60;
 
         /// <summary>
         /// Maximum download speed in bytes per second (0 = unlimited)
         /// </summary>
-        public int MaxDownloadSpeed { get; set; } = 0;
+        public int MaxDownloadSpeed { get; set; }
+
+
+        /// <summary>
+        /// Number of chunks for download
+        /// </summary>
+        public int Chunks { get; set; } = 1;
 
         /// <summary>
         /// Number of times to retry connections
@@ -51,13 +56,13 @@ namespace Tubifarry.Download.Clients.Lucida
         public bool IsTrack { get; set; }
 
         /// <summary>
-        /// The actual URL to download from
+        /// The item ID/URL to download from
         /// </summary>
-        public string ItemUrl { get; set; } = string.Empty;
+        public string ItemId { get; set; } = string.Empty;
 
-        public LucidaDownloadOptions() { }
+        public BaseDownloadOptions() { }
 
-        protected LucidaDownloadOptions(LucidaDownloadOptions options) : base(options)
+        protected BaseDownloadOptions(BaseDownloadOptions options) : base(options)
         {
             ClientInfo = options.ClientInfo;
             DownloadPath = options.DownloadPath;
@@ -67,7 +72,8 @@ namespace Tubifarry.Download.Clients.Lucida
             ConnectionRetries = options.ConnectionRetries;
             NamingConfig = options.NamingConfig;
             IsTrack = options.IsTrack;
-            ItemUrl = options.ItemUrl;
+            Chunks = options.Chunks;
+            ItemId = options.ItemId;
         }
     }
 }

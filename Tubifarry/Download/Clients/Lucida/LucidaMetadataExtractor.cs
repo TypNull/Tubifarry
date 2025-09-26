@@ -3,6 +3,7 @@ using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Tubifarry.Download.Base;
 using Tubifarry.Indexers.Lucida;
 
 namespace Tubifarry.Download.Clients.Lucida
@@ -27,7 +28,7 @@ namespace Tubifarry.Download.Clients.Lucida
         /// <summary>
         /// Extracts album metadata from Lucida page
         /// </summary>
-        public static async Task<LucidaAlbumModel> ExtractAlbumMetadataAsync(LucidaHttpClient httpClient, string url)
+        public static async Task<LucidaAlbumModel> ExtractAlbumMetadataAsync(BaseHttpClient httpClient, string url)
         {
             try
             {

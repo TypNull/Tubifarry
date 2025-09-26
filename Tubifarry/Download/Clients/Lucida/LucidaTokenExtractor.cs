@@ -1,6 +1,7 @@
 using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Text.RegularExpressions;
+using Tubifarry.Download.Base;
 using Tubifarry.Indexers.Lucida;
 
 namespace Tubifarry.Download.Clients.Lucida
@@ -19,7 +20,7 @@ namespace Tubifarry.Download.Clients.Lucida
         /// <summary>
         /// Extracts tokens from a Lucida web page
         /// </summary>
-        public static async Task<LucidaTokens> ExtractTokensAsync(LucidaHttpClient httpClient, string url)
+        public static async Task<LucidaTokens> ExtractTokensAsync(BaseHttpClient httpClient, string url)
         {
             try
             {

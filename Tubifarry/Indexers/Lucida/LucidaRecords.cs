@@ -1,58 +1,8 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Lucida
 {
-    #region JSON Converters
-
-    /// <summary>
-    /// Custom JSON converter that handles both string and numeric values, converting them to string
-    /// </summary>
-    public class FlexibleStringConverter : JsonConverter<string>
-    {
-        public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return reader.TokenType switch
-            {
-                JsonTokenType.String => reader.GetString() ?? string.Empty,
-                JsonTokenType.Number => reader.GetInt64().ToString(),
-                JsonTokenType.True => "true",
-                JsonTokenType.False => "false",
-                JsonTokenType.Null => string.Empty,
-                _ => throw new JsonException($"Cannot convert token type {reader.TokenType} to string")
-            };
-        }
-
-        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue(value);
-        }
-    }
-
-    /// <summary>
-    /// Custom JSON converter for flexible float handling
-    /// </summary>
-    public class FlexibleFloatConverter : JsonConverter<float>
-    {
-        public override float Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return reader.TokenType switch
-            {
-                JsonTokenType.Number => (float)reader.GetDouble(),
-                JsonTokenType.String => float.TryParse(reader.GetString(), out float result) ? result :
-                    throw new JsonException($"Cannot convert string '{reader.GetString()}' to float"),
-                _ => throw new JsonException($"Cannot convert token type {reader.TokenType} to float")
-            };
-        }
-
-        public override void Write(Utf8JsonWriter writer, float value, JsonSerializerOptions options)
-        {
-            writer.WriteNumberValue(value);
-        }
-    }
-
-    #endregion
-
     #region Search & Parsing Models
 
     /// <summary>
@@ -111,11 +61,11 @@ namespace Tubifarry.Indexers.Lucida
     /// Album model from search results
     /// </summary>
     public record LucidaAlbum(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id,
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("releaseDate")] string ReleaseDate,
-        [property: JsonPropertyName("trackCount"), JsonConverter(typeof(FlexibleFloatConverter))] float TrackCount,
+        [property: JsonPropertyName("trackCount"), JsonConverter(typeof(FloatConverter))] float TrackCount,
         [property: JsonPropertyName("coverArtwork")] List<LucidaArtwork>? CoverArtwork = null,
         [property: JsonPropertyName("artists")] List<LucidaArtist>? Artists = null,
         [property: JsonPropertyName("upc")] string? Upc = null,
@@ -129,7 +79,7 @@ namespace Tubifarry.Indexers.Lucida
     /// Track model from search results
     /// </summary>
     public record LucidaTrack(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id,
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("durationMs")] long DurationMs,
@@ -137,8 +87,8 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("description")] string? Description = null,
         [property: JsonPropertyName("explicit")] bool Explicit = false,
         [property: JsonPropertyName("isrc")] string? Isrc = null,
-        [property: JsonPropertyName("trackNumber"), JsonConverter(typeof(FlexibleFloatConverter))] float TrackNumber = 0,
-        [property: JsonPropertyName("discNumber"), JsonConverter(typeof(FlexibleFloatConverter))] float DiscNumber = 1,
+        [property: JsonPropertyName("trackNumber"), JsonConverter(typeof(FloatConverter))] float TrackNumber = 0,
+        [property: JsonPropertyName("discNumber"), JsonConverter(typeof(FloatConverter))] float DiscNumber = 1,
         [property: JsonPropertyName("coverArtwork")] List<LucidaArtwork>? CoverArtwork = null,
         [property: JsonPropertyName("artists")] List<LucidaArtist>? Artists = null,
         [property: JsonPropertyName("album")] LucidaAlbumReference? Album = null,
@@ -151,7 +101,7 @@ namespace Tubifarry.Indexers.Lucida
     /// Album reference within track info
     /// </summary>
     public record LucidaAlbumReference(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id,
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id,
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("coverArtwork")] List<LucidaArtwork>? CoverArtwork = null,
@@ -168,7 +118,7 @@ namespace Tubifarry.Indexers.Lucida
     /// Artist information
     /// </summary>
     public record LucidaArtist(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id,
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id,
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("pictures")] List<string>? Pictures = null)
@@ -181,8 +131,8 @@ namespace Tubifarry.Indexers.Lucida
     /// </summary>
     public record LucidaArtwork(
         [property: JsonPropertyName("url")] string Url,
-        [property: JsonPropertyName("width"), JsonConverter(typeof(FlexibleFloatConverter))] float Width,
-        [property: JsonPropertyName("height"), JsonConverter(typeof(FlexibleFloatConverter))] float Height)
+        [property: JsonPropertyName("width"), JsonConverter(typeof(FloatConverter))] float Width,
+        [property: JsonPropertyName("height"), JsonConverter(typeof(FloatConverter))] float Height)
     {
         public LucidaArtwork() : this("", 0, 0) { }
 
@@ -220,7 +170,7 @@ namespace Tubifarry.Indexers.Lucida
     public record LucidaInfo(
         [property: JsonPropertyName("success")] bool Success,
         [property: JsonPropertyName("type")] string Type = "",
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id = "",
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id = "",
         [property: JsonPropertyName("url")] string Url = "",
         [property: JsonPropertyName("title")] string Title = "",
         [property: JsonPropertyName("durationMs")] long DurationMs = 0,
@@ -259,7 +209,7 @@ namespace Tubifarry.Indexers.Lucida
     /// Artist info from JavaScript data (different structure than search results)
     /// </summary>
     public record LucidaArtistInfo(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id = "",
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id = "",
         [property: JsonPropertyName("name")] string Name = "",
         [property: JsonPropertyName("url")] string Url = "")
     {
@@ -283,7 +233,7 @@ namespace Tubifarry.Indexers.Lucida
     /// Album reference within track info
     /// </summary>
     public record LucidaAlbumRef(
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id = "",
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id = "",
         [property: JsonPropertyName("url")] string Url = "",
         [property: JsonPropertyName("title")] string Title = "",
         [property: JsonPropertyName("releaseDate")] string? ReleaseDate = null)
@@ -297,7 +247,7 @@ namespace Tubifarry.Indexers.Lucida
     /// </summary>
     public record LucidaTrackInfo(
         [property: JsonPropertyName("url")] string Url = "",
-        [property: JsonPropertyName("id"), JsonConverter(typeof(FlexibleStringConverter))] string Id = "",
+        [property: JsonPropertyName("id"), JsonConverter(typeof(StringConverter))] string Id = "",
         [property: JsonPropertyName("title")] string Title = "",
         [property: JsonPropertyName("durationMs")] long DurationMs = 0,
         [property: JsonPropertyName("isrc")] string? Isrc = null,

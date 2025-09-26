@@ -84,7 +84,7 @@ namespace Tubifarry.Indexers.Lucida
                         RequestTimeout = TimeSpan.FromSeconds(_settings.RequestTimeout),
                         ContentSummary = new LucidaRequestData(service, _settings.BaseUrl, country.Code, isSingle).ToJson()
                     };
-                    req.Headers["User-Agent"] = LucidaIndexer.UserAgent;
+                    req.Headers["User-Agent"] = Tubifarry.UserAgent;
 
                     chain.AddTier(new[] { new IndexerRequest(req) });
                 }
