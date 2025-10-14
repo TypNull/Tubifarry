@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<AssemblyName>Lidarr.Plugin.$(MSBuildProjectName)</AssemblyName>
@@ -19,14 +19,15 @@
 
 	<ItemGroup>
 		<PackageReference Include="FuzzySharp" Version="2.0.2" />
-		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.43">
+		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.44">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.0" />
-		<PackageReference Include="Xabe.FFmpeg" Version="5.2.6" />
-		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="5.2.6" />
-		<PackageReference Include="YouTubeMusicAPI" Version="3.0.0" />
+		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.1" />
+		<PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
+		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
+		<PackageReference Include="YouTubeMusicAPI" Version="3.0.1" />
+		<PackageReference Include="YouTubeSessionGenerator" Version="1.0.2" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -36,7 +37,13 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj" />
 		<ProjectReference Include="..\Submodules\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj" />
-		<ProjectReference Include="..\Submodules\SessionGenerator\YouTubeSessionGenerator\YouTubeSessionGenerator.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <PackageReference Update="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+	    <PrivateAssets>all</PrivateAssets>
+	    <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+	  </PackageReference>
 	</ItemGroup>
 
 	<!-- Import the Debug.targets file -->

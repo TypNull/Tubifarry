@@ -1,6 +1,3 @@
 [submodule "Submodules/Lidarr"]
 	path = Submodules/Lidarr
 	url = https://github.com/Lidarr/Lidarr/
-[submodule "Submodules/SessionGenerator"]
-	path = Submodules/SessionGenerator
-	url = https://github.com/Mimigerna/YouTubeSessionGenerator-Compatibility-Version.git
