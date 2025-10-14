@@ -65,29 +65,64 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("fileCount")] int FileCount,
         [property: JsonPropertyName("files")] List<SlskdFileData> Files)
     {
-        public int CalculatePriority()
+        public int CalculatePriority(int expectedTrackCount = 0)
         {
+            // Early exit: completely locked folders
             if (LockedFileCount >= FileCount && FileCount > 0)
                 return 0;
 
+            // Early exit: more than 50% locked = useless source
+            double availabilityRatio = FileCount > 0 ? (FileCount - LockedFileCount) / (double)FileCount : 1.0;
+            if (availabilityRatio <= 0.5)
+                return 0;
+
             int score = 0;
-            if (FileCount > 0)
+
+            // Get actual track count
+            int actualTrackCount = 0;
+            if (expectedTrackCount > 0)
             {
-                double availabilityRatio = (FileCount - LockedFileCount) / (double)FileCount;
-                score += (int)(Math.Pow(availabilityRatio, 0.6) * 4000);
+                actualTrackCount = Files.Count(f =>
+                    AudioFormatHelper.GetAudioCodecFromExtension(
+                        f.Extension ?? System.IO.Path.GetExtension(f.Filename) ?? "") != AudioFormat.Unknown);
             }
 
+            // Early exit: Missing 50%+ of expected tracks
+            if (expectedTrackCount > 0 && actualTrackCount > 0 && actualTrackCount <= expectedTrackCount * 0.5)
+                return 0;
+
+            // ===== TRACK COUNT MATCHING (0 to +2500) =====
+            if (expectedTrackCount > 0 && actualTrackCount > 0)
+            {
+                int trackDiff = actualTrackCount - expectedTrackCount;
+
+                if (trackDiff < 0) // -1: ~500 pts, -2: ~60 pts, -3+: near 0
+                    score += (int)(2500 * Math.Exp(-Math.Pow(Math.Abs(trackDiff), 2) * 5));
+                else if (trackDiff == 0)  // PERFECT MATCH
+                    score += 2500;
+                else   // EXTRA TRACKS: Less critical, just penalized: +1: ~1600 pts, +2: ~600 pts, +3: ~100 pts, +15: near 0
+                    score += (int)(2500 * Math.Exp(-Math.Pow(trackDiff, 2) * 1.5));
+            }
+
+            // ===== AVAILABILITY RATIO (0 to +2000) =====
+            score += (int)(Math.Pow(availabilityRatio, 2.0) * 2000);
+
+            // ===== UPLOAD SPEED (0 to +1800) =====
             if (UploadSpeed > 0)
             {
                 double speedMbps = UploadSpeed / (1024.0 * 1024.0 / 8.0);
-                score += (int)(Math.Log10(Math.Max(0.1, speedMbps) + 1) * 1200);
+                score += Math.Min(1800, (int)(Math.Log10(Math.Max(0.1, speedMbps) + 1) * 1100));
             }
-            double queuePenalty = Math.Pow(0.9, Math.Min(QueueLength, 30));
-            score += (int)(queuePenalty * 2000);
-            if (HasFreeUploadSlot)
-                score += 1000;
-            if (FileCount >= 15)
-                score += 200;
+
+            // ===== QUEUE LENGTH (50 to +1500) =====
+            double queueFactor = Math.Pow(0.94, Math.Min(QueueLength, 40));
+            score += (int)(queueFactor * 1500);
+
+            // ===== FREE UPLOAD SLOT (0 or +800) =====
+            score += HasFreeUploadSlot ? 800 : 0;
+
+            // ===== COLLECTION SIZE (0 to +300) =====
+            score += Math.Min(300, (int)(Math.Log10(Math.Max(1, FileCount) + 1) * 150));
 
             return Math.Clamp(score, 0, 10000);
         }
@@ -100,7 +135,7 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
         [property: JsonPropertyName("mimimumFiles")] int MinimumFiles)
     {
-        private readonly static JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, _jsonOptions)!;
     }
 
