@@ -1,10 +1,12 @@
 # Tubifarry for Lidarr 🎶  
 ![Downloads](https://img.shields.io/github/downloads/TypNull/Tubifarry/total)  ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TypNull/Tubifarry)  ![GitHub last commit](https://img.shields.io/github/last-commit/TypNull/Tubifarry)  ![License](https://img.shields.io/github/license/TypNull/Tubifarry)  ![GitHub stars](https://img.shields.io/github/stars/TypNull/Tubifarry)  
 
-Tubifarry is a versatile plugin for **Lidarr** that enhances your music library by indexing from **Spotify** and enabling direct music downloads from **YouTube**. While it is not explicitly a `Spotify-to-YouTube` downloader, it leverages the YouTube API to seamlessly integrate music downloads into your Lidarr setup. Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
+Tubifarry is a plugin for **Lidarr** that adds multiple music sources to your library management. It uses **Spotify's catalog** as an [indexer](https://wiki.servarr.com/en/lidarr/supported#indexers) to search for music, then downloads the actual audio files from **YouTube**. Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
 
 Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This makes it easy to manage and download soundtracks for your favorite movies and TV shows. 🎬🎵
 For further customization, Codec Tinker lets you convert audio files between formats using FFmpeg, helping you optimize your library.⚙️  
+
+> **Note**: Some details in this documentation may vary from the current implementation.
 
 ---
 
@@ -66,11 +68,10 @@ Tubifarry supports **Slskd**, the Soulseek client, as both an **indexer** and **
 ---
 
 ### YouTube Downloader Setup 🎥 
-> #### YouTube Warning ⚠️
-> YouTube may restrict access to Tubifarry, as it is identified as a bot. We appreciate your understanding and patience in this matter.
+> #### YouTube Bot Detection ⚠️
+> YouTube actively detects and blocks automated downloaders. To bypass this, configure the Trusted Session Generator and provide cookie authentication (see setup steps below).
 
-Tubifarry allows you to download music directly from YouTube. Follow the steps below to configure the YouTube downloader.  
-If you get identified as a bot please set up the trusted session generator and or login with cookies. 
+The YouTube downloader extracts audio from YouTube and converts them to audio files using FFmpeg. 
 
 #### **Configure the Indexer**:  
 1. Navigate to `Settings -> Indexers` and click **Add**.  
@@ -83,13 +84,14 @@ If you get identified as a bot please set up the trusted session generator and o
 4. **Optional**: If using FFmpeg, ensure the FFmpeg path is correctly configured.  
 
 #### **FFmpeg and Audio Conversion**:  
-1. **FFmpeg**: FFmpeg can be used to extract audio from downloaded files, which are typically embedded in MP4 containers. If you choose to use FFmpeg, ensure it is installed and accessible in your system's PATH or the specified FFmpeg path. If not, the plugin does attempt to download it automatically during setup. Without FFmpeg, songs will be downloaded in their original format, which may not require additional processing.  
+1. **FFmpeg**: Required to extract audio from YouTube. The plugin will attempt to download FFmpeg automatically if not found. Without FFmpeg, files will be downloaded in their original format, which Lidarr may cannot properly import.
+   - Ensure FFmpeg is in your system PATH or specify its location in settings
+   - Used for extracting audio tracks and converting between formats
 
-   **Important Note**: If FFmpeg is not used, Lidarr may incorrectly interpret the MP4 container as corrupt. While FFmpeg usage is **recommended**, it is not strictly necessary. However, to avoid potential issues, you can choose to extract audio without re-encoding, but this may lead to better compatibility with Lidarr.
-
-2. **Max Audio Quality**: Tubifarry supports a maximum audio quality of **256kb/s AAC** for downloaded files through YouTube. While most files are in 128kbps AAC by default, they can be converted to higher-quality formats like **AAC, Opus or MP3v2** if FFmpeg is used.  
-
-   **Note**: For higher-quality audio (e.g., 256kb/s), you need a **YouTube Premium subscription**.  
+2. **Audio Quality**: YouTube provides audio at various bitrates:
+   - Standard quality: 128kbps AAC (free users)
+   - High quality: 256kbps AAC (YouTube Premium required)
+   - The plugin can convert to other formats (MP3, Opus) using FFmpeg  
 
 ---
 
@@ -110,7 +112,7 @@ To enable this feature:
 
 ### Queue Cleaner 🧹  
 
-The **Queue Cleaner** automatically processes items in your Lidarr queue that have **failed to import**. It ensures your library stays organized by handling failed imports based on your preferences.  
+The **Queue Cleaner** automatically handles downloads that fail to import into your library. When Lidarr can't import a download (due to missing tracks, incorrect metadata, etc.), Queue Cleaner can rename files based on their embedded tags, retry the import, blocklist the release, or remove the files.  
 
 1. **Key Options**:  
    - *Blocklist*: Choose to remove, blocklist, or both for failed imports.  
@@ -127,7 +129,7 @@ The **Queue Cleaner** automatically processes items in your Lidarr queue that ha
 
 ### Codec Tinker 🎛️
 
-**Codec Tinker** is a feature in Tubifarry that lets you **convert audio files** between different formats using FFmpeg. Whether you want to standardize your library or optimize files for specific devices, Codec Tinker makes it easy to tinker with your audio formats.
+**Codec Tinker** automatically converts audio files between formats using FFmpeg when they're imported into your library. You can set up rules to convert specific formats (e.g., convert all WAV files to FLAC, or convert high-bitrate AAC to MP3). Note: Lossy formats (MP3, AAC) cannot be converted to lossless formats (FLAC, WAV) as quality cannot be restored.
 
 #### How to Enable Codec Tinker
 
@@ -157,7 +159,7 @@ The **Queue Cleaner** automatically processes items in your Lidarr queue that ha
 
 ###  Lyrics Fetcher 📜
 
-**Lyrics Fetcher** is a feature that lets you **download synchronized lyrics for tracks**. It uses LRCLIB to fetch time-synced lyrics that highlight each line as it's sung, enhancing your music experience whether you want to sing along with friends or enjoy music on your own.
+**Lyrics Fetcher** automatically downloads lyrics for your music files. It fetches synchronized lyrics from LRCLIB and plain lyrics from Genius. Lyrics can be saved as separate .lrc files and embedded directly into the audio files' metadata.
 
 #### How to Enable Lyrics Fetcher
 
@@ -177,7 +179,7 @@ You can configure the following options:
 
 ### Search Sniper 🏹
 
-**Search Sniper** strategically automates your music searches when you have a large wanted list. Instead of overwhelming your system by searching for all items at once or manually navigating through pages, Search Sniper intelligently processes your wanted list in batches at regular intervals, optimizing search performance.
+**Search Sniper** automatically triggers searches for missing albums in your wanted list. Instead of searching for everything at once, which can overload indexers, it randomly selects a few albums from your wanted list at regular intervals and searches for them. It keeps track of what has been searched recently to avoid repeating searches too often.
 
 #### How to Enable Search Sniper
 
@@ -196,7 +198,7 @@ You can configure the following options:
 
 ###  Custom Metadata Sources 🧩
 
-Tubifarry now offers additional metadata sources beyond MusicBrainz, including **Discogs** and **Deezer**. These alternative sources can provide richer artist information, album details, and cover art that might be missing from the default metadata provider. **Note**: This feature is experimental and should not be used on production systems where stability is critical. Please report any issues you encounter to help improve this feature.
+Tubifarry can fetch metadata from additional sources beyond MusicBrainz, including **Discogs**, **Deezer**, and **Last.fm**. These sources can provide additional artist information, album details, and cover art when MusicBrainz data is incomplete. The MetaMix feature intelligently combines data from multiple sources to create more complete metadata profiles.
 
 #### How to Enable Individual Metadata Sources
 
@@ -246,7 +248,8 @@ The feature currently works best with artists that are properly linked across di
      - [Firefox](https://addons.mozilla.org/en-US/firefox/addon/cookies-txt/)  
   2. Log in to YouTube and save the `cookies.txt` file in a folder accessible by Lidarr.  
   3. In Lidarr, go to **Indexer and Downloader Settings** and provide the path to the `cookies.txt` file.  
-  4. **Trusted Session Generator**: This tool ([available here](https://github.com/iv-org/youtube-trusted-session-generator)) creates authentication tokens that appear more like a regular browser session to YouTube. It helps bypass YouTube's bot detection by.
+  4. **Trusted Session Generator**: Creates authentication tokens that mimic regular browser sessions to bypass YouTube's bot detection.
+     - It generates tokens locally, which requires Node.js installed and available in your system's PATH
   
   The combination of cookies and trusted sessions significantly improves success rates when downloading from YouTube, and can help access higher quality audio streams.
 
