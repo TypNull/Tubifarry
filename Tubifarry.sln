@@ -8,9 +8,9 @@ EndProject
 Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "Lidarr.Console", "Submodules\Lidarr\_output\net6.0\Lidarr.Console.exe", "{6EC23C64-DEF7-4A6A-918B-1A86CCB2AF03}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = Submodules\Lidarr\_output\net6.0\Lidarr.Console.exe
+		Executable = Submodules\Lidarr\_output\net8.0\Lidarr.Console.exe
 		RemoteMachine = 
-		StartingDirectory = Submodules\Lidarr\_output\net6.0
+		StartingDirectory = Submodules\Lidarr\_output\net8.0
 		Environment = Standard
 		LaunchingEngine = 00000000-0000-0000-0000-000000000000
 		UseLegacyDebugEngines = No
@@ -22,8 +22,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Core", "Submodules\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj", "{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Common", "Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj", "{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YouTubeSessionGenerator", "Submodules\SessionGenerator\YouTubeSessionGenerator\YouTubeSessionGenerator.csproj", "{ACB3B39E-B672-426F-BD30-011EB3E67092}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -45,10 +43,6 @@ Global
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.Build.0 = Release|Any CPU
-		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{ACB3B39E-B672-426F-BD30-011EB3E67092}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
