@@ -1,4 +1,4 @@
-name: "✨ Feature Request"
+name: "Feature Request"
 description: Suggest an idea or improvement for Tubifarry
 title: "[FEATURE] "
 labels: ["enhancement"]
@@ -8,33 +8,33 @@ body:
     attributes:
       value: |
         ## Thanks for taking the time to suggest a feature!
-        Please provide as much detail as possible to help us understand your idea.
-  
+        
+        Please provide detailed information about your feature idea.
+        Check existing issues first to avoid duplicates.
   - type: textarea
     id: feature-request
     attributes:
       label: Feature Request
       description: Describe what you'd like to see added and why it would be valuable.
       placeholder: |
-        I'm frustrated when... and would like to see...
+        I would like Tubifarry to support [specific feature] because [reason].
         
         This would improve the experience by...
+        
+        The feature should work like [detailed description].
     validations:
       required: true
-  
-
-  
   - type: dropdown
     id: importance
     attributes:
-      label: How important is this feature to you?
+      label: Priority Level
+      description: How important is this feature for your workflow?
       options:
         - Nice to have (low priority)
         - Would improve my experience (medium priority)
         - Critical to my use case (high priority)
     validations:
       required: true
-  
   - type: textarea
     id: mockups
     attributes:
@@ -49,7 +49,6 @@ body:
         </details>
     validations:
       required: false
-  
   - type: dropdown
     id: contribution
     attributes:
@@ -61,7 +60,6 @@ body:
         - Yes, I'd be willing to implement this feature
     validations:
       required: true
-  
   - type: textarea
     id: technical
     attributes:
@@ -76,3 +74,10 @@ body:
         </details>
     validations:
       required: false
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
