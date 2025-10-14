@@ -3,6 +3,9 @@ using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
@@ -60,7 +63,7 @@ namespace Tubifarry.Indexers.Soulseek
                 Files: []);
         }
 
-        public static AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, SlskdSearchData searchData, SlskdFolderData folderData, SlskdSettings? settings = null)
+        public static AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, SlskdSearchData searchData, SlskdFolderData folderData, SlskdSettings? settings = null, int expectedTrackCount = 0)
         {
             string dirNameNorm = NormalizeString(directory.Key);
             string searchArtistNorm = NormalizeString(searchData.Artist ?? "");
@@ -111,7 +114,8 @@ namespace Tubifarry.Indexers.Soulseek
                           : BitRate) ?? 0,
                 Size = TotalSize,
                 InfoUrl = infoUrl,
-                Priotity = folderData.CalculatePriority(),
+                ExplicitContent = ExtractExplicitTag(folderData.Path),
+                Priotity = folderData.CalculatePriority(expectedTrackCount),
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
                 ExtraInfo = [$"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
                 Duration = TotalDuration
@@ -281,6 +285,23 @@ namespace Tubifarry.Indexers.Soulseek
                 return string.Empty;
             component = CleanComponentRegex().Replace(component, "");
             return ReduceWhitespaceRegex().Replace(component.Trim(), " ");
+        }
+
+        private static bool ExtractExplicitTag(string path)
+        {
+            Match match = ExplicitTagRegex().Match(path);
+            if (match.Success)
+            {
+                if (match.Groups["negation"].Success && !string.IsNullOrWhiteSpace(match.Groups["negation"].Value))
+                {
+                    Logger.Trace($"Found negated explicit tag in path, skipping: {match.Value}");
+                    return false;
+                }
+
+                Logger.Trace($"Extracted explicit tag from path: {path}");
+                return true;
+            }
+            return false;
         }
 
         private static string? ExtractYearFromPath(string path)

@@ -118,11 +118,24 @@ namespace Tubifarry.Download.Clients.Soulseek
                 .Select(file => Path.GetFileName(file.File.Filename)).ToList();
 
             DownloadItemStatus status = DownloadItemStatus.Queued;
-            DateTime lastTime = SlskdDownloadDirectory.Files.Max(x => x.EnqueuedAt > x.StartedAt ? x.EnqueuedAt : x.StartedAt + x.ElapsedTime);
 
-            if (now - lastTime > timeout)
+            bool anyActiveDownload = SlskdDownloadDirectory.Files.Any(f =>
+                f.State == "InProgress" || f.State == "Queued, Locally" || f.State == "Initializing");
+
+            List<SlskdDownloadFile> incompleteFiles = SlskdDownloadDirectory.Files.Where(f => !f.State.StartsWith("Completed")).ToList();
+
+            bool allStuckInRemoteQueue = incompleteFiles.Count != 0 && incompleteFiles.All(f =>
+                f.State == "Queued, Remotely" && (now - f.EnqueuedAt) > timeout);
+
+            if (allStuckInRemoteQueue && !anyActiveDownload)
             {
                 status = DownloadItemStatus.Failed;
+            }
+            else if (!anyActiveDownload && incompleteFiles.Count != 0)
+            {
+                DateTime lastActivity = incompleteFiles.SelectMany(f => new[] { f.EnqueuedAt, f.StartedAt, f.StartedAt + f.ElapsedTime }).Max();
+                if ((now - lastActivity) > (timeout * 2))
+                    status = DownloadItemStatus.Failed;
             }
             else if ((double)failedFiles.Count / fileStatuses.Count * 100 > 20)
             {
