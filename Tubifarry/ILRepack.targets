@@ -11,6 +11,7 @@
 			<InputAssemblies Include="$(OutputPath)FuzzySharp.dll" />
 			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
 			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
+			<InputAssemblies Include="$(OutputPath)System.Text.Json.dll" />
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
 		</ItemGroup>
 
@@ -19,7 +20,7 @@
             Internalize="true"
             InputAssemblies="@(InputAssemblies)"
             TargetKind="Dll"
-            LibraryPath="..\Submodules\Lidarr\_output\net6.0\;$(OutputPath)"
+            LibraryPath="..\Submodules\Lidarr\_output\net8.0\;$(OutputPath)"
             OutputFile="$(OutputPath)$(AssemblyName).dll"
         />
     </Target>

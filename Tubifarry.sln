@@ -8,9 +8,9 @@ EndProject
 Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "Lidarr.Console", "Submodules\Lidarr\_output\net6.0\Lidarr.Console.exe", "{6EC23C64-DEF7-4A6A-918B-1A86CCB2AF03}"
 	ProjectSection(DebuggerProjectSystem) = preProject
 		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = Submodules\Lidarr\_output\net6.0\Lidarr.Console.exe
+		Executable = Submodules\Lidarr\_output\net8.0\Lidarr.Console.exe
 		RemoteMachine = 
-		StartingDirectory = Submodules\Lidarr\_output\net6.0
+		StartingDirectory = Submodules\Lidarr\_output\net8.0
 		Environment = Standard
 		LaunchingEngine = 00000000-0000-0000-0000-000000000000
 		UseLegacyDebugEngines = No

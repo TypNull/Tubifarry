@@ -34,10 +34,9 @@ namespace Tubifarry.Core.Utilities
                 return null;
             }
 
-            var framework = branch == null ? "net6.0" : $"net6.0-{branch}";
-
+            string framework = branch == null ? PluginInfo.Framework : $"{PluginInfo.Framework}-{branch}";
             releases = releases!.Where(release => release.Assets.Any(asset => asset.Name.EndsWith($"{framework}.zip"))).ToList();
-            var latest = releases.OrderByDescending(x => x.PublishedAt).FirstOrDefault(x => IsSupported(x, branch));
+            Release? latest = releases.OrderByDescending(x => x.PublishedAt).FirstOrDefault(x => IsSupported(x, branch));
 
             if (latest == null)
             {
@@ -45,8 +44,8 @@ namespace Tubifarry.Core.Utilities
                 return null;
             }
 
-            var version = Version.Parse(latest.TagName.TrimStart('v'));
-            var asset = latest.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
+            Version version = Version.Parse(latest.TagName.TrimStart('v'));
+            Asset? asset = latest.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
 
             if (asset == null)
             {
@@ -88,7 +87,7 @@ namespace Tubifarry.Core.Utilities
                     return false;
             }
             Version version = Version.Parse(release.TagName.TrimStart('v'));
-            string framework = branch == null ? "net6.0" : $"net6.0-{branch}";
+            string framework = branch == null ? PluginInfo.Framework : $"{PluginInfo.Framework}-{branch}";
             Asset? asset = release.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
             return asset != null;
         }
