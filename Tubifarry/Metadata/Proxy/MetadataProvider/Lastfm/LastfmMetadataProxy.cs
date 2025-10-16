@@ -13,19 +13,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
     [ProxyFor(typeof(ISearchForNewArtist))]
     [ProxyFor(typeof(ISearchForNewAlbum))]
     [ProxyFor(typeof(ISearchForNewEntity))]
-    public class LastfmMetadataProxy : ProxyBase<LastfmMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    public partial class LastfmMetadataProxy(ILastfmProxy lastfmProxy, Logger logger) : ProxyBase<LastfmMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
-        private readonly ILastfmProxy _lastfmProxy;
-        private readonly Logger _logger;
+        private readonly ILastfmProxy _lastfmProxy = lastfmProxy;
+        private readonly Logger _logger = logger;
 
         public override string Name => "Last.fm";
         private LastfmMetadataProxySettings ActiveSettings => Settings ?? LastfmMetadataProxySettings.Instance!;
-
-        public LastfmMetadataProxy(ILastfmProxy lastfmProxy, Logger logger)
-        {
-            _lastfmProxy = lastfmProxy;
-            _logger = logger;
-        }
 
         public List<Album> SearchForNewAlbum(string title, string artist) => _lastfmProxy.SearchNewAlbum(ActiveSettings, title, artist);
 
@@ -40,19 +34,19 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         public HashSet<string> GetChangedAlbums(DateTime startTime)
         {
             _logger.Warn("GetChangedAlbums: Last.fm API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public HashSet<string> GetChangedArtists(DateTime startTime)
         {
             _logger.Warn("GetChangedArtists: Last.fm API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
         {
             _logger.Warn("SearchNewAlbumByRecordingIds: Last.fm API does not support fingerprint search; returning empty list.");
-            return new List<Album>();
+            return [];
         }
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
@@ -60,7 +54,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (_lastfmProxy.IsLastfmIdQuery(albumTitle) || _lastfmProxy.IsLastfmIdQuery(artistName))
                 return MetadataSupportLevel.Supported;
 
-            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
+            if ((albumTitle != null && FormatRegex().IsMatch(albumTitle)) || (artistName != null && FormatRegex().IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.ImplicitSupported;
@@ -88,7 +82,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = _lastfmRegex.Match(link.Url);
+                Match match = FormatRegex().Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                 {
                     string artistName = match.Groups[1].Value;
@@ -99,7 +93,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             return null;
         }
 
-        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
-        private static readonly Regex _lastfmRegex = new(@"last\.fm\/music\/([^\/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        [GeneratedRegex(@"^\s*\w+:\s*\w+", RegexOptions.Compiled)]
+        private static partial Regex FormatRegex();
+
+        [GeneratedRegex(@"last\.fm\/music\/([^\/]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex LastfmRegex();
     }
 }

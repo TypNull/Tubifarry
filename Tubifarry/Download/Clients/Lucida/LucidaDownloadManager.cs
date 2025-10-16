@@ -11,15 +11,13 @@ namespace Tubifarry.Download.Clients.Lucida
     /// <summary>
     /// Interface for the Lucida download manager
     /// </summary>
-    public interface ILucidaDownloadManager : IBaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient> { }
+    public interface ILucidaDownloadManager : IBaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient>;
 
     /// <summary>
     /// Lucida download manager using the base download manager implementation
     /// </summary>
-    public class LucidaDownloadManager : BaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient>, ILucidaDownloadManager
+    public class LucidaDownloadManager(Logger logger) : BaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient>(logger), ILucidaDownloadManager
     {
-        public LucidaDownloadManager(Logger logger) : base(logger) { }
-
         protected override async Task<LucidaDownloadRequest> CreateDownloadRequest(
             RemoteAlbum remoteAlbum,
             IIndexer indexer,
@@ -51,6 +49,7 @@ namespace Tubifarry.Download.Clients.Lucida
             };
 
             _requesthandler.MaxParallelism = provider.Settings.MaxParallelDownloads;
+            await Task.Yield();
             return new LucidaDownloadRequest(remoteAlbum, options);
         }
     }

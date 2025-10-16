@@ -20,11 +20,11 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse)
         {
             if (!PreProcess(importListResponse))
-                return new List<ImportListItemInfo>();
+                return [];
 
             try
             {
-                IList<ImportListItemInfo> items = ParseRecordingRecommendations(importListResponse.Content);
+                List<ImportListItemInfo> items = ParseRecordingRecommendations(importListResponse.Content);
                 _logger.Trace("Successfully parsed {0} recording recommendations", items.Count);
                 return items;
             }
@@ -35,7 +35,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
             }
         }
 
-        private IList<ImportListItemInfo> ParseRecordingRecommendations(string content)
+        private List<ImportListItemInfo> ParseRecordingRecommendations(string content)
         {
             RecordingRecommendationResponse? response = JsonSerializer.Deserialize<RecordingRecommendationResponse>(content, GetJsonOptions());
             IReadOnlyList<RecordingRecommendation>? recommendations = response?.Payload?.Mbids;
@@ -43,7 +43,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
             if (recommendations?.Any() != true)
             {
                 _logger.Debug("No recording recommendations available");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             _logger.Trace("Processing {0} recording recommendations", recommendations.Count);

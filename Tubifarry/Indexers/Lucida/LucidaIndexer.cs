@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace Tubifarry.Indexers.Lucida
 {
-    public class LucidaIndexer : HttpIndexerBase<LucidaIndexerSettings>
+    public partial class LucidaIndexer : HttpIndexerBase<LucidaIndexerSettings>
     {
         private readonly ILucidaRequestGenerator _requestGenerator;
         private readonly ILucidaParser _parser;
@@ -60,7 +60,7 @@ namespace Tubifarry.Indexers.Lucida
                     return;
                 }
 
-                if (!response.Content.Contains("Lucida") && !Regex.IsMatch(response.Content, "<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase))
+                if (!response.Content.Contains("Lucida") && !LucidaHeaderRegex().IsMatch(response.Content))
                 {
                     failures.Add(new ValidationFailure("BaseUrl", "The provided URL does not appear to be a Lucida instance"));
                     return;
@@ -91,9 +91,9 @@ namespace Tubifarry.Indexers.Lucida
             }
 
             List<string> codes = Settings.CountryCode?
-                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split([';', ','], StringSplitOptions.RemoveEmptyEntries)
                 .Select(c => c.Trim().ToUpperInvariant())
-                .ToList() ?? new List<string>();
+                .ToList() ?? [];
 
             if (codes.Count == 0)
             {
@@ -115,5 +115,8 @@ namespace Tubifarry.Indexers.Lucida
             return _requestGenerator;
         }
         public override IParseIndexerResponse GetParser() => _parser;
+
+        [GeneratedRegex("<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase, "de-DE")]
+        private static partial Regex LucidaHeaderRegex();
     }
 }

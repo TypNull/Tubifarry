@@ -60,8 +60,6 @@ namespace Tubifarry.Core.Utilities
             return null;
         }
 
-
-
         public static ValidationFailure? TestExecutePermissions(string directoryPath, ILogger logger)
         {
             try
@@ -78,10 +76,9 @@ namespace Tubifarry.Core.Utilities
 
         }
 
-
         public static List<ValidationFailure> TestAllPermissions(string directoryPath, ILogger logger)
         {
-            List<ValidationFailure> tests = new();
+            List<ValidationFailure> tests = [];
             try
             {
                 tests!.AddIfNotNull(TestExistance(directoryPath, logger));

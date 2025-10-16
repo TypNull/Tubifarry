@@ -92,7 +92,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (string.IsNullOrEmpty(artistName) && string.IsNullOrEmpty(mbid))
                 throw new ArgumentException("Either artistName or mbid must be provided");
 
-            Dictionary<string, string> parameters = new();
+            Dictionary<string, string> parameters = [];
 
             if (!string.IsNullOrEmpty(artistName))
                 parameters.Add("artist", artistName);
@@ -149,7 +149,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             try
             {
                 LastfmAlbumInfoResponse? response = JsonSerializer.Deserialize<LastfmAlbumInfoResponse>(json.GetRawText());
-                return MappingAgent.MapAgent(response?.Album, _userAgent); ;
+                return MappingAgent.MapAgent(response?.Album, _userAgent);
             }
             catch (Exception ex)
             {
@@ -227,7 +227,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         /// ///TODO: Needs cleaning
         private async Task<List<T>?> FetchPaginatedResultsAsync<T>(HttpRequestBuilder requestBuilder, int maxPages, int itemsPerPage)
         {
-            List<T> results = new();
+            List<T> results = [];
             int page = 1;
             bool hasMorePages = true;
 

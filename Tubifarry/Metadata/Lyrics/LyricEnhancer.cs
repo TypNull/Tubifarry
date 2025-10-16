@@ -11,27 +11,20 @@ using Tubifarry.Core.Records;
 
 namespace Tubifarry.Metadata.Lyrics
 {
-    public class LyricsEnhancer : MetadataBase<LyricsEnhancerSettings>
+    public partial class LyricsEnhancer(HttpClient httpClient, Logger logger, IRootFolderWatchingService rootFolderWatchingService) : MetadataBase<LyricsEnhancerSettings>
     {
-        private readonly Logger _logger;
-        private readonly HttpClient _httpClient;
-        private readonly IRootFolderWatchingService _rootFolderWatchingService;
-
-        public LyricsEnhancer(HttpClient httpClient, Logger logger, IRootFolderWatchingService rootFolderWatchingService)
-        {
-            _logger = logger;
-            _httpClient = httpClient;
-            _rootFolderWatchingService = rootFolderWatchingService;
-        }
+        private readonly Logger _logger = logger;
+        private readonly HttpClient _httpClient = httpClient;
+        private readonly IRootFolderWatchingService _rootFolderWatchingService = rootFolderWatchingService;
 
         public override string Name => "Lyrics Enhancer";
 
         public override MetadataFile? FindMetadataFile(Artist artist, string path) => null;
         public override MetadataFileResult? ArtistMetadata(Artist artist) => null;
         public override MetadataFileResult? AlbumMetadata(Artist artist, Album album, string albumPath) => null;
-        public override List<ImageFileResult> ArtistImages(Artist artist) => new();
-        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => new();
-        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
+        public override List<ImageFileResult> ArtistImages(Artist artist) => [];
+        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => [];
+        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => [];
 
         public override string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
         {
@@ -154,7 +147,7 @@ namespace Tubifarry.Metadata.Lyrics
                     lrcContent.AppendLine($"[length:{ts.ToString(@"mm\:ss\.ff")}]");
                 }
 
-                lrcContent.AppendLine($"[by:Tubifarry Lyrics Enhancer]");
+                lrcContent.AppendLine("[by:Tubifarry Lyrics Enhancer]");
                 lrcContent.AppendLine();
 
                 foreach (SyncLine syncLine in lyric.SyncedLyrics.Where(l => l != null && !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line)).OrderBy(l => double.TryParse(l.Milliseconds ?? "0", out double ms) ? ms : 0))
@@ -196,7 +189,7 @@ namespace Tubifarry.Metadata.Lyrics
                 string plainLyrics = json["plainLyrics"]?.ToString() ?? string.Empty;
                 string syncedLyricsStr = json["syncedLyrics"]?.ToString() ?? string.Empty;
 
-                SyncLyric? syncedLyrics = SyncLine.ParseSyncedLyrics(syncedLyricsStr);
+                List<SyncLine>? syncedLyrics = SyncLine.ParseSyncedLyrics(syncedLyricsStr);
 
                 if (string.IsNullOrWhiteSpace(plainLyrics) && (syncedLyrics == null || syncedLyrics.Count == 0))
                 {
@@ -227,7 +220,7 @@ namespace Tubifarry.Metadata.Lyrics
                     return null;
                 }
 
-                string? plainLyrics = await ExtractLyricsFromGeniusPageAsync(songPath, bestMatch, artistName, trackTitle);
+                string? plainLyrics = await ExtractLyricsFromGeniusPageAsync(songPath);
                 if (string.IsNullOrWhiteSpace(plainLyrics))
                     return null;
 
@@ -244,7 +237,6 @@ namespace Tubifarry.Metadata.Lyrics
         {
             string searchUrl = $"https://api.genius.com/search?q={Uri.EscapeDataString($"{artistName} {trackTitle}")}";
             _logger.Debug($"Searching for track on Genius: {searchUrl}");
-            _logger.Debug($"Sending API request to Genius");
 
             using HttpRequestMessage request = new(HttpMethod.Get, searchUrl);
             request.Headers.Add("Authorization", $"Bearer {Settings.GeniusApiKey}");
@@ -307,7 +299,7 @@ namespace Tubifarry.Metadata.Lyrics
 
                 int artistScore = artistMatches.Count > 0 ? 100 : FuzzySharp.Fuzz.WeightedRatio(resultArtist, artistName);
 
-                int combinedScore = (titleScore * 3 + artistScore * 7) / 10;
+                int combinedScore = ((titleScore * 3) + (artistScore * 7)) / 10;
 
                 _logger.Debug($"Match candidate: '{resultTitle}' by '{resultArtist}' - " +
                              $"Title Score: {titleScore} (Token Set: {tokenSetScore}, Token Sort: {tokenSortScore}, " +
@@ -330,7 +322,7 @@ namespace Tubifarry.Metadata.Lyrics
             return bestMatch;
         }
 
-        private async Task<string?> ExtractLyricsFromGeniusPageAsync(string songPath, JToken bestMatch, string artistName, string trackTitle)
+        private async Task<string?> ExtractLyricsFromGeniusPageAsync(string songPath)
         {
             string songUrl = $"https://genius.com{songPath}";
             _logger.Trace($"Fetching lyrics from Genius page: {songUrl}");
@@ -358,27 +350,24 @@ namespace Tubifarry.Metadata.Lyrics
 
         private string? ExtractLyricsFromHtml(string html)
         {
-            Match match = DataLyricsContainerRegex.Match(html);
+            Match match = DataLyricsContainerRegex().Match(html);
 
             if (!match.Success)
-                match = ClassicLyricsClassRegex.Match(html);
+                match = ClassicLyricsClassRegex().Match(html);
             if (!match.Success)
-                match = LyricsRootIdRegex.Match(html);
+                match = LyricsRootIdRegex().Match(html);
 
             if (match.Success)
             {
                 _logger.Trace("Match found. Processing lyrics HTML...");
                 string lyricsHtml = match.Groups[1].Value;
 
-                string plainLyrics = BrTagRegex.Replace(lyricsHtml, "\n");
-                plainLyrics = ItalicTagRegex.Replace(plainLyrics, "");
-                plainLyrics = BoldTagRegex.Replace(plainLyrics, "");
-                plainLyrics = AnchorTagRegex.Replace(plainLyrics, "");
-                plainLyrics = AllHtmlTagsRegex.Replace(plainLyrics, "");
+                string plainLyrics = BrTagRegex().Replace(lyricsHtml, "\n");
+                plainLyrics = ItalicTagRegex().Replace(plainLyrics, "");
+                plainLyrics = BoldTagRegex().Replace(plainLyrics, "");
+                plainLyrics = AnchorTagRegex().Replace(plainLyrics, "");
+                plainLyrics = AllHtmlTagsRegex().Replace(plainLyrics, "");
                 plainLyrics = System.Web.HttpUtility.HtmlDecode(plainLyrics).Trim();
-
-                int lineCount = plainLyrics.Split('\n').Length;
-
                 return plainLyrics;
             }
             else
@@ -406,19 +395,28 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        private static readonly Regex DataLyricsContainerRegex = new(@"<div[^>]*data-lyrics-container[^>]*>(.*?)<\/div>",
-        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        [GeneratedRegex(@"<div[^>]*data-lyrics-container[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
+        private static partial Regex DataLyricsContainerRegex();
+        [GeneratedRegex(@"<div[^>]*class=""[^""]*lyrics[^""]*""[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
+        private static partial Regex ClassicLyricsClassRegex();
+        [GeneratedRegex(@"<div[^>]*id=""lyrics-root[^""]*""[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
+        private static partial Regex LyricsRootIdRegex();
 
-        private static readonly Regex ClassicLyricsClassRegex = new(@"<div[^>]*class=""[^""]*lyrics[^""]*""[^>]*>(.*?)<\/div>",
-            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private static readonly Regex LyricsRootIdRegex = new(@"<div[^>]*id=""lyrics-root[^""]*""[^>]*>(.*?)<\/div>",
-            RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        [GeneratedRegex(@"<br[^>]*>", RegexOptions.Compiled)]
+        private static partial Regex BrTagRegex();
 
-        private static readonly Regex BrTagRegex = new(@"<br[^>]*>", RegexOptions.Compiled);
-        private static readonly Regex ItalicTagRegex = new(@"</?i[^>]*>", RegexOptions.Compiled);
-        private static readonly Regex BoldTagRegex = new(@"</?b[^>]*>", RegexOptions.Compiled);
-        private static readonly Regex AnchorTagRegex = new(@"</?a[^>]*>", RegexOptions.Compiled);
-        private static readonly Regex AllHtmlTagsRegex = new(@"<[^>]*>", RegexOptions.Compiled);
+        [GeneratedRegex(@"</?i[^>]*>", RegexOptions.Compiled)]
+        private static partial Regex ItalicTagRegex();
+
+        [GeneratedRegex(@"</?b[^>]*>", RegexOptions.Compiled)]
+        private static partial Regex BoldTagRegex();
+
+        [GeneratedRegex(@"</?a[^>]*>", RegexOptions.Compiled)]
+        private static partial Regex AnchorTagRegex();
+
+        [GeneratedRegex(@"<[^>]*>", RegexOptions.Compiled)]
+        private static partial Regex AllHtmlTagsRegex
+            ();
     }
 }

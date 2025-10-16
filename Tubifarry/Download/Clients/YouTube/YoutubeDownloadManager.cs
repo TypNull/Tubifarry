@@ -12,7 +12,7 @@ namespace Tubifarry.Download.Clients.YouTube
     /// <summary>
     /// Interface for YouTube download manager
     /// </summary>
-    public interface IYoutubeDownloadManager : IBaseDownloadManager<YouTubeDownloadRequest, YouTubeDownloadOptions, YoutubeClient> { }
+    public interface IYoutubeDownloadManager : IBaseDownloadManager<YouTubeDownloadRequest, YouTubeDownloadOptions, YoutubeClient>;
 
     /// <summary>
     /// YouTube download manager using the base download manager implementation

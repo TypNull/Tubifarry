@@ -27,7 +27,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
         public List<TResult> ExecuteSearch()
         {
-            List<TResult> aggregatedItems = new();
+            List<TResult> aggregatedItems = [];
             int bestPriority = int.MaxValue;
 
             foreach (ProxyCandidate candidate in _mixedProxy.GetCandidateProxies(_supportSelector, _interfaceType))
@@ -60,7 +60,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 bool success = !queryValid || newCount > 0;
                 _mixedProxy._adaptiveThreshold.UpdateMetrics(candidate.Proxy.Name, sw.Elapsed.TotalMilliseconds, newCount, success);
 
-                if (newCount == 0 && aggregatedItems.Any())
+                if (newCount == 0 && aggregatedItems.Count != 0)
                 {
                     _logger.Trace($"No new items from proxy {candidate.Proxy.Name}, stopping further calls.");
                     break;

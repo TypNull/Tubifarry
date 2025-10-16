@@ -24,8 +24,8 @@
         public const string RepoUrl = &quot;$(RepoUrl)&quot;%3B
         public const string Framework = &quot;$(TargetFramework)&quot;%3B
         public const string MinimumLidarrVersion = &quot;$(MinimumLidarrVersion)&quot;%3B
-        public const bool CI = $(CI)%3B
         public const string BuildDate = &quot;$([System.DateTime]::UtcNow.ToString(&quot;yyyy-MM-dd HH:mm:ss&quot;))&quot;%3B
+		public const bool CI = $(CI)%3B
     }
 }"
 			Encoding="UTF-8"

@@ -14,7 +14,7 @@ namespace Tubifarry.Indexers.YouTube
             RuleFor(x => x.CookiePath)
                 .Must(path => string.IsNullOrEmpty(path) || File.Exists(path))
                 .WithMessage("Cookie file does not exist. Please provide a valid path to the cookies file.")
-                .Must(path => string.IsNullOrEmpty(path) || CookieManager.ParseCookieFile(path).Any())
+                .Must(path => string.IsNullOrEmpty(path) || CookieManager.ParseCookieFile(path).Length != 0)
                 .WithMessage("Cookie file is invalid or contains no valid cookies.");
 
             // Validate TrustedSessionGeneratorUrl (optional)

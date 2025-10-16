@@ -72,12 +72,11 @@ namespace Tubifarry.Core.Replacements
 
         public override HttpRequest GetDownloadRequest(string link) => new(link);
 
-
         protected virtual async Task<IList<ReleaseInfo>> FetchReleases(
             Func<IIndexerRequestGenerator<TIndexerPageableRequest>, IndexerPageableRequestChain<TIndexerPageableRequest>> pageableRequestChainSelector,
             bool isRecent = false)
         {
-            List<ReleaseInfo> releases = new();
+            List<ReleaseInfo> releases = [];
             string url = string.Empty;
             TimeSpan minimumBackoff = TimeSpan.FromHours(1);
 
@@ -99,11 +98,11 @@ namespace Tubifarry.Core.Replacements
                 {
                     IEnumerable<TIndexerPageableRequest> pageableRequests = pageableRequestChain.GetTier(i);
 
-                    List<ReleaseInfo> tierReleases = new();
+                    List<ReleaseInfo> tierReleases = [];
 
                     foreach (TIndexerPageableRequest pageableRequest in pageableRequests)
                     {
-                        List<ReleaseInfo> pagedReleases = new();
+                        List<ReleaseInfo> pagedReleases = [];
 
                         foreach (IndexerRequest? request in pageableRequest)
                         {
@@ -130,12 +129,14 @@ namespace Tubifarry.Core.Replacements
                         _logger.Debug($"Tier {i + 1} found {tierReleases.Count} usable results out of total {releases.Count} results. Stopping search.");
                         break;
                     }
-                    else if (tierReleases.Any())
+                    else if (tierReleases.Count != 0)
+                    {
                         _logger.Debug($"Tier {i + 1} found {tierReleases.Count} results out of total {releases.Count}, but doesn't meet usability criteria. Trying next tier.");
-
+                    }
                     else
+                    {
                         _logger.Debug($"Tier {i + 1} found no results. Total results so far: {releases.Count}. Trying next tier.");
-
+                    }
                 }
 
                 if (isRecent && !releases.Empty())
@@ -165,7 +166,7 @@ namespace Tubifarry.Core.Replacements
                 return true;
             }
 
-            DateTime oldestReleaseDate = page.Select(v => v.PublishDate).Min();
+            DateTime oldestReleaseDate = page.Min(v => v.PublishDate);
             if (oldestReleaseDate < lastReleaseInfo.PublishDate || page.Any(v => v.DownloadUrl == lastReleaseInfo.DownloadUrl))
             {
                 fullyUpdated = true;
@@ -182,7 +183,6 @@ namespace Tubifarry.Core.Replacements
         }
 
         protected virtual bool IsFullPage(IList<ReleaseInfo> page) => PageSize != 0 && page.Count >= PageSize;
-
 
         protected virtual bool IsValidRelease(ReleaseInfo release)
         {
@@ -203,16 +203,16 @@ namespace Tubifarry.Core.Replacements
 
         private void UpdateRssSyncStatus(List<ReleaseInfo> releases, ReleaseInfo? lastReleaseInfo, bool fullyUpdated)
         {
-            List<ReleaseInfo> ordered = releases.OrderByDescending(v => v.PublishDate).ToList();
+            List<ReleaseInfo> ordered = [.. releases.OrderByDescending(v => v.PublishDate)];
 
             if (!fullyUpdated && lastReleaseInfo != null)
             {
                 DateTime gapStart = lastReleaseInfo.PublishDate;
-                DateTime gapEnd = ordered.Last().PublishDate;
+                DateTime gapEnd = ordered[^1].PublishDate;
                 _logger.Warn("Indexer {0} rss sync didn't cover the period between {1} and {2} UTC. Search may be required.", Definition.Name, gapStart, gapEnd);
             }
 
-            lastReleaseInfo = ordered.First();
+            lastReleaseInfo = ordered[0];
             _indexerStatusService.UpdateRssSyncStatus(Definition.Id, lastReleaseInfo);
         }
 
@@ -296,7 +296,7 @@ namespace Tubifarry.Core.Replacements
 
             try
             {
-                return parser.ParseResponse(response).ToList();
+                return [.. parser.ParseResponse(response)];
             }
             catch (Exception ex)
             {
@@ -322,7 +322,6 @@ namespace Tubifarry.Core.Replacements
         }
 
         protected override async Task Test(List<ValidationFailure> failures) => failures.AddIfNotNull(await TestConnection());
-
 
         protected virtual async Task<ValidationFailure> TestConnection()
         {

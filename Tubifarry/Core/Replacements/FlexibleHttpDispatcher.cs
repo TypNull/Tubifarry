@@ -28,20 +28,20 @@ namespace Tubifarry.Core.Replacements
                 userAgentValidator.AddBlacklistPattern(pattern);
         }
 
-        readonly string[] blacklisted = new string[]
-        {
+        readonly string[] blacklisted =
+        [
             // Fuzzy matching for Lidarr (catches variations like Lidar, Lidaar, etc.)
-            @".*[a]r+.*",
-            @".*[e]rr+.*",
+            ".*[a]r+.*",
+            ".*[e]rr+.*",
             // Fuzzy matching for Tubifarry (catches variations like Tubifary, Tubiferry, etc.)
-            @".*t[uo]b?[iey]?.*",
+            ".*t[uo]b?[iey]?.*",
             // Additional fuzzy blocking patterns
-            @".*.[fbvd][ae]r+.*",
-            @".*b[o0]t.*",
-            @".*cr[ae]wl[ae]r.*",
-            @".*pr[o0]xy.*",
-            @".*scr[ae]p[ae]r.*"
-        };
+            ".*.[fbvd][ae]r+.*",
+            ".*b[o0]t.*",
+            ".*cr[ae]wl[ae]r.*",
+            ".*pr[o0]xy.*",
+            ".*scr[ae]p[ae]r.*"
+        ];
 
         async Task<HttpResponse> IHttpDispatcher.GetResponseAsync(HttpRequest request, CookieContainer cookies)
         {
@@ -68,7 +68,7 @@ namespace Tubifarry.Core.Replacements
         {
             string userAgent = headers.GetSingleValue("User-Agent");
 
-            HttpHeader filtered = new();
+            HttpHeader filtered = [];
             foreach (KeyValuePair<string, string> h in headers.Where(h => h.Key != "User-Agent"))
                 filtered.Add(h.Key, h.Value);
 

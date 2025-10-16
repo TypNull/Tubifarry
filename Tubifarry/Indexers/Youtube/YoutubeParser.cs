@@ -50,7 +50,7 @@ namespace Tubifarry.Indexers.YouTube
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<ReleaseInfo> releases = new();
+            List<ReleaseInfo> releases = [];
 
             try
             {
@@ -60,12 +60,12 @@ namespace Tubifarry.Indexers.YouTube
                     return releases;
                 }
                 JObject jsonResponse = JObject.Parse(indexerResponse.Content);
-                Page<SearchResult> searchPage = TryParseWithDelegate(jsonResponse) ?? new Page<SearchResult>(new List<SearchResult>(), null);
+                Page<SearchResult> searchPage = TryParseWithDelegate(jsonResponse) ?? new Page<SearchResult>([], null);
 
                 _logger.Trace($"Parsed {searchPage.Items.Count} search results from YouTube Music API response");
                 ProcessSearchResults(searchPage.Items, releases);
                 _logger.Debug($"Successfully converted {releases.Count} results to releases");
-                return releases.DistinctBy(x => x.DownloadUrl).OrderByDescending(o => o.PublishDate).ToList();
+                return [.. releases.DistinctBy(x => x.DownloadUrl).OrderByDescending(o => o.PublishDate)];
             }
             catch (Exception ex)
             {
@@ -139,7 +139,7 @@ namespace Tubifarry.Indexers.YouTube
                 string browseId = await _youTubeClient!.GetAlbumBrowseIdAsync(albumData.AlbumId);
                 AlbumInfo albumInfo = await _youTubeClient.GetAlbumInfoAsync(browseId);
 
-                if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
+                if (albumInfo?.Songs == null || albumInfo.Songs.Length == 0)
                 {
                     _logger.Trace($"No songs found for album: '{albumData.AlbumName}'");
                     albumData.Bitrate = DEFAULT_BITRATE;

@@ -7,27 +7,20 @@ namespace Tubifarry.Download.Base
     /// Provides standardized HTTP operations with proper headers and error handling
     /// Never modifies the shared HttpClient uses individual requests with proper headers
     /// </summary>
-    public class BaseHttpClient
+    /// <remarks>
+    /// Initializes a new instance of the BaseHttpClient
+    /// </remarks>
+    /// <param name="baseUrl">Base URL for the service instance</param>
+    /// <param name="timeout">Request timeout (default: 60 seconds)</param>
+    public class BaseHttpClient(string baseUrl, TimeSpan? timeout = null)
     {
-        private readonly HttpClient _httpClient;
-        private readonly TimeSpan _timeout;
-
-        /// <summary>
-        /// Initializes a new instance of the BaseHttpClient
-        /// </summary>
-        /// <param name="baseUrl">Base URL for the service instance</param>
-        /// <param name="timeout">Request timeout (default: 60 seconds)</param>
-        public BaseHttpClient(string baseUrl, TimeSpan? timeout = null)
-        {
-            BaseUrl = baseUrl?.TrimEnd('/') ?? throw new ArgumentNullException(nameof(baseUrl));
-            _httpClient = HttpGet.HttpClient;
-            _timeout = timeout ?? TimeSpan.FromSeconds(60);
-        }
+        private readonly HttpClient _httpClient = HttpGet.HttpClient;
+        private readonly TimeSpan _timeout = timeout ?? TimeSpan.FromSeconds(60);
 
         /// <summary>
         /// Gets the base URL for this service instance
         /// </summary>
-        public string BaseUrl { get; }
+        public string BaseUrl { get; } = baseUrl?.TrimEnd('/') ?? throw new ArgumentNullException(nameof(baseUrl));
 
         /// <summary>
         /// Creates a properly configured HttpRequestMessage with standard headers
@@ -128,7 +121,6 @@ namespace Tubifarry.Download.Base
         {
             try
             {
-                // Add standard headers if not already present
                 if (!request.Headers.Contains("User-Agent"))
                     request.Headers.Add("User-Agent", Tubifarry.UserAgent);
 

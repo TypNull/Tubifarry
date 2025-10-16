@@ -6,8 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace Tubifarry.Core.Records
 {
-
-    public record Lyric(string? PlainLyrics, SyncLyric? SyncedLyrics)
+    public record Lyric(string? PlainLyrics, List<SyncLine>? SyncedLyrics)
     {
         public static async Task<Lyric?> FetchLyricsFromLRCLIBAsync(string instance, ReleaseInfo releaseInfo, string trackName, int duration = 0, CancellationToken token = default)
         {
@@ -19,9 +18,7 @@ namespace Tubifarry.Core.Records
         }
     }
 
-    public class SyncLyric : List<SyncLine> { }
-
-    public record class SyncLine
+    public partial record class SyncLine
     {
         [JsonProperty("lrc_timestamp")]
         public string? LrcTimestamp { get; init; }
@@ -35,13 +32,13 @@ namespace Tubifarry.Core.Records
         [JsonProperty("line")]
         public string? Line { get; init; }
 
-        public static SyncLyric ParseSyncedLyrics(string syncedLyrics)
+        public static List<SyncLine> ParseSyncedLyrics(string syncedLyrics)
         {
-            SyncLyric lyric = new();
+            List<SyncLine> lyric = [];
             string[] array = syncedLyrics.Split(new char[1] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
             for (int i = 0; i < array.Length; i++)
             {
-                Match match = Regex.Match(array[i], "\\[(\\d{2}:\\d{2}\\.\\d{2})\\](.*)");
+                Match match = TagRegex().Match(array[i]);
                 if (match.Success)
                 {
                     string value = match.Groups[1].Value;
@@ -57,5 +54,8 @@ namespace Tubifarry.Core.Records
             }
             return lyric;
         }
+
+        [GeneratedRegex("\\[(\\d{2}:\\d{2}\\.\\d{2})\\](.*)")]
+        private static partial Regex TagRegex();
     }
 }

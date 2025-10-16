@@ -49,7 +49,7 @@ namespace Tubifarry.Download.Clients.YouTube
         public override DownloadClientInfo GetStatus() => new()
         {
             IsLocalhost = false,
-            OutputRootFolders = new() { new OsPath(Settings.DownloadPath) }
+            OutputRootFolders = [new OsPath(Settings.DownloadPath)]
         };
 
         protected override void Test(List<ValidationFailure> failures)

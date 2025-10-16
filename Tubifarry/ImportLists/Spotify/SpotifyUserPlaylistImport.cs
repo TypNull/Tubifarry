@@ -47,7 +47,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
 
         public override IList<SpotifyImportListItemInfo> Fetch(SpotifyWebAPI api)
         {
-            List<SpotifyImportListItemInfo> result = new();
+            List<SpotifyImportListItemInfo> result = [];
             if (!string.IsNullOrWhiteSpace(Settings.CacheDirectory))
                 _fileCache ??= new FileCache(Settings.CacheDirectory);
 
@@ -137,7 +137,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
             if (playlistTracks == null)
                 return;
 
-            List<SpotifyImportListItemInfo> playlistItems = new();
+            List<SpotifyImportListItemInfo> playlistItems = [];
             ProcessPlaylistTracks(api, playlistTracks, playlistItems);
 
             CachedPlaylistData cachedDataToSave = new()
@@ -168,7 +168,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
 
         private class CachedPlaylistData
         {
-            public List<SpotifyImportListItemInfo> ImportListItems { get; set; } = new();
+            public List<SpotifyImportListItemInfo> ImportListItems { get; set; } = [];
             public SimplePlaylist? Playlist { get; set; }
         }
 

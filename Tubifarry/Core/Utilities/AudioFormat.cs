@@ -23,7 +23,7 @@ namespace Tubifarry.Core.Utilities
 
     internal static class AudioFormatHelper
     {
-        private static readonly AudioFormat[] _lossyFormats = new[] {
+        private static readonly AudioFormat[] _lossyFormats = [
             AudioFormat.AAC,
             AudioFormat.MP3,
             AudioFormat.Opus,
@@ -31,9 +31,9 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.MP4,
             AudioFormat.AMR,
             AudioFormat.WMA
-        };
+        ];
 
-        private static readonly int[] _standardBitrates = {
+        private static readonly int[] _standardBitrates = [
             0,      // VBR (Variable Bitrate)
             32,     // Low-quality voice
             64,     // Basic music/voice
@@ -46,7 +46,7 @@ namespace Tubifarry.Core.Utilities
             384,    // Dolby Digital/AC-3 (5.1 surround)
             448,    // Dolby Digital/AC-3 (higher-end)
             510     // Opus maximum
-        };
+        ];
 
         /// <summary>
         /// Defines bitrate constraints for lossy audio formats: (Default, Minimum, Maximum)

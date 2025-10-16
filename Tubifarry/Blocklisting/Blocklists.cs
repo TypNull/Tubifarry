@@ -3,14 +3,9 @@ using NzbDrone.Core.Indexers;
 
 namespace Tubifarry.Blocklisting
 {
-    public class YoutubeBlocklist : BaseBlocklist<YoutubeDownloadProtocol>
-    {
-        public YoutubeBlocklist(IBlocklistRepository blocklistRepository) : base(blocklistRepository) { }
+    public class YoutubeBlocklist(IBlocklistRepository blocklistRepository) : BaseBlocklist<YoutubeDownloadProtocol>(blocklistRepository)
+    { }
 
-    }
-
-    public class SoulseekBlocklist : BaseBlocklist<SoulseekDownloadProtocol>
-    {
-        public SoulseekBlocklist(IBlocklistRepository blocklistRepository) : base(blocklistRepository) { }
-    }
+    public class SoulseekBlocklist(IBlocklistRepository blocklistRepository) : BaseBlocklist<SoulseekDownloadProtocol>(blocklistRepository)
+    { }
 }

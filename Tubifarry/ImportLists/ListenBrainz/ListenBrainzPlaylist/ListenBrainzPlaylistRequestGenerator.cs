@@ -3,20 +3,15 @@ using NzbDrone.Core.ImportLists;
 
 namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
 {
-    public class ListenBrainzPlaylistRequestGenerator : IImportListRequestGenerator
+    public class ListenBrainzPlaylistRequestGenerator(ListenBrainzPlaylistSettings settings) : IImportListRequestGenerator
     {
-        private readonly ListenBrainzPlaylistSettings _settings;
-
-        public ListenBrainzPlaylistRequestGenerator(ListenBrainzPlaylistSettings settings)
-        {
-            _settings = settings;
-        }
+        private readonly ListenBrainzPlaylistSettings _settings = settings;
 
         public virtual ImportListPageableRequestChain GetListItems()
         {
             ImportListPageableRequestChain pageableRequests = new();
 
-            List<ImportListRequest> requests = new();
+            List<ImportListRequest> requests = [];
 
             foreach (string playlistId in _settings.PlaylistIds)
             {
@@ -26,10 +21,8 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
                 }
             }
 
-            if (requests.Any())
-            {
+            if (requests.Count != 0)
                 pageableRequests.Add(requests);
-            }
 
             return pageableRequests;
         }

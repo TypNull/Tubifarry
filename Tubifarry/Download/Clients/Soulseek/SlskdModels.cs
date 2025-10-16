@@ -10,23 +10,24 @@ namespace Tubifarry.Download.Clients.Soulseek
 {
     public class SlskdDownloadItem
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly DownloadClientItem _downloadClientItem;
+        private readonly Logger _logger;
         private DateTime _lastUpdateTime;
         private long _lastDownloadedSize;
 
         public string ID { get; set; }
-        public List<SlskdFileData> FileData { get; set; } = new();
+        public List<SlskdFileData> FileData { get; set; } = [];
         public string? Username { get; set; }
         public ReleaseInfo ReleaseInfo { get; set; }
 
         public event EventHandler<SlskdFileState>? FileStateChanged;
 
-        private Logger _logger;
 
         private SlskdDownloadDirectory? _slskdDownloadDirectory;
-        private Dictionary<string, SlskdFileState> _previousFileStates = new();
+        private readonly Dictionary<string, SlskdFileState> _previousFileStates = [];
 
-        public List<Task> PostProcessTasks { get; } = new();
+        public List<Task> PostProcessTasks { get; } = [];
 
         public SlskdDownloadDirectory? SlskdDownloadDirectory
         {
@@ -44,7 +45,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             _logger = NzbDroneLogger.GetLogger(this);
             ReleaseInfo = releaseInfo;
-            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(ReleaseInfo.Source, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            FileData = JsonSerializer.Deserialize<List<SlskdFileData>>(ReleaseInfo.Source, _jsonOptions) ?? [];
             _lastUpdateTime = DateTime.UtcNow;
             _lastDownloadedSize = 0;
             ID = GetStableMD5Id(FileData.Select(file => file.Filename));
@@ -54,10 +55,9 @@ namespace Tubifarry.Download.Clients.Soulseek
 
         public static string GetStableMD5Id(IEnumerable<string?> filenames)
         {
-            using System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
-            string combined = string.Join("|", filenames.OrderBy(f => f));
+            string combined = string.Join("|", filenames.Order());
             byte[] bytes = System.Text.Encoding.UTF8.GetBytes(combined);
-            return BitConverter.ToString(md5.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
+            return BitConverter.ToString(System.Security.Cryptography.MD5.HashData(bytes)).Replace("-", "").ToLowerInvariant();
         }
 
         private void CompareFileStates(SlskdDownloadDirectory? newDirectory)
@@ -74,9 +74,9 @@ namespace Tubifarry.Download.Clients.Soulseek
                         FileStateChanged?.Invoke(this, fileState);
                 }
                 else
+                {
                     _previousFileStates.Add(file.Filename, new(file));
-
-
+                }
             }
         }
 
@@ -121,13 +121,15 @@ namespace Tubifarry.Download.Clients.Soulseek
             DateTime lastTime = SlskdDownloadDirectory.Files.Max(x => x.EnqueuedAt > x.StartedAt ? x.EnqueuedAt : x.StartedAt + x.ElapsedTime);
 
             if (now - lastTime > timeout)
+            {
                 status = DownloadItemStatus.Failed;
+            }
             else if ((double)failedFiles.Count / fileStatuses.Count * 100 > 20)
             {
                 status = DownloadItemStatus.Failed;
                 _downloadClientItem.Message = $"Downloading {failedFiles.Count} files failed: {string.Join(", ", failedFiles)}";
             }
-            else if (failedFiles.Any())
+            else if (failedFiles.Count != 0)
             {
                 status = DownloadItemStatus.Warning;
                 _downloadClientItem.Message = $"Downloading {failedFiles.Count} files failed: {string.Join(", ", failedFiles)}";
@@ -140,14 +142,18 @@ namespace Tubifarry.Download.Clients.Soulseek
                     status = DownloadItemStatus.Completed;
             }
             else if (fileStatuses.Any(status => status == DownloadItemStatus.Paused))
+            {
                 status = DownloadItemStatus.Paused;
+            }
             else if (fileStatuses.Any(status => status == DownloadItemStatus.Warning))
             {
                 _downloadClientItem.Message = "Some files failed. Retrying download...";
                 status = DownloadItemStatus.Warning;
             }
             else if (fileStatuses.Any(status => status == DownloadItemStatus.Downloading))
+            {
                 status = DownloadItemStatus.Downloading;
+            }
 
             // Update DownloadClientItem
             _downloadClientItem.TotalSize = totalSize;
@@ -223,12 +229,12 @@ namespace Tubifarry.Download.Clients.Soulseek
                 yield return new SlskdDownloadDirectory(
                     Directory: directory.TryGetProperty("directory", out JsonElement directoryElement) ? directoryElement.GetString() ?? string.Empty : string.Empty,
                     FileCount: directory.TryGetProperty("fileCount", out JsonElement fileCountElement) ? fileCountElement.GetInt32() : 0,
-                    Files: directory.TryGetProperty("files", out JsonElement filesElement) ? SlskdDownloadFile.GetFiles(filesElement).ToList() : new List<SlskdDownloadFile>()
+                    Files: directory.TryGetProperty("files", out JsonElement filesElement) ? SlskdDownloadFile.GetFiles(filesElement).ToList() : []
                 );
             }
         }
 
-        public List<SlskdFileData> ToSlskdFileDataList() => Files?.Select(f => f.ToSlskdFileData()).ToList() ?? new List<SlskdFileData>();
+        public List<SlskdFileData> ToSlskdFileDataList() => Files?.Select(f => f.ToSlskdFileData()).ToList() ?? [];
 
         public SlskdFolderData CreateFolderData(string username) => SlskdItemsParser.ParseFolderName(Directory) with
         {
@@ -236,7 +242,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             HasFreeUploadSlot = true,
             UploadSpeed = 0,
             LockedFileCount = 0,
-            LockedFiles = new List<SlskdLockedFile>()
+            LockedFiles = []
         };
     }
 
@@ -309,16 +315,10 @@ namespace Tubifarry.Download.Clients.Soulseek
         }
     }
 
-    public readonly struct DownloadKey<TOuterKey, TInnerKey> where TOuterKey : notnull where TInnerKey : notnull
+    public readonly struct DownloadKey<TOuterKey, TInnerKey>(TOuterKey outerKey, TInnerKey innerKey) where TOuterKey : notnull where TInnerKey : notnull
     {
-        public TOuterKey OuterKey { get; }
-        public TInnerKey InnerKey { get; }
-
-        public DownloadKey(TOuterKey outerKey, TInnerKey innerKey)
-        {
-            OuterKey = outerKey;
-            InnerKey = innerKey;
-        }
+        public TOuterKey OuterKey { get; } = outerKey;
+        public TInnerKey InnerKey { get; } = innerKey;
 
         public override readonly bool Equals(object? obj) =>
             obj is DownloadKey<TOuterKey, TInnerKey> other &&

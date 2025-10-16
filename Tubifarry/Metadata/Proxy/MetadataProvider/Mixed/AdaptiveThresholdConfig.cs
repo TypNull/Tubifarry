@@ -45,7 +45,7 @@
         /// <summary>
         /// Stores metrics for each proxy, indexed by the proxy's name.
         /// </summary>
-        public Dictionary<string, ProxyMetrics> ProxyMetrics { get; set; } = new Dictionary<string, ProxyMetrics>();
+        public Dictionary<string, ProxyMetrics> ProxyMetrics { get; set; } = [];
     }
 
 }

@@ -13,12 +13,12 @@ namespace Tubifarry.Indexers.Soulseek
             // Base URL validation
             RuleFor(c => c.BaseUrl)
                 .ValidRootUrl()
-                .Must(url => !url.EndsWith("/"))
+                .Must(url => !url.EndsWith('/'))
                 .WithMessage("Base URL must not end with a slash ('/').");
 
             // External URL validation (only if not empty)
             RuleFor(c => c.ExternalUrl)
-                .Must(url => string.IsNullOrEmpty(url) || Uri.IsWellFormedUriString(url, UriKind.Absolute) && !url.EndsWith("/"))
+                .Must(url => string.IsNullOrEmpty(url) || (Uri.IsWellFormedUriString(url, UriKind.Absolute) && !url.EndsWith('/')))
                 .WithMessage("External URL must be a valid URL and must not end with a slash ('/').");
 
             // API Key validation
@@ -69,7 +69,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             // Include File Extensions validation
             RuleFor(c => c.IncludeFileExtensions)
-                .Must(extensions => extensions == null || extensions.All(ext => !ext.Contains('.')))
+                .Must(extensions => extensions?.All(ext => !ext.Contains('.')) != false)
                 .WithMessage("File extensions must not contain a dot ('.').");
 
             // Ignore List File Path validation
@@ -97,7 +97,7 @@ namespace Tubifarry.Indexers.Soulseek
         public bool OnlyAudioFiles { get; set; } = true;
 
         [FieldDefinition(4, Type = FieldType.Tag, Label = "Include File Extensions", HelpText = "Specify file extensions to include when 'Include Only Audio Files' is enabled. This setting has no effect if 'Include Only Audio Files' is disabled.", Advanced = true)]
-        public IEnumerable<string> IncludeFileExtensions { get; set; } = Array.Empty<string>();
+        public IEnumerable<string> IncludeFileExtensions { get; set; } = [];
 
         [FieldDefinition(6, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;

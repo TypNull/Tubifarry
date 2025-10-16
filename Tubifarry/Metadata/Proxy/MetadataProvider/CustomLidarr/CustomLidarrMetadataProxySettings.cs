@@ -8,7 +8,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
 {
     public class CustomLidarrMetadataProxySettingsValidator : AbstractValidator<CustomLidarrMetadataProxySettings>
     {
-        private static readonly string[] _restrictedDomains = new[] { "musicbrainz.org", "lidarr.audio" };
+        private static readonly string[] _restrictedDomains = ["musicbrainz.org", "lidarr.audio"];
 
         public CustomLidarrMetadataProxySettingsValidator()
         {

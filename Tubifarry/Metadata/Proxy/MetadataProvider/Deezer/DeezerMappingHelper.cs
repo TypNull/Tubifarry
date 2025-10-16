@@ -21,24 +21,24 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 ForeignAlbumId = dAlbum.Id + _identifier,
                 Title = dAlbum.Title ?? string.Empty,
                 ReleaseDate = dAlbum.ReleaseDate,
-                CleanTitle = dAlbum.Title.CleanArtistName(), // Use CleanArtistName instead of CleanAlbumTitle, as lidar utilizes it too.
-                Links = new List<Links>(),
-                Genres = dAlbum.Genres?.Data?.Select(g => g.Name).ToList() ?? new List<string>(),
+                CleanTitle = dAlbum.Title.CleanArtistName(),
+                Links = [],
+                Genres = dAlbum.Genres?.Data?.Select(g => g.Name).ToList() ?? [],
                 AlbumType = AlbumMapper.PrimaryTypeMap.TryGetValue(dAlbum.RecordType.ToLowerInvariant(), out string? mappedType) ? mappedType : "Album",
-                SecondaryTypes = new List<SecondaryAlbumType>(),
+                SecondaryTypes = [],
                 Ratings = new Ratings { Votes = dAlbum.Fans, Value = Math.Min(dAlbum.Fans > 0 ? (decimal)(dAlbum.Fans / 1000.0) : 0, 0) },
                 AnyReleaseOk = true,
             };
 
-            List<string> overviewParts = new();
+            List<string> overviewParts = [];
             if (!string.IsNullOrWhiteSpace(dAlbum.Label)) overviewParts.Add($"Label: {dAlbum.Label}");
             if (dAlbum.ReleaseDate != DateTime.MinValue)
                 overviewParts.Add($"Released: {dAlbum.ReleaseDate:yyyy-MM-dd}");
             if (dAlbum.NumberOfTracks > 0) overviewParts.Add($"{dAlbum.NumberOfTracks} tracks");
             if (!string.IsNullOrWhiteSpace(dAlbum.UPC)) overviewParts.Add($"UPC: {dAlbum.UPC}");
-            album.Overview = overviewParts.Any() ? string.Join(" • ", overviewParts) : "Found on Deezer";
+            album.Overview = overviewParts.Count != 0 ? string.Join(" • ", overviewParts) : "Found on Deezer";
 
-            album.Images = new List<MediaCover>();
+            album.Images = [];
             foreach (string? url in new[] { dAlbum.CoverMedium, dAlbum.CoverBig })
                 if (!string.IsNullOrEmpty(url)) album.Images.Add(new MediaCover(MediaCoverTypes.Cover, url + $"?{FlexibleHttpDispatcher.UA_PARAM}={dAlbum.UserAgent}"));
 
@@ -47,9 +47,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             if (!string.IsNullOrEmpty(dAlbum.UPC))
                 album.Links.Add(new Links { Url = $"upc:{dAlbum.UPC}", Name = "UPC" });
 
-            List<DeezerTrack> tracks = dAlbum.Tracks?.Data ?? new List<DeezerTrack>();
-            List<int> diskNumbers = tracks.Select(t => t.DiskNumber).Distinct().OrderBy(d => d).ToList();
-            if (!diskNumbers.Any())
+            List<DeezerTrack> tracks = dAlbum.Tracks?.Data ?? [];
+            List<int> diskNumbers = [.. tracks.Select(t => t.DiskNumber).Distinct().Order()];
+            if (diskNumbers.Count == 0)
                 diskNumbers.Add(1);
 
             AlbumRelease albumRelease = new()
@@ -66,7 +66,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 }),
                 Album = album,
                 TrackCount = dAlbum.NumberOfTracks,
-                Label = !string.IsNullOrWhiteSpace(dAlbum.Label) ? new List<string> { dAlbum.Label } : new List<string>(),
+                Label = !string.IsNullOrWhiteSpace(dAlbum.Label) ? [dAlbum.Label] : [],
                 Status = "Official"
             };
 
@@ -78,7 +78,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 album.ArtistMetadataId = artist.ArtistMetadataId;
             }
             tracks = tracks.Select((x, index) => x with { TrackPosition = index + 1 }).ToList();
-            albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist!)) ?? new();
+            albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist!)) ?? [];
 
 
             if (dAlbum.Contributors?.Count > 1)
@@ -86,7 +86,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(dAlbum.Title ?? string.Empty);
             album.SecondaryTypes.AddRange(titleTypes);
 
-            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease> { albumRelease });
+            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>([albumRelease]);
             return album;
         }
 
@@ -109,14 +109,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 Name = dArtist.Name,
                 Overview = $"Artist \"{dArtist.Name}\" found on Deezer{(dArtist.NbAlbum > 0 ? $" with {dArtist.NbAlbum} albums" : "")}{(dArtist.NbAlbum > 0 && dArtist.NbFan > 0 ? " and" : "")}{(dArtist.NbFan > 0 ? $" {dArtist.NbFan} fans" : "")}.",
                 Images = GetArtistImages(dArtist),
-                Links = new List<Links>
-                {
+                Links =
+                [
                     new() { Url = dArtist.Link, Name = "Deezer" },
                     new() { Url = dArtist.Share, Name = "Deezer Share" }
-                },
-                Genres = new(),
-                Members = new(),
-                Aliases = new(),
+                ],
+                Genres = [],
+                Members = [],
+                Aliases = [],
                 Status = ArtistStatusType.Continuing,
                 Type = string.Empty,
                 Ratings = new Ratings()
@@ -128,7 +128,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
 
         private static List<MediaCover> GetArtistImages(DeezerArtist artist)
         {
-            List<MediaCover> images = new();
+            List<MediaCover> images = [];
             foreach (string? url in new[] { artist.PictureMedium, artist.PictureBig })
                 if (!string.IsNullOrEmpty(url)) images.Add(new MediaCover(MediaCoverTypes.Poster, url + $"?{FlexibleHttpDispatcher.UA_PARAM}={artist.UserAgent}"));
             return images;

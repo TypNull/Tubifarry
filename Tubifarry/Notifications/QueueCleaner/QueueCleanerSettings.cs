@@ -5,10 +5,7 @@ using NzbDrone.Core.Validation;
 
 namespace Tubifarry.Notifications.Queue
 {
-    public class QueueCleanerSettingsValidator : AbstractValidator<QueueCleanerSettings>
-    {
-        public QueueCleanerSettingsValidator() { }
-    }
+    public class QueueCleanerSettingsValidator : AbstractValidator<QueueCleanerSettings>;
 
     public class QueueCleanerSettings : IProviderConfig
     {
@@ -27,7 +24,7 @@ namespace Tubifarry.Notifications.Queue
         public bool RetryFindingRelease { get; set; } = true;
 
         [FieldDefinition(5, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
-        public IEnumerable<string> Indexers { get; set; } = new List<string>();
+        public IEnumerable<string> Indexers { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

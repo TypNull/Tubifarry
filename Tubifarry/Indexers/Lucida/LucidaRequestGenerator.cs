@@ -45,14 +45,14 @@ namespace Tubifarry.Indexers.Lucida
             string baseUrl = _settings!.BaseUrl.TrimEnd('/');
             Dictionary<string, List<ServiceCountry>> services = LucidaServiceHelper.GetServicesAsync(baseUrl, _httpClient, _logger)
                              .GetAwaiter().GetResult();
-            if (!services.Any())
+            if (services.Count == 0)
             {
                 _logger.Warn("No services available");
                 return chain;
             }
 
             HashSet<string> userCountries = _settings.CountryCode
-                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split([';', ','], StringSplitOptions.RemoveEmptyEntries)
                 .Select(c => c.Trim().ToUpperInvariant())
                 .ToHashSet();
 
@@ -86,7 +86,7 @@ namespace Tubifarry.Indexers.Lucida
                     };
                     req.Headers["User-Agent"] = Tubifarry.UserAgent;
 
-                    chain.AddTier(new[] { new IndexerRequest(req) });
+                    chain.AddTier([new IndexerRequest(req)]);
                 }
             }
 

@@ -61,7 +61,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             AddQueryParamIfNotNull(request, "country", country);
             AddQueryParamIfNotNull(request, "sort", sort);
             AddQueryParamIfNotNull(request, "sort_order", sortOrder);
-            List<DiscogsMasterReleaseVersion> masterReleaseVersions = await FetchPaginatedResultsAsync<DiscogsMasterReleaseVersion>(request, maxPages ?? MaxPageLimit, PageSize) ?? new();
+            List<DiscogsMasterReleaseVersion> masterReleaseVersions = await FetchPaginatedResultsAsync<DiscogsMasterReleaseVersion>(request, maxPages ?? MaxPageLimit, PageSize) ?? [];
             return MappingAgent.MapAgent(masterReleaseVersions, _userAgent)!;
         }
 
@@ -76,7 +76,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             HttpRequestBuilder request = BuildRequest($"artists/{artistId}/releases");
             AddQueryParamIfNotNull(request, "sort", sort);
             AddQueryParamIfNotNull(request, "sort_order", sortOrder);
-            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsArtistRelease>(request, maxPages ?? MaxPageLimit, itemsPerPage ?? PageSize) ?? new(), _userAgent)!;
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsArtistRelease>(request, maxPages ?? MaxPageLimit, itemsPerPage ?? PageSize) ?? [], _userAgent)!;
         }
 
         public async Task<DiscogsLabel?> GetLabelAsync(int labelId)
@@ -87,14 +87,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
         public async Task<List<DiscogsLabelRelease>> GetLabelReleasesAsync(int labelId, int? maxPages = null)
         {
-            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsLabelRelease>(BuildRequest($"labels/{labelId}/releases"), maxPages ?? MaxPageLimit, PageSize) ?? new(), _userAgent)!;
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsLabelRelease>(BuildRequest($"labels/{labelId}/releases"), maxPages ?? MaxPageLimit, PageSize) ?? [], _userAgent)!;
         }
 
         public async Task<List<DiscogsSearchItem>> SearchAsync(DiscogsSearchParameter searchRequest, int? maxPages = null)
         {
             HttpRequestBuilder request = BuildRequest("database/search");
             AddSearchParams(request, searchRequest);
-            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsSearchItem>(request, maxPages ?? MaxPageLimit, PageSize) ?? new(), _userAgent)!;
+            return MappingAgent.MapAgent(await FetchPaginatedResultsAsync<DiscogsSearchItem>(request, maxPages ?? MaxPageLimit, PageSize) ?? [], _userAgent)!;
         }
 
         public async Task<DiscogsStats?> GetReleaseStatsAsync(int releaseId)
@@ -209,7 +209,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
         private async Task<List<T>?> FetchPaginatedResultsAsync<T>(HttpRequestBuilder requestBuilder, int? maxPages, int? itemsPerPage)
         {
-            List<T> results = new();
+            List<T> results = [];
             int page = 1;
             bool hasNextPage = true;
 
@@ -226,13 +226,15 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                     if (pageResults != null)
                         results.AddRange(pageResults);
                 }
-                else break;
+                else
+                {
+                    break;
+                }
 
                 hasNextPage = response.TryGetProperty("pagination", out JsonElement pagination) && pagination.TryGetProperty("pages", out JsonElement pages) && pages.TryGetInt32(out int pagesInt) && pagesInt > page;
 
                 if (maxPages.HasValue && page >= maxPages.Value) break;
                 else if (page >= MaxPageLimit) break;
-
 
                 page++;
             }

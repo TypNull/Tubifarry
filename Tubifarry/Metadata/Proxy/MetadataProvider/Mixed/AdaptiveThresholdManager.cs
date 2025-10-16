@@ -11,6 +11,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
     public class AdaptiveThresholdManager : IProvideAdaptiveThreshold, IDisposable
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
+
         private string? _configFilePath;
         private bool _disposed;
         private System.Timers.Timer? _saveTimer;
@@ -43,7 +45,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             lock (_lock)
             {
                 if (!_isDirty || _configFilePath == null) return;
-                string json = JsonSerializer.Serialize(Config, new JsonSerializerOptions { WriteIndented = true });
+                string json = JsonSerializer.Serialize(Config, _jsonOptions);
                 File.WriteAllText(_configFilePath, json);
                 _isDirty = false;
             }
@@ -88,7 +90,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             double performanceAdjustment = 1.0 - metrics.PerformanceScore;
 
             // Weights can be tuned; here we use a weighted sum.
-            double adjustment = 0.5 * qualityAdjustment + 0.3 * performanceAdjustment + 0.2 * failureRatio;
+            double adjustment = (0.5 * qualityAdjustment) + (0.3 * performanceAdjustment) + (0.2 * failureRatio);
             int maxAdjustment = Config.MaxThresholdCount - baseThreshold;
             int dynamicThreshold = baseThreshold + (int)Math.Round(adjustment * maxAdjustment);
             return dynamicThreshold < 1 ? 1 : dynamicThreshold;
@@ -118,7 +120,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 metrics.TotalNewResults += newCount;
                 if (!success) metrics.Failures++;
 
-                double learningRate = Config.InitialLearningRate / (1 + Config.LearningRateDecay * metrics.Calls);
+                double learningRate = Config.InitialLearningRate / (1 + (Config.LearningRateDecay * metrics.Calls));
 
                 double expectedCount = metrics.ExpectedNewResults;
                 double measuredQuality = expectedCount > 0 ? Math.Min(1.0, newCount / expectedCount) : 0.0;

@@ -10,6 +10,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
 {
     public class ListenBrainzUserStatsParser : IParseImportListResponse
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly ListenBrainzUserStatsSettings _settings;
         private readonly Logger _logger;
 
@@ -22,16 +23,16 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse)
         {
             if (!PreProcess(importListResponse))
-                return new List<ImportListItemInfo>();
+                return [];
 
             try
             {
-                IList<ImportListItemInfo> items = _settings.StatType switch
+                List<ImportListItemInfo> items = _settings.StatType switch
                 {
                     (int)ListenBrainzStatType.Artists => ParseArtistStats(importListResponse.Content),
                     (int)ListenBrainzStatType.Releases => ParseReleaseStats(importListResponse.Content),
                     (int)ListenBrainzStatType.ReleaseGroups => ParseReleaseGroupStats(importListResponse.Content),
-                    _ => new List<ImportListItemInfo>()
+                    _ => []
                 };
 
                 _logger.Debug("Successfully parsed {0} items from ListenBrainz user stats", items.Count);
@@ -44,15 +45,15 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
             }
         }
 
-        private IList<ImportListItemInfo> ParseArtistStats(string content)
+        private List<ImportListItemInfo> ParseArtistStats(string content)
         {
-            ArtistStatsResponse? response = JsonSerializer.Deserialize<ArtistStatsResponse>(content, GetJsonOptions());
+            ArtistStatsResponse? response = JsonSerializer.Deserialize<ArtistStatsResponse>(content, _jsonOptions);
             IReadOnlyList<ArtistStat>? artists = response?.Payload?.Artists;
 
             if (artists?.Any() != true)
             {
                 _logger.Debug("No artist stats found");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             return artists
@@ -66,15 +67,15 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
                 .ToList();
         }
 
-        private IList<ImportListItemInfo> ParseReleaseStats(string content)
+        private List<ImportListItemInfo> ParseReleaseStats(string content)
         {
-            ReleaseStatsResponse? response = JsonSerializer.Deserialize<ReleaseStatsResponse>(content, GetJsonOptions());
+            ReleaseStatsResponse? response = JsonSerializer.Deserialize<ReleaseStatsResponse>(content, _jsonOptions);
             IReadOnlyList<ReleaseStat>? releases = response?.Payload?.Releases;
 
             if (releases?.Any() != true)
             {
                 _logger.Debug("No release stats found");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             return releases
@@ -90,15 +91,15 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
                 .ToList();
         }
 
-        private IList<ImportListItemInfo> ParseReleaseGroupStats(string content)
+        private List<ImportListItemInfo> ParseReleaseGroupStats(string content)
         {
-            ReleaseGroupStatsResponse? response = JsonSerializer.Deserialize<ReleaseGroupStatsResponse>(content, GetJsonOptions());
+            ReleaseGroupStatsResponse? response = JsonSerializer.Deserialize<ReleaseGroupStatsResponse>(content, _jsonOptions);
             IReadOnlyList<ReleaseGroupStat>? releaseGroups = response?.Payload?.ReleaseGroups;
 
             if (releaseGroups?.Any() != true)
             {
                 _logger.Debug("No release group stats found");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             return releaseGroups
@@ -112,11 +113,6 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
                 })
                 .ToList();
         }
-
-        private static JsonSerializerOptions GetJsonOptions() => new()
-        {
-            PropertyNameCaseInsensitive = true
-        };
 
         private bool PreProcess(ImportListResponse importListResponse)
         {

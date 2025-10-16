@@ -187,22 +187,22 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("releaseDate")] string? ReleaseDate = null)
     {
         [JsonPropertyName("artists")]
-        public LucidaArtistInfo[] Artists { get; init; } = Array.Empty<LucidaArtistInfo>();
+        public LucidaArtistInfo[] Artists { get; init; } = [];
 
         [JsonPropertyName("producers")]
-        public string[] Producers { get; init; } = Array.Empty<string>();
+        public string[] Producers { get; init; } = [];
 
         [JsonPropertyName("composers")]
-        public string[] Composers { get; init; } = Array.Empty<string>();
+        public string[] Composers { get; init; } = [];
 
         [JsonPropertyName("lyricists")]
-        public string[] Lyricists { get; init; } = Array.Empty<string>();
+        public string[] Lyricists { get; init; } = [];
 
         [JsonPropertyName("coverArtwork")]
-        public LucidaArtworkInfo[] CoverArtwork { get; init; } = Array.Empty<LucidaArtworkInfo>();
+        public LucidaArtworkInfo[] CoverArtwork { get; init; } = [];
 
         [JsonPropertyName("tracks")]
-        public LucidaTrackInfo[] Tracks { get; init; } = Array.Empty<LucidaTrackInfo>();
+        public LucidaTrackInfo[] Tracks { get; init; } = [];
     }
 
     /// <summary>
@@ -214,7 +214,7 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("url")] string Url = "")
     {
         [JsonPropertyName("pictures")]
-        public string[] Pictures { get; init; } = Array.Empty<string>();
+        public string[] Pictures { get; init; } = [];
     };
 
     /// <summary>
@@ -239,7 +239,7 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("releaseDate")] string? ReleaseDate = null)
     {
         [JsonPropertyName("coverArtwork")]
-        public LucidaArtworkInfo[] CoverArtwork { get; init; } = Array.Empty<LucidaArtworkInfo>();
+        public LucidaArtworkInfo[] CoverArtwork { get; init; } = [];
     };
 
     /// <summary>
@@ -259,16 +259,16 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("csrfFallback")] string? CsrfFallback = null)
     {
         [JsonPropertyName("artists")]
-        public LucidaArtistInfo[] Artists { get; init; } = Array.Empty<LucidaArtistInfo>();
+        public LucidaArtistInfo[] Artists { get; init; } = [];
 
         [JsonPropertyName("producers")]
-        public string[] Producers { get; init; } = Array.Empty<string>();
+        public string[] Producers { get; init; } = [];
 
         [JsonPropertyName("composers")]
-        public string[] Composers { get; init; } = Array.Empty<string>();
+        public string[] Composers { get; init; } = [];
 
         [JsonPropertyName("lyricists")]
-        public string[] Lyricists { get; init; } = Array.Empty<string>();
+        public string[] Lyricists { get; init; } = [];
     };
 
     /// <summary>
@@ -292,7 +292,7 @@ namespace Tubifarry.Indexers.Lucida
         public string Id { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
-        public List<LucidaArtist> Artists { get; set; } = new();
+        public List<LucidaArtist> Artists { get; set; } = [];
         public string? AlbumTitle { get; set; }
         public string? AlbumId { get; set; }
         public string? AlbumUrl { get; set; }
@@ -305,10 +305,10 @@ namespace Tubifarry.Indexers.Lucida
         public string? Year { get; set; }
         public string? Copyright { get; set; }
         public string? CoverUrl { get; set; }
-        public List<LucidaArtworkInfo> CoverArtworks { get; set; } = new();
-        public List<string> Composers { get; set; } = new();
-        public List<string> Producers { get; set; } = new();
-        public List<string> Lyricists { get; set; } = new();
+        public List<LucidaArtworkInfo> CoverArtworks { get; set; } = [];
+        public List<string> Composers { get; set; } = [];
+        public List<string> Producers { get; set; } = [];
+        public List<string> Lyricists { get; set; } = [];
 
         // Service URLs
         public string? OriginalServiceUrl { get; set; }
@@ -351,7 +351,7 @@ namespace Tubifarry.Indexers.Lucida
         public string Id { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
-        public List<LucidaArtistInfo> Artists { get; set; } = new();
+        public List<LucidaArtistInfo> Artists { get; set; } = [];
         public int TrackCount { get; set; }
         public int DiscCount { get; set; } = 1;
         public string? ReleaseDate { get; set; }
@@ -359,8 +359,8 @@ namespace Tubifarry.Indexers.Lucida
         public string? Upc { get; set; }
         public string? Copyright { get; set; }
         public string? CoverUrl { get; set; }
-        public List<LucidaArtworkInfo> CoverArtworks { get; set; } = new();
-        public List<LucidaTrackModel> Tracks { get; set; } = new();
+        public List<LucidaArtworkInfo> CoverArtworks { get; set; } = [];
+        public List<LucidaTrackModel> Tracks { get; set; } = [];
 
         // Service URLs
         public string? OriginalServiceUrl { get; set; }

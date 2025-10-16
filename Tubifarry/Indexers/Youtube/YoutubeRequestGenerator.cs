@@ -93,12 +93,12 @@ namespace Tubifarry.Indexers.YouTube
                     visitorData: _sessionToken!.VisitorData,
                     poToken: _sessionToken!.PoToken,
                     signatureTimestamp: null,
-                    items: new (string key, object? value)[]
-                    {
+                    items:
+                    [
                         ("query", searchQuery),
                         ("params", ToParams(category)),
                         ("continuation", null)
-                    }
+                    ]
                 );
 
                 string jsonPayload = JsonConvert.SerializeObject(payload, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });

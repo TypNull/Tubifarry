@@ -18,6 +18,7 @@ namespace Tubifarry.Download.Clients.Lucida
     /// </summary>
     public class LucidaDownloadRequest : BaseDownloadRequest<BaseDownloadOptions>
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         private readonly BaseHttpClient _httpClient;
 
         public LucidaDownloadRequest(RemoteAlbum remoteAlbum, BaseDownloadOptions? options) : base(remoteAlbum, options)
@@ -127,7 +128,6 @@ namespace Tubifarry.Download.Clients.Lucida
             _requestContainer.Add(_trackContainer);
         }
 
-
         private void InitiateDownload(string url, string primaryToken, string fallbackToken, long expiry, string fileName, CancellationToken token)
         {
             OwnRequest downloadRequestWrapper = new(async (t) =>
@@ -201,21 +201,21 @@ namespace Tubifarry.Download.Clients.Lucida
             try
             {
                 LucidaDownloadRequestInfo request = LucidaDownloadRequestInfo.CreateWithTokens(url, primaryToken, fallbackToken, expiry);
-                string requestBody = JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                string requestBody = JsonSerializer.Serialize(request, _jsonOptions);
 
                 const string apiEndpoint = "%2Fapi%2Ffetch%2Fstream%2Fv2";
                 string requestUrl = $"{_httpClient.BaseUrl}/api/load?url={apiEndpoint}";
                 _logger.Trace($"Initiating track download from URL: {url}, Request URL: {requestUrl}");
 
                 HttpRequestMessage httpRequest = new(HttpMethod.Post, requestUrl);
-                httpRequest.Content = new StringContent(requestBody, Encoding.UTF8, "text/plain");
                 httpRequest.Headers.Add("Origin", _httpClient.BaseUrl);
                 httpRequest.Headers.Add("Referer", $"{_httpClient.BaseUrl}/?url={Uri.EscapeDataString(url)}");
+                httpRequest.Content = new StringContent(requestBody, Encoding.UTF8, "text/plain");
                 HttpResponseMessage response = await _httpClient.PostAsync(httpRequest);
                 string responseContent = await response.Content.ReadAsStringAsync(token);
                 response.EnsureSuccessStatusCode();
 
-                LucidaDownloadResponse? downloadResponse = JsonSerializer.Deserialize<LucidaDownloadResponse>(responseContent, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                LucidaDownloadResponse? downloadResponse = JsonSerializer.Deserialize<LucidaDownloadResponse>(responseContent, _jsonOptions);
 
                 if (downloadResponse?.Success == true && !string.IsNullOrEmpty(downloadResponse.Handoff))
                     return (downloadResponse.Handoff, downloadResponse.Server ?? downloadResponse.Name ?? "hund");
@@ -250,7 +250,7 @@ namespace Tubifarry.Download.Clients.Lucida
                     string statusUrl = $"https://{serverName}.{ExtractDomainFromUrl(Options.BaseUrl)}/api/fetch/request/{handoffId}";
                     string responseContent = await _httpClient.GetStringAsync(statusUrl, token);
 
-                    LucidaStatusResponse? status = JsonSerializer.Deserialize<LucidaStatusResponse>(responseContent, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    LucidaStatusResponse? status = JsonSerializer.Deserialize<LucidaStatusResponse>(responseContent, _jsonOptions);
 
                     if (status?.Success == true && status.Status == "completed")
                         return true;
@@ -311,14 +311,14 @@ namespace Tubifarry.Download.Clients.Lucida
                 {
                     Name = albumInfo?.Artist ?? ReleaseInfo.Artist,
                 }),
-                AlbumReleases = new NzbDrone.Core.Datastore.LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease>
-                {
+                AlbumReleases = new NzbDrone.Core.Datastore.LazyLoaded<List<AlbumRelease>>(
+                [
                     new() {
                         TrackCount = albumInfo?.TrackCount ?? 0,
                         Title = albumInfo?.Title ?? ReleaseInfo.Album,
                         Duration = (int)(albumInfo?.GetTotalDurationMs() ?? 0)
                     }
-                }),
+                ]),
                 Genres = _remoteAlbum.Albums?.FirstOrDefault()?.Genres,
             };
         }

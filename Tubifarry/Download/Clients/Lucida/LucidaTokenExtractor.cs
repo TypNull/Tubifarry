@@ -10,12 +10,9 @@ namespace Tubifarry.Download.Clients.Lucida
     /// Extracts authentication tokens from Lucida web pages
     /// Simple, focused implementation that gets the job done
     /// </summary>
-    public static class LucidaTokenExtractor
+    public static partial class LucidaTokenExtractor
     {
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(LucidaTokenExtractor));
-
-        private static readonly Regex TokenPattern = new(@"""token""\s*:\s*""([^""]+)""", RegexOptions.Compiled);
-        private static readonly Regex TokenExpiryPattern = new(@"""tokenExpiry""\s*:\s*(\d+)", RegexOptions.Compiled);
 
         /// <summary>
         /// Extracts tokens from a Lucida web page
@@ -67,7 +64,7 @@ namespace Tubifarry.Download.Clients.Lucida
         /// </summary>
         private static string ExtractToken(string html)
         {
-            Match match = TokenPattern.Match(html);
+            Match match = TokenRegex().Match(html);
             return match.Success ? match.Groups[1].Value : string.Empty;
         }
 
@@ -76,10 +73,15 @@ namespace Tubifarry.Download.Clients.Lucida
         /// </summary>
         private static long ExtractTokenExpiry(string html)
         {
-            Match match = TokenExpiryPattern.Match(html);
+            Match match = TokenExpiryRegex().Match(html);
             if (match.Success && long.TryParse(match.Groups[1].Value, out long expiry))
                 return expiry;
             return DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds();
         }
+
+        [GeneratedRegex(@"""token""\s*:\s*""([^""]+)""", RegexOptions.Compiled)]
+        private static partial Regex TokenRegex();
+        [GeneratedRegex(@"""tokenExpiry""\s*:\s*(\d+)", RegexOptions.Compiled)]
+        private static partial Regex TokenExpiryRegex();
     }
 }

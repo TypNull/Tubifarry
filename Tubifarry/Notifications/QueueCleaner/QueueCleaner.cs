@@ -122,7 +122,7 @@ namespace Tubifarry.Notifications.QueueCleaner
                 return false;
             }
 
-            List<IFileInfo> filesOnDisk = _diskProvider.GetFileInfos(item.DownloadItem.OutputPath.FullPath, true).ToList();
+            List<IFileInfo> filesOnDisk = [.. _diskProvider.GetFileInfos(item.DownloadItem.OutputPath.FullPath, true)];
             HashSet<string> audioExtensions = new(MediaFileExtensions.Extensions, StringComparer.OrdinalIgnoreCase);
             ReleaseFormatter releaseFormatter = new(item.RemoteAlbum.Release, item.RemoteAlbum.Artist, _namingConfig.GetConfig());
 
@@ -191,10 +191,10 @@ namespace Tubifarry.Notifications.QueueCleaner
         {
             item.State = TrackedDownloadState.DownloadFailed;
 
-            List<EntityHistory> grabbedItems = _historyService.Find(item.DownloadItem.DownloadId, EntityHistoryEventType.Grabbed).ToList();
+            List<EntityHistory> grabbedItems = [.. _historyService.Find(item.DownloadItem.DownloadId, EntityHistoryEventType.Grabbed)];
             EntityHistory historyItem = grabbedItems[^1];
 
-            _ = Enum.TryParse(historyItem.Data.GetValueOrDefault(EntityHistory.RELEASE_SOURCE, ReleaseSourceType.Unknown.ToString()), out ReleaseSourceType releaseSource);
+            _ = Enum.TryParse(historyItem.Data.GetValueOrDefault(EntityHistory.RELEASE_SOURCE, nameof(ReleaseSourceType.Unknown)), out ReleaseSourceType releaseSource);
 
             DownloadFailedEvent downloadFailedEvent = new()
             {
@@ -252,7 +252,7 @@ namespace Tubifarry.Notifications.QueueCleaner
                     .Where(indexer => !validProviders.Contains(indexer, StringComparer.OrdinalIgnoreCase))
                     .ToList();
 
-                if (invalidProviders.Any())
+                if (invalidProviders.Count != 0)
                 {
                     string errorMessage = $"The following indexers are not valid or available: {string.Join(", ", invalidProviders)}";
                     result.Errors.Add(new ValidationFailure(nameof(Settings.Indexers), errorMessage, Settings.Indexers));

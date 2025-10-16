@@ -15,6 +15,7 @@ namespace Tubifarry.Indexers.Soulseek
 {
     internal class SlskdRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
         private readonly IHttpClient _client;
@@ -39,7 +40,7 @@ namespace Tubifarry.Indexers.Soulseek
             List<AlbumRelease>? albumReleases = album?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
             List<string> tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?
-                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? new List<string>();
+                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? [];
 
             _processedSearches.Clear();
 
@@ -49,7 +50,7 @@ namespace Tubifarry.Indexers.Soulseek
                 searchCriteria.AlbumYear.ToString(),
                 searchCriteria.InteractiveSearch,
                 trackCount,
-                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
+                searchCriteria.Artist?.Metadata.Value.Aliases ?? [],
                 tracks);
 
             return CreateSearchChain(searchParams);
@@ -63,7 +64,7 @@ namespace Tubifarry.Indexers.Soulseek
             List<AlbumRelease>? albumReleases = album?.AlbumReleases.Value;
             int trackCount = albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0;
             List<string> tracks = albumReleases?.FirstOrDefault(x => x.Tracks.Value is { Count: > 0 })?.Tracks.Value?
-                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? new List<string>();
+                .Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? [];
 
             _processedSearches.Clear();
 
@@ -73,7 +74,7 @@ namespace Tubifarry.Indexers.Soulseek
                 null,
                 searchCriteria.InteractiveSearch,
                 trackCount,
-                searchCriteria.Artist?.Metadata.Value.Aliases ?? new List<string>(),
+                searchCriteria.Artist?.Metadata.Value.Aliases ?? [],
                 tracks);
 
             return CreateSearchChain(searchParams);
@@ -166,7 +167,7 @@ namespace Tubifarry.Indexers.Soulseek
             {
                 chain.AddTierFactory(SearchTierGenerator.CreateTier(() =>
                 {
-                    string[] albumWords = searchParams.Album.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    string[] albumWords = searchParams.Album.Split([' '], StringSplitOptions.RemoveEmptyEntries);
                     int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
                     string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
                     return ExecuteSearch(searchParams.Artist, halfAlbumTitle, searchParams.Interactive, false, searchParams.TrackCount);
@@ -205,7 +206,7 @@ namespace Tubifarry.Indexers.Soulseek
                 searchText = SlskdTextProcessor.BuildSearchText(artist, album);
 
             if (string.IsNullOrWhiteSpace(searchText) || _processedSearches.Contains(searchText))
-                return Enumerable.Empty<IndexerRequest>();
+                return [];
 
             _processedSearches.Add(searchText);
             _logger.Trace($"Added '{searchText}' to processed searches. Total processed: {_processedSearches.Count}");
@@ -216,7 +217,7 @@ namespace Tubifarry.Indexers.Soulseek
                 if (request != null)
                 {
                     _logger.Trace($"Successfully generated request for search: {searchText}");
-                    return new[] { request };
+                    return [request];
                 }
                 else
                 {
@@ -228,15 +229,16 @@ namespace Tubifarry.Indexers.Soulseek
                 _logger.Error(ex, $"Error executing search: {searchText}");
             }
 
-            return Enumerable.Empty<IndexerRequest>();
+            return [];
         }
 
-        private IEnumerable<IndexerRequest> ExecuteVariousArtistsSearches(string album, string? year, bool interactive, int trackCount)
+        private List<IndexerRequest> ExecuteVariousArtistsSearches(string album, string? year, bool interactive, int trackCount)
         {
-            List<IndexerRequest> requests = new();
-
-            requests.AddRange(ExecuteSearch(null, $"{album} {year}", interactive, false, trackCount));
-            requests.AddRange(ExecuteSearch(null, album, interactive, false, trackCount));
+            List<IndexerRequest> requests =
+            [
+                .. ExecuteSearch(null, $"{album} {year}", interactive, false, trackCount),
+                .. ExecuteSearch(null, album, interactive, false, trackCount),
+            ];
 
             if (Settings.StripPunctuation)
             {
@@ -253,9 +255,9 @@ namespace Tubifarry.Indexers.Soulseek
             return requests;
         }
 
-        private IEnumerable<IndexerRequest> ExecuteVariationSearches(string? artist, IEnumerable<string> variations, bool interactive, int trackCount)
+        private List<IndexerRequest> ExecuteVariationSearches(string? artist, IEnumerable<string> variations, bool interactive, int trackCount)
         {
-            List<IndexerRequest> requests = new();
+            List<IndexerRequest> requests = [];
 
             foreach (string variation in variations)
             {
@@ -370,7 +372,9 @@ namespace Tubifarry.Indexers.Soulseek
                     timeoutEndTime = DateTime.UtcNow.AddSeconds(20);
                 }
                 else if (hasTimedOut && timeoutEndTime < DateTime.UtcNow)
+                {
                     break;
+                }
 
                 JsonNode? searchStatus = await GetSearchResultsAsync(searchId);
 
@@ -433,8 +437,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                 if (response.StatusCode == HttpStatusCode.OK)
                 {
-                    SlskdDirectoryApiResponse[]? directoryResponse = JsonSerializer.Deserialize<SlskdDirectoryApiResponse[]>(response.Content,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    SlskdDirectoryApiResponse[]? directoryResponse = JsonSerializer.Deserialize<SlskdDirectoryApiResponse[]>(response.Content, _jsonOptions);
 
                     if (directoryResponse?.Length > 0 && directoryResponse[0].Files?.Any() == true)
                     {
@@ -460,10 +463,8 @@ namespace Tubifarry.Indexers.Soulseek
                                 );
                             }).ToList();
 
-                        if (directoryFiles.Any())
-                        {
+                        if (directoryFiles.Count != 0)
                             return directoryFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)).First();
-                        }
                     }
                 }
                 else

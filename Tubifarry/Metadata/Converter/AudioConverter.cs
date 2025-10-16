@@ -10,16 +10,10 @@ using Xabe.FFmpeg;
 
 namespace Tubifarry.Metadata.Converter
 {
-    public class AudioConverter : MetadataBase<AudioConverterSettings>
+    public class AudioConverter(Logger logger, Lazy<ITagService> tagService) : MetadataBase<AudioConverterSettings>
     {
-        private readonly Logger _logger;
-        private readonly Lazy<ITagService> _tagService;
-
-        public AudioConverter(Logger logger, Lazy<ITagService> tagService)
-        {
-            _logger = logger;
-            _tagService = tagService;
-        }
+        private readonly Logger _logger = logger;
+        private readonly Lazy<ITagService> _tagService = tagService;
 
         public override string Name => "Codec Tinker";
 
@@ -150,7 +144,7 @@ namespace Tubifarry.Metadata.Converter
 
         private ConversionRule? GetArtistTagRule(TrackFile trackFile)
         {
-            if (trackFile.Artist?.Value?.Tags == null || !trackFile.Artist.Value.Tags.Any())
+            if (trackFile.Artist?.Value?.Tags == null || trackFile.Artist.Value.Tags.Count == 0)
                 return null;
 
             foreach (Tag? tag in trackFile.Artist.Value.Tags.Select(x => _tagService.Value.GetTag(x)))

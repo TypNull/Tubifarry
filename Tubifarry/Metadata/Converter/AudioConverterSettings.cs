@@ -115,7 +115,7 @@ namespace Tubifarry.Metadata.Converter
         public int TargetFormat { get; set; } = (int)TargetAudioFormat.Opus;
 
         [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Specify custom conversion rules with format and bitrate conditions. Examples: 'mp3 -> opus:128' (MP3 to Opus 128kbps), 'mp3<=128 -> aac:128' (MP3 ≤128kbps to AAC 128kbps), 'flac -> mp3' (FLAC to MP3).")]
-        public IEnumerable<KeyValuePair<string, string>> CustomConversion { get; set; } = Array.Empty<KeyValuePair<string, string>>();
+        public IEnumerable<KeyValuePair<string, string>> CustomConversion { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

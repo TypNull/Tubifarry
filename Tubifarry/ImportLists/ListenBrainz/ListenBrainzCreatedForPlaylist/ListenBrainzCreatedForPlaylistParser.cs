@@ -11,6 +11,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
 {
     public class ListenBrainzCreatedForPlaylistParser : IParseImportListResponse
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly ListenBrainzCreatedForPlaylistSettings _settings;
         private readonly ListenBrainzCreatedForPlaylistRequestGenerator _requestGenerator;
         private readonly IHttpClient _httpClient;
@@ -29,7 +30,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse)
         {
             if (!PreProcess(importListResponse))
-                return new List<ImportListItemInfo>();
+                return [];
 
             try
             {
@@ -46,13 +47,13 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
 
         private IList<ImportListItemInfo> ParseCreatedForPlaylists(string content)
         {
-            PlaylistsResponse? response = JsonSerializer.Deserialize<PlaylistsResponse>(content, GetJsonOptions());
+            PlaylistsResponse? response = JsonSerializer.Deserialize<PlaylistsResponse>(content, _jsonOptions);
             IReadOnlyList<PlaylistInfo>? playlists = response?.Playlists;
 
             if (playlists?.Any() != true)
             {
                 _logger.Debug("No playlists found in response");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             string targetPlaylistType = _requestGenerator.GetPlaylistTypeName();
@@ -60,13 +61,13 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
                 .Where(p => IsTargetPlaylistType(p, targetPlaylistType))
                 .ToList();
 
-            if (!matchingPlaylists.Any())
+            if (matchingPlaylists.Count == 0)
             {
                 _logger.Debug("No playlists of type {0} found", targetPlaylistType);
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
-            List<ImportListItemInfo> allItems = new();
+            List<ImportListItemInfo> allItems = [];
             foreach (PlaylistInfo? playlist in matchingPlaylists)
             {
                 try
@@ -114,7 +115,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
         private static string ExtractPlaylistMbid(string identifier) =>
             identifier.Split('/').Last();
 
-        private IList<ImportListItemInfo> FetchPlaylistItems(string mbid)
+        private List<ImportListItemInfo> FetchPlaylistItems(string mbid)
         {
             try
             {
@@ -134,16 +135,16 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
                 if (response.StatusCode != HttpStatusCode.OK)
                 {
                     _logger.Warn("Failed to fetch playlist {0} with HTTP {1}", mbid, response.StatusCode);
-                    return new List<ImportListItemInfo>();
+                    return [];
                 }
 
-                PlaylistResponse? playlistResponse = JsonSerializer.Deserialize<PlaylistResponse>(response.Content, GetJsonOptions());
+                PlaylistResponse? playlistResponse = JsonSerializer.Deserialize<PlaylistResponse>(response.Content, _jsonOptions);
                 IReadOnlyList<TrackData>? tracks = playlistResponse?.Playlist?.Tracks;
 
                 if (tracks?.Any() != true)
                 {
                     _logger.Debug("No tracks found in playlist {0}", mbid);
-                    return new List<ImportListItemInfo>();
+                    return [];
                 }
 
                 _logger.Trace("Processing {0} tracks from playlist {1}", tracks.Count, mbid);
@@ -159,7 +160,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
             catch (Exception ex)
             {
                 _logger.Warn(ex, "Failed to fetch playlist {0}", mbid);
-                return new List<ImportListItemInfo>();
+                return [];
             }
         }
 
@@ -219,9 +220,6 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
                 return null;
             }
         }
-
-        private JsonSerializerOptions GetJsonOptions() =>
-            new() { PropertyNameCaseInsensitive = true };
 
         private static bool PreProcess(ImportListResponse importListResponse)
         {

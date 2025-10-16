@@ -12,7 +12,7 @@ namespace Tubifarry.Metadata.Proxy
         public abstract string Name { get; }
         public Type ConfigContract => typeof(TSettings);
         public virtual ProviderMessage? Message => null;
-        public IEnumerable<ProviderDefinition> DefaultDefinitions => new List<ProviderDefinition>();
+        public IEnumerable<ProviderDefinition> DefaultDefinitions => [];
         public ProviderDefinition? Definition { get; set; }
 
         protected TSettings? Settings => Definition?.Settings == null ? default : (TSettings)Definition!.Settings;
@@ -31,9 +31,9 @@ namespace Tubifarry.Metadata.Proxy
         public virtual MetadataFileResult ArtistMetadata(Artist artist) => default!;
         public virtual MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
         public virtual MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile) => default!;
-        public virtual List<ImageFileResult> ArtistImages(Artist artist) => new();
-        public virtual List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumPath) => new();
-        public virtual List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => new();
+        public virtual List<ImageFileResult> ArtistImages(Artist artist) => [];
+        public virtual List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumPath) => [];
+        public virtual List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => [];
 
         public virtual ValidationResult Test() => new();
     }

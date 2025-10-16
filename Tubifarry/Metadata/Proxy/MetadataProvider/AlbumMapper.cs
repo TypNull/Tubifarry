@@ -97,14 +97,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
         public static List<SecondaryAlbumType> DetermineSecondaryTypesFromTitle(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
-                return new List<SecondaryAlbumType>();
+                return [];
 
             string? cleanTitle = Parser.NormalizeTitle(title)?.ToLowerInvariant();
             if (cleanTitle == null)
-                return new List<SecondaryAlbumType>();
+                return [];
 
-            HashSet<SecondaryAlbumType> detectedTypes = new();
-            HashSet<string> keywordMatcher = new();
+            HashSet<SecondaryAlbumType> detectedTypes = [];
+            HashSet<string> keywordMatcher = [];
 
             foreach (KeyValuePair<SecondaryAlbumType, List<string>> kvp in SecondaryTypeKeywords)
             {
@@ -128,7 +128,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
             if (detectedTypes.Contains(SecondaryAlbumType.Live) && detectedTypes.Contains(SecondaryAlbumType.Remix))
                 detectedTypes.Remove(SecondaryAlbumType.Remix);
 
-            return detectedTypes.ToList();
+            return [.. detectedTypes];
         }
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
             List<string> releaseStatuses = new(metadataProfile.ReleaseStatuses.Where(s => s.Allowed).Select(s => s.ReleaseStatus.Name));
 
             return albums.Where(album => primaryTypes.Contains(album.AlbumType) &&
-                                (!album.SecondaryTypes.Any() && secondaryTypes.Contains("Studio") ||
+                                ((album.SecondaryTypes.Count == 0 && secondaryTypes.Contains("Studio")) ||
                                  album.SecondaryTypes.Any(x => secondaryTypes.Contains(x.Name))) &&
                                 album.AlbumReleases.Value.Any(x => releaseStatuses.Contains(x.Status))).ToList();
         }
@@ -171,13 +171,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
                     }
                 }
 
-                HashSet<SecondaryAlbumType> secondaryTypes = new();
+                HashSet<SecondaryAlbumType> secondaryTypes = [];
                 foreach (string desc in formatDescriptions)
                 {
                     if (SecondaryTypeMap.TryGetValue(desc.ToLowerInvariant(), out SecondaryAlbumType? secondaryType))
                         secondaryTypes.Add(secondaryType);
                 }
-                album.SecondaryTypes = secondaryTypes.ToList();
+                album.SecondaryTypes = [.. secondaryTypes];
             }
         }
     }

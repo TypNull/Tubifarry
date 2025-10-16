@@ -22,20 +22,15 @@ namespace Tubifarry.Indexers.Spotify
     /// <summary>
     /// Enriches Spotify album data with YouTube Music streaming information.
     /// </summary>
-    internal class SpotifyToYouTubeEnricher : ISpotifyToYouTubeEnricher
+    internal class SpotifyToYouTubeEnricher(Logger logger) : ISpotifyToYouTubeEnricher
     {
         private const int DEFAULT_BITRATE = 128;
         private const int MAX_CONCURRENT_ENRICHMENTS = 3;
 
         private YouTubeMusicClient? _ytClient;
         private SessionTokens? _sessionTokens;
-        private readonly Logger _logger;
+        private readonly Logger _logger = logger;
         private SpotifyIndexerSettings? _currentSettings;
-
-        public SpotifyToYouTubeEnricher(Logger logger)
-        {
-            _logger = logger;
-        }
 
         public void UpdateSettings(SpotifyIndexerSettings settings)
         {
@@ -62,7 +57,7 @@ namespace Tubifarry.Indexers.Spotify
             if (_ytClient == null)
                 throw new NullReferenceException("YouTube client is not initialized.");
 
-            List<AlbumData> enrichedAlbums = new();
+            List<AlbumData> enrichedAlbums = [];
 
             foreach (AlbumData[]? batch in albums.Chunk(MAX_CONCURRENT_ENRICHMENTS).ToList())
             {
@@ -70,7 +65,7 @@ namespace Tubifarry.Indexers.Spotify
 
                 try
                 {
-                    bool allCompleted = Task.WaitAll(enrichmentTasks.ToArray(), TimeSpan.FromMinutes(3));
+                    bool allCompleted = Task.WaitAll([.. enrichmentTasks], TimeSpan.FromMinutes(3));
                     if (!allCompleted)
                         _logger.Warn("Some enrichment tasks timed out after 3 minutes. Proceeding with completed tasks.");
 
@@ -105,8 +100,7 @@ namespace Tubifarry.Indexers.Spotify
 
                 string searchQuery = $"\"{albumData.AlbumName}\" \"{albumData.ArtistName}\"";
 
-                PaginatedAsyncEnumerable<SearchResult>? searchResults = null;
-                searchResults = _ytClient!.SearchAsync(searchQuery, SearchCategory.Albums);
+                PaginatedAsyncEnumerable<SearchResult>? searchResults = _ytClient!.SearchAsync(searchQuery, SearchCategory.Albums);
 
                 if (searchResults == null)
                 {
@@ -145,7 +139,7 @@ namespace Tubifarry.Indexers.Spotify
                             continue;
                         }
 
-                        if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
+                        if (albumInfo?.Songs == null || albumInfo.Songs.Length == 0)
                             continue;
 
                         if (albumData.TotalTracks > 0 && !IsTrackCountValid(albumData.TotalTracks, albumInfo.Songs.Length))

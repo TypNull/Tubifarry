@@ -126,7 +126,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         /// </summary>
         private async Task<List<T>?> FetchPaginatedResultsAsync<T>(HttpRequestBuilder requestBuilder, int maxPages, int itemsPerPage)
         {
-            List<T> results = new();
+            List<T> results = [];
             int page = 0;
             bool hasNextPage = true;
 
@@ -264,7 +264,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         // Alternatively, keep your advanced search method as is.
         private static string BuildAdvancedSearchQuery(DeezerSearchParameter search)
         {
-            List<string> parts = new();
+            List<string> parts = [];
             if (!string.IsNullOrWhiteSpace(search.Query))
                 parts.Add(search.Query.Trim());
             if (!string.IsNullOrWhiteSpace(search.Artist))

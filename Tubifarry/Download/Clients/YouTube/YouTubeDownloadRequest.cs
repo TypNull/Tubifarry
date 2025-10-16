@@ -60,7 +60,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
             await ApplyRandomDelayAsync(token);
 
-            if (albumInfo?.Songs == null || !albumInfo.Songs.Any())
+            if (albumInfo?.Songs == null || albumInfo.Songs.Length == 0)
             {
                 LogAndAppendMessage($"No tracks to download found in the album: {ReleaseInfo.Album}", LogLevel.Debug);
                 return;
@@ -201,11 +201,11 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 Name = albumInfo.Artists?.FirstOrDefault()?.Name ?? ReleaseInfo.Artist,
             }),
-            AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease> { new() {
+            AlbumReleases = new LazyLoaded<List<AlbumRelease>>([ new() {
                     TrackCount = albumInfo.SongCount,
                     Title =  albumInfo.Name ?? ReleaseInfo.Album,
                     Duration = (int)albumInfo.Duration.TotalMilliseconds
-                } }),
+                } ]),
             Genres = _remoteAlbum.Albums.FirstOrDefault()?.Genres
         };
 

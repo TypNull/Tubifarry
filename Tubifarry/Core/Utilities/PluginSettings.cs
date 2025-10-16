@@ -18,25 +18,18 @@ namespace Tubifarry.Core.Utilities
         event EventHandler<SettingChangedEventArgs> SettingChanged;
     }
 
-    public class SettingChangedEventArgs : EventArgs
+    public class SettingChangedEventArgs(string key, object? oldValue, object? newValue) : EventArgs
     {
-        public string Key { get; }
-        public object? OldValue { get; }
-        public object? NewValue { get; }
-
-        public SettingChangedEventArgs(string key, object? oldValue, object? newValue)
-        {
-            Key = key;
-            OldValue = oldValue;
-            NewValue = newValue;
-        }
+        public string Key { get; } = key;
+        public object? OldValue { get; } = oldValue;
+        public object? NewValue { get; } = newValue;
     }
 
     public class PluginSettings : IPluginSettings
     {
         private readonly string _settingsPath;
         private readonly ConcurrentDictionary<string, string> _settings;
-        private readonly object _syncLock = new(); // Using a simple lock instead of ReaderWriterLockSlim
+        private readonly object _syncLock = new();
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly bool _autoSave;
         private readonly Logger _logger;
@@ -47,7 +40,7 @@ namespace Tubifarry.Core.Utilities
         {
             _logger = logger;
             _settingsPath = Path.Combine(appFolderInfo.GetPluginPath(), PluginInfo.Author, PluginInfo.Name, "settings.resx");
-            _settings = new ConcurrentDictionary<string, string>();
+            _settings = [];
             _autoSave = autoSave;
 
             _jsonOptions = new JsonSerializerOptions
@@ -94,7 +87,7 @@ namespace Tubifarry.Core.Utilities
                 OnSettingChanged(key, oldValue, value);
 
                 if (_autoSave)
-                    SaveInternal(); // Call internal method that doesn't re-acquire the lock
+                    SaveInternal();
             }
         }
 
@@ -117,7 +110,7 @@ namespace Tubifarry.Core.Utilities
 
                     if (_autoSave)
                     {
-                        SaveInternal(); // Call internal method that doesn't re-acquire the lock
+                        SaveInternal();
                     }
                 }
             }
@@ -131,7 +124,6 @@ namespace Tubifarry.Core.Utilities
             }
         }
 
-        // Internal method that assumes the lock is already held
         private void SaveInternal()
         {
             try

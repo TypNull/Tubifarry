@@ -19,9 +19,9 @@ namespace Tubifarry.ImportLists.ArrStack
     /// <summary>
     /// Handles MusicBrainz API integration for finding soundtrack albums.
     /// </summary>
-    internal class ArrSoundtrackImportParser : IParseImportListResponse
+    internal partial class ArrSoundtrackImportParser : IParseImportListResponse
     {
-        private static readonly string[] SoundtrackTerms = { "soundtrack", "ost", "score", "original soundtrack", "film score" };
+        private static readonly string[] SoundtrackTerms = ["soundtrack", "ost", "score", "original soundtrack", "film score"];
         private const string MusicBrainzBaseUrl = "https://musicbrainz.org/ws/2";
 
         // MusicBrainz requires 1 request per second
@@ -59,7 +59,7 @@ namespace Tubifarry.ImportLists.ArrStack
 
         public async Task<List<ImportListItemInfo>> ParseResponseAsync(ImportListResponse importListResponse)
         {
-            List<ImportListItemInfo> results = new();
+            List<ImportListItemInfo> results = [];
 
             if (string.IsNullOrWhiteSpace(importListResponse.Content))
             {
@@ -107,7 +107,7 @@ namespace Tubifarry.ImportLists.ArrStack
                 _logger.Trace($"Found {cachedResults.ImportListItems.Count} soundtracks for '{media.Title}'");
                 return cachedResults.ImportListItems;
             }
-            return new List<ImportListItemInfo>();
+            return [];
         }
 
         private async Task<MediaProcessingResult> FetchSoundtracksForMedia(ArrMedia media)
@@ -117,15 +117,15 @@ namespace Tubifarry.ImportLists.ArrStack
             try
             {
                 List<MusicBrainzSearchItem> searchResults = await SearchMusicBrainzSoundtracks(media.Title);
-                if (!searchResults.Any())
+                if (searchResults.Count == 0)
                 {
                     _logger.Debug("No soundtrack matches found for '{0}'", media.Title);
                     return result;
                 }
 
                 result.SearchResults = searchResults;
-                List<MusicBrainzAlbumItem> validAlbums = new();
-                List<ImportListItemInfo> importItems = new();
+                List<MusicBrainzAlbumItem> validAlbums = [];
+                List<ImportListItemInfo> importItems = [];
 
                 foreach (MusicBrainzSearchItem searchItem in searchResults)
                 {
@@ -214,7 +214,7 @@ namespace Tubifarry.ImportLists.ArrStack
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to parse MusicBrainz search response");
-                return new List<MusicBrainzSearchItem>();
+                return [];
             }
         }
 
@@ -283,8 +283,8 @@ namespace Tubifarry.ImportLists.ArrStack
         {
             foreach (string term in SoundtrackTerms)
                 title = title.Replace(term, "", StringComparison.OrdinalIgnoreCase);
-            title = Regex.Replace(title, @"[^a-zA-Z0-9\s]", "").Trim();
-            return Regex.Replace(title, @"\s+", " ");
+            title = NormalizeTitleEmptyRegex().Replace(title, "").Trim();
+            return NormalizeTitleSpaceRegex().Replace(title, " ");
         }
 
         private static string EscapeLuceneQuery(string query)
@@ -330,9 +330,14 @@ namespace Tubifarry.ImportLists.ArrStack
         private class MediaProcessingResult
         {
             public ArrMedia? Media { get; set; }
-            public List<ImportListItemInfo> ImportListItems { get; set; } = new();
-            public List<MusicBrainzSearchItem> SearchResults { get; set; } = new();
-            public List<MusicBrainzAlbumItem> AlbumDetails { get; set; } = new();
+            public List<ImportListItemInfo> ImportListItems { get; set; } = [];
+            public List<MusicBrainzSearchItem> SearchResults { get; set; } = [];
+            public List<MusicBrainzAlbumItem> AlbumDetails { get; set; } = [];
         }
+
+        [GeneratedRegex(@"[^a-zA-Z0-9\s]")]
+        private static partial Regex NormalizeTitleEmptyRegex();
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex NormalizeTitleSpaceRegex();
     }
 }

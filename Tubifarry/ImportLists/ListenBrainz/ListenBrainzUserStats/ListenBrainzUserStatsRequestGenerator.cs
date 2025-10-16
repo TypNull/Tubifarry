@@ -3,15 +3,10 @@ using NzbDrone.Core.ImportLists;
 
 namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
 {
-    public class ListenBrainzUserStatsRequestGenerator : IImportListRequestGenerator
+    public class ListenBrainzUserStatsRequestGenerator(ListenBrainzUserStatsSettings settings) : IImportListRequestGenerator
     {
-        private readonly ListenBrainzUserStatsSettings _settings;
+        private readonly ListenBrainzUserStatsSettings _settings = settings;
         private const int MaxItemsPerRequest = 100;
-
-        public ListenBrainzUserStatsRequestGenerator(ListenBrainzUserStatsSettings settings)
-        {
-            _settings = settings;
-        }
 
         public virtual ImportListPageableRequestChain GetListItems()
         {

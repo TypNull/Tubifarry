@@ -14,17 +14,11 @@ namespace Tubifarry.Indexers.Spotify
     /// <summary>
     /// Parses Spotify API responses and converts them to album data.
     /// </summary>
-    internal class SpotifyParser : ISpotifyParser
+    internal class SpotifyParser(Logger logger, ISpotifyToYouTubeEnricher enricher) : ISpotifyParser
     {
-        private readonly Logger _logger;
-        private readonly ISpotifyToYouTubeEnricher _enricher;
+        private readonly Logger _logger = logger;
+        private readonly ISpotifyToYouTubeEnricher _enricher = enricher;
         private SpotifyIndexerSettings? _currentSettings;
-
-        public SpotifyParser(Logger logger, ISpotifyToYouTubeEnricher enricher)
-        {
-            _logger = logger;
-            _enricher = enricher;
-        }
 
         public void UpdateSettings(SpotifyIndexerSettings settings)
         {
@@ -34,7 +28,7 @@ namespace Tubifarry.Indexers.Spotify
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<ReleaseInfo> releases = new();
+            List<ReleaseInfo> releases = [];
 
             try
             {
@@ -46,7 +40,7 @@ namespace Tubifarry.Indexers.Spotify
 
                 using JsonDocument jsonDoc = JsonDocument.Parse(indexerResponse.Content);
                 JsonElement root = jsonDoc.RootElement;
-                List<AlbumData> albums = new();
+                List<AlbumData> albums = [];
 
                 if (root.TryGetProperty("albums", out JsonElement albumsElement))
                 {
@@ -62,7 +56,7 @@ namespace Tubifarry.Indexers.Spotify
                     releases.Add(album.ToReleaseInfo());
 
                 _logger.Debug($"Successfully converted {releases.Count} albums to releases");
-                return releases.DistinctBy(x => x.DownloadUrl).OrderByDescending(o => o.PublishDate).ToList();
+                return [.. releases.DistinctBy(x => x.DownloadUrl).OrderByDescending(o => o.PublishDate)];
             }
             catch (Exception ex)
             {
@@ -73,7 +67,7 @@ namespace Tubifarry.Indexers.Spotify
 
         private List<AlbumData> ParseAlbumItems(JsonElement itemsElement)
         {
-            List<AlbumData> albums = new();
+            List<AlbumData> albums = [];
 
             foreach (JsonElement albumElement in itemsElement.EnumerateArray())
             {
