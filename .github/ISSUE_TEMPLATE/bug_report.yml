@@ -1,4 +1,4 @@
-name: "🐛 Bug Report"
+name: "Bug Report"
 description: Report a bug or unexpected behavior in Tubifarry
 title: "[BUG] "
 labels: ["bug"]
@@ -14,20 +14,28 @@ body:
     id: tubifarry-version
     attributes:
       label: Tubifarry Version
-      description: What version of Tubifarry are you running?
-      placeholder: e.g., v1.8.0
+      description: |
+        What version of Tubifarry are you running?
+        Find this in: System → Plugin.
+
+        Format must be: v1.8.1 (not "latest" or "newest")
+      placeholder: v1.8.1
     validations:
       required: true
-  
+
   - type: input
     id: lidarr-version
     attributes:
       label: Lidarr Version
-      description: What version of Lidarr are you using?
-      placeholder: e.g., v2.10.2
+      description: |
+        What version of Lidarr are you using?
+        Find this in: System → Status
+
+        Format must be: v2.14.2 (not "latest")
+      placeholder: v2.14.2
     validations:
       required: true
-  
+
   - type: dropdown
     id: os
     attributes:
@@ -40,21 +48,24 @@ body:
         - Other (specify in additional context)
     validations:
       required: true
-  
+
   - type: textarea
     id: bug-description
     attributes:
       label: Bug Description
       description: A clear and concise description of what the bug is and the specific feature that's not working.
-      placeholder: I was trying to... and then... The search function doesn't work as expected because...
+      placeholder: |
+        Example: "I was trying to... and then... The search function doesn't work as expected because..."
+        
+        Describe what you were trying to do and what went wrong:
     validations:
       required: true
-  
+
   - type: textarea
     id: reproduction
     attributes:
       label: Steps to Reproduce
-      description: How can we reproduce this issue?
+      description: Provide exact steps so we can recreate the issue
       placeholder: |
         1. Go to '...'
         2. Click on '....'
@@ -62,7 +73,7 @@ body:
         4. See error
     validations:
       required: true
-  
+
   - type: textarea
     id: expected
     attributes:
@@ -71,38 +82,48 @@ body:
       placeholder: I expected to see...
     validations:
       required: true
-  
+
   - type: markdown
     attributes:
       value: |
-        ## Logs
+        ## How to Enable Trace Logging
         
-        To help resolve your issue, trace logs are needed. Please follow these steps:
+        1. Go to Lidarr → Settings → General → Logging
+        2. Set Log Level to **Trace** (not Debug, not Info)
+        3. Click Save
+        4. Reproduce your exact problem
+        5. Go to System → Logs → Files tab
+        6. Download the most recent log file
+        7. Paste the relevant section below
         
-        1. **Enable trace logging** and replicate the problem you encountered
-        2. Guidance on how to enable trace logging can be found in the troubleshooting guide of Lidarr
-        3. Please paste your logs directly in the plaintext section below
-        4. Use the details tag to keep the issue readable or attach the logs as a file
-        
-        **Important:** If your logs do not contain the word **`trace`**, it will be difficult to provide help.
+        If your logs do not contain the word **`trace`**, your issue will be closed
 
   - type: textarea
     id: logs
     attributes:
-      label: Log Files
-      description: Please paste your trace logs below (replace the placeholder text)
+      label: Trace Log Files
+      description: |
+        Paste only the relevant trace logs here. Do not delete the details tags.
       value: |
         <details>
         <summary>Logs</summary>
 
-         ```plaintext
-        Paste your logs here...
+        ```plaintext
+        Keep the plaintext markers intact and paste your logs in here...
         ```
         
         </details>
     validations:
       required: true
-  
+
+  - type: checkboxes
+    id: log-checklist
+    attributes:
+      label: Log Checklist
+      options:
+        - label: I have enabled Trace logging in Lidarr before reproducing the issue
+          required: true
+
   - type: textarea
     id: screenshots
     attributes:
@@ -115,5 +136,13 @@ body:
         <!-- Paste your screenshots here... -->
         
         </details>
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that might help us resolve the issue
     validations:
       required: false

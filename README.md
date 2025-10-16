@@ -1,12 +1,12 @@
 # Tubifarry for Lidarr 🎶  
 ![Downloads](https://img.shields.io/github/downloads/TypNull/Tubifarry/total)  ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TypNull/Tubifarry)  ![GitHub last commit](https://img.shields.io/github/last-commit/TypNull/Tubifarry)  ![License](https://img.shields.io/github/license/TypNull/Tubifarry)  ![GitHub stars](https://img.shields.io/github/stars/TypNull/Tubifarry)  
 
-Tubifarry is a versatile plugin for **Lidarr** that enhances your music library by indexing from **Spotify** and enabling direct music downloads from **YouTube**. While it is not explicitly a `Spotify-to-YouTube` downloader, it leverages the YouTube API to seamlessly integrate music downloads into your Lidarr setup. Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
+Tubifarry is a plugin for **Lidarr** that adds multiple music sources to your library management. It uses **Spotify's catalog** as an [indexer](https://wiki.servarr.com/en/lidarr/supported#indexers) to search for music, then downloads the actual audio files from **YouTube**. Tubifarry also supports **Slskd**, the Soulseek client, as both an **indexer** and **downloader**, allowing you to tap into the vast music collection available on the Soulseek network. 🛠️  
 
 Additionally, Tubifarry supports fetching soundtracks from **Sonarr** (series) and **Radarr** (movies) and adding them to Lidarr using the **Arr-Soundtracks** import list feature. This makes it easy to manage and download soundtracks for your favorite movies and TV shows. 🎬🎵
 For further customization, Codec Tinker lets you convert audio files between formats using FFmpeg, helping you optimize your library.⚙️  
 
-**Note:** There is a development version of Tubifarry. Please do not open issues for the stable version
+## **Note:** There is a development version of Tubifarry. Please do not open issues for the stable version. Some details in this documentation may vary from the current implementation.
 
 ---
 
@@ -21,9 +21,6 @@ For further customization, Codec Tinker lets you convert audio files between for
 7. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
 
 ----
-
-> ### ⚠️ Compatibility Notice
-> **Tubifarry version 1.8.0 is not compatible with Lidarr version 2.13.1 or above, please update Tubifarry!**
 
 ## Installation 🚀  
 To use Tubifarry, ensure your Lidarr setup is on the `plugins` branch. Follow the steps below to get started.  
@@ -63,7 +60,7 @@ Tubifarry supports **Slskd**, the Soulseek client, as both an **indexer** and **
 #### **Setting Up the Soulseek Download Client**:  
 1. Go to `Settings -> Download Clients` and click **Add**.  
 2. Select `Slskd` from the list of download clients.  
-3. Set the **download path** where downloaded files will be downloaded.  
+3. Set the **download path mapping** where downloaded files will be downloaded the same in Lidarr and Slskd.  
 
 ---
 

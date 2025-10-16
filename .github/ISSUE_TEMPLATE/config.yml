@@ -1,12 +1,11 @@
 # .github/ISSUE_TEMPLATE/config.yml
 blank_issues_enabled: false
 
-# External links only - no template references
 contact_links:
-  - name: "❓ Questions & Support"
+  - name: "Questions & Support"
     url: https://github.com/TypNull/Tubifarry/discussions
     about: Ask questions or get help with Tubifarry in our Discussions forum.
   
-  - name: "📖 Documentation"
+  - name: "Documentation"
     url: https://github.com/TypNull/Tubifarry/wiki
     about: Check out the official documentation for Tubifarry.
