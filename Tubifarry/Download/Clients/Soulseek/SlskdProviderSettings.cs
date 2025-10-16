@@ -13,7 +13,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             // Base URL validation
             RuleFor(c => c.BaseUrl)
                 .ValidRootUrl()
-                .Must(url => !url.EndsWith("/"))
+                .Must(url => !url.EndsWith('/'))
                 .WithMessage("Base URL must not end with a slash ('/').");
 
             // API Key validation
@@ -34,9 +34,8 @@ namespace Tubifarry.Download.Clients.Soulseek
         }
     }
 
-    public class SlskdProviderSettings : IProviderConfig
+    public partial class SlskdProviderSettings : IProviderConfig
     {
-        private static readonly Regex _hostRegex = new(@"^(?:https?:\/\/)?([^\/:\?]+)(?::\d+)?(?:\/|$)", RegexOptions.Compiled);
         private static readonly SlskdProviderSettingsValidator Validator = new();
         private string? _host;
 
@@ -64,7 +63,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         [FieldDefinition(99, Label = "Host", Type = FieldType.Textbox, Hidden = HiddenType.Hidden)]
         public string Host
         {
-            get => _host ??= (_hostRegex.Match(BaseUrl) is { Success: true } match) ? match.Groups[1].Value : BaseUrl;
+            get => _host ??= (HostRegex().Match(BaseUrl) is { Success: true } match) ? match.Groups[1].Value : BaseUrl;
             set { }
         }
 
@@ -75,5 +74,8 @@ namespace Tubifarry.Download.Clients.Soulseek
         public TimeSpan? GetTimeout() => Timeout == null ? null : TimeSpan.FromHours(Timeout.Value);
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
+
+        [GeneratedRegex(@"^(?:https?:\/\/)?([^\/:\?]+)(?::\d+)?(?:\/|$)", RegexOptions.Compiled)]
+        private static partial Regex HostRegex();
     }
 }

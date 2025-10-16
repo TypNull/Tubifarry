@@ -13,21 +13,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
     /// Simple scraper that extracts image IDs from Last.fm's artist page
     /// and constructs direct URLs to high-quality images
     /// </summary>
-    public class LastfmImageScraper
+    public partial class LastfmImageScraper
     {
         private readonly IHttpClient _httpClient;
         private readonly Logger _logger;
         private readonly ICircuitBreaker _circuitBreaker;
         private readonly string _userAgent;
         private readonly CacheService _cache;
-
-        private static readonly Regex UlContainerRegex = new(
-            @"<ul\s+class=""image-list"">(.+?)</ul>",
-            RegexOptions.Compiled | RegexOptions.Singleline);
-
-        private static readonly Regex ImageIdRegex = new(
-            @"href=""[^""]*\/\+images\/([0-9a-f]{32})""",
-            RegexOptions.Compiled);
 
         public LastfmImageScraper(IHttpClient httpClient, string userAgent, CacheService cache)
         {
@@ -48,7 +40,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (string.IsNullOrWhiteSpace(artistName))
             {
                 _logger.Warn("Cannot fetch artist images: Artist name is empty");
-                return new List<string>();
+                return [];
             }
             string cacheKey = $"lastfm_artist_images_{artistName.ToLowerInvariant().Replace(" ", "_")}";
 
@@ -71,7 +63,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Error in cache operation for {artistName}");
-                return new List<string>();
+                return [];
             }
         }
 
@@ -85,7 +77,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (_circuitBreaker.IsOpen)
             {
                 _logger.Warn("Circuit breaker is open, skipping request to Last.fm website");
-                return new List<string>();
+                return [];
             }
 
             try
@@ -103,7 +95,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 {
                     _logger.Warn($"Failed to get artist images. Status: {response.StatusCode}");
                     _circuitBreaker.RecordFailure();
-                    return new List<string>();
+                    return [];
                 }
 
                 _circuitBreaker.RecordSuccess();
@@ -116,7 +108,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 _logger.Error(ex, $"Error fetching artist images for {artistName}");
                 _circuitBreaker.RecordFailure();
-                return new List<string>();
+                return [];
             }
         }
 
@@ -127,15 +119,15 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         /// <returns>List of full-size image URLs</returns>
         private List<string> ExtractImageUrls(string html)
         {
-            List<string> imageUrls = new();
+            List<string> imageUrls = [];
 
-            Match ulMatch = UlContainerRegex.Match(html);
+            Match ulMatch = UlContainerRegex().Match(html);
             if (ulMatch.Success && ulMatch.Groups.Count > 1)
             {
                 string ulContent = ulMatch.Groups[1].Value;
                 _logger.Trace("Found image list container");
 
-                MatchCollection idMatches = ImageIdRegex.Matches(ulContent);
+                MatchCollection idMatches = ImageIdRegex().Matches(ulContent);
                 _logger.Trace($"Found {idMatches.Count} image IDs in container");
 
                 foreach (Match idMatch in idMatches)
@@ -159,5 +151,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
             return imageUrls;
         }
+
+        [GeneratedRegex(@"<ul\s+class=""image-list"">(.+?)</ul>", RegexOptions.Compiled | RegexOptions.Singleline)]
+        private static partial Regex UlContainerRegex();
+
+        [GeneratedRegex(@"href=""[^""]*\/\+images\/([0-9a-f]{32})""", RegexOptions.Compiled)]
+        private static partial Regex ImageIdRegex();
     }
 }

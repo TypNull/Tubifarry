@@ -23,7 +23,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse)
         {
-            List<ImportListItemInfo> items = new();
+            List<ImportListItemInfo> items = [];
 
             if (!PreProcess(importListResponse))
                 return items;
@@ -52,19 +52,19 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             return items;
         }
 
-        private IList<ImportListItemInfo> ProcessTopAlbumsResponse(LastFmTopResponse jsonResponse)
+        private List<ImportListItemInfo> ProcessTopAlbumsResponse(LastFmTopResponse jsonResponse)
         {
-            List<ImportListItemInfo> items = new();
-            List<LastFmArtist> inputArtists = jsonResponse.TopAlbums?.Album.ConvertAll(x => x.Artist) ?? new();
+            List<ImportListItemInfo> items = [];
+            List<LastFmArtist> inputArtists = jsonResponse.TopAlbums?.Album.ConvertAll(x => x.Artist) ?? [];
             _logger.Trace("Found {0} input artists from TopAlbums.", inputArtists.Count);
 
-            List<List<LastFmArtist>> similarLists = new();
+            List<List<LastFmArtist>> similarLists = [];
             foreach (LastFmArtist artist in inputArtists)
             {
                 HttpRequest request = BuildRequest("artist.getSimilar", new Dictionary<string, string> { { "artist", artist.Name } });
                 ImportListResponse response = FetchImportListResponse(request);
                 LastFmSimilarArtistsResponse similarResponse = Json.Deserialize<LastFmSimilarArtistsResponse>(response.Content);
-                List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? new List<LastFmArtist>();
+                List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Artist '{0}': Fetched {1} similar artists.", artist.Name, similarList.Count);
             }
@@ -74,10 +74,10 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
             int overallCap = _settings.FetchCount * _settings.ImportCount;
             int totalAlbums = 0;
-            foreach ((LastFmArtist artist, int count, int bestRank) rec in sortedRecommended)
+            foreach ((LastFmArtist artist, int count, int bestRank) in sortedRecommended)
             {
-                int albumLimitForArtist = Math.Min(rec.count, 5);
-                List<LastFmAlbum> albums = FetchTopAlbumsForArtist(rec.artist);
+                int albumLimitForArtist = Math.Min(count, 5);
+                List<LastFmAlbum> albums = FetchTopAlbumsForArtist(artist);
                 foreach (LastFmAlbum? album in albums.Take(albumLimitForArtist))
                 {
                     items.Add(ConvertAlbumToImportListItems(album));
@@ -94,19 +94,19 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             return items;
         }
 
-        private IList<ImportListItemInfo> ProcessTopArtistsResponse(LastFmTopResponse jsonResponse)
+        private List<ImportListItemInfo> ProcessTopArtistsResponse(LastFmTopResponse jsonResponse)
         {
-            List<ImportListItemInfo> items = new();
-            List<LastFmArtist>? inputArtists = jsonResponse.TopArtists?.Artist ?? new();
+            List<ImportListItemInfo> items = [];
+            List<LastFmArtist>? inputArtists = jsonResponse.TopArtists?.Artist ?? [];
             _logger.Trace("Found {0} input artists from TopArtists.", inputArtists.Count);
 
-            List<List<LastFmArtist>> similarLists = new();
+            List<List<LastFmArtist>> similarLists = [];
             foreach (LastFmArtist artist in inputArtists)
             {
                 HttpRequest request = BuildRequest("artist.getSimilar", new Dictionary<string, string> { { "artist", artist.Name } });
                 ImportListResponse response = FetchImportListResponse(request);
                 LastFmSimilarArtistsResponse similarResponse = Json.Deserialize<LastFmSimilarArtistsResponse>(response.Content);
-                List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? new List<LastFmArtist>();
+                List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Artist '{0}': Fetched {1} similar artists.", artist.Name, similarList.Count);
             }
@@ -116,12 +116,12 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
             int overallCap = _settings.FetchCount * _settings.ImportCount;
             int totalArtists = 0;
-            foreach ((LastFmArtist artist, int count, int bestRank) rec in sortedRecommended)
+            foreach ((LastFmArtist artist, int count, int bestRank) in sortedRecommended)
             {
                 items.Add(new ImportListItemInfo
                 {
-                    Artist = rec.artist.Name,
-                    ArtistMusicBrainzId = rec.artist.Mbid
+                    Artist = artist.Name,
+                    ArtistMusicBrainzId = artist.Mbid
                 });
                 totalArtists++;
                 if (totalArtists >= overallCap)
@@ -130,13 +130,13 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             return items;
         }
 
-        private IList<ImportListItemInfo> ProcessTopTracksResponse(LastFmTopResponse jsonResponse)
+        private List<ImportListItemInfo> ProcessTopTracksResponse(LastFmTopResponse jsonResponse)
         {
-            List<ImportListItemInfo> items = new();
-            List<LastFmTrack>? inputTracks = jsonResponse.TopTracks?.Track ?? new();
+            List<ImportListItemInfo> items = [];
+            List<LastFmTrack>? inputTracks = jsonResponse.TopTracks?.Track ?? [];
             _logger.Trace("Found {0} input tracks from TopTracks.", inputTracks.Count);
 
-            List<List<LastFmArtist>> similarLists = new();
+            List<List<LastFmArtist>> similarLists = [];
             foreach (LastFmTrack track in inputTracks)
             {
                 HttpRequest request = BuildRequest("track.getSimilar", new Dictionary<string, string>
@@ -146,7 +146,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             });
                 ImportListResponse response = FetchImportListResponse(request);
                 LastFmSimilarTracksResponse similarResponse = Json.Deserialize<LastFmSimilarTracksResponse>(response.Content);
-                List<LastFmArtist> similarList = similarResponse?.SimilarTracks?.Track.Select(t => t.Artist).ToList() ?? new List<LastFmArtist>();
+                List<LastFmArtist> similarList = similarResponse?.SimilarTracks?.Track.ConvertAll(t => t.Artist) ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Track '{0}' by '{1}': Fetched {2} similar artists.", track.Name, track.Artist.Name, similarList.Count);
             }
@@ -156,12 +156,12 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
             int overallCap = _settings.FetchCount * _settings.ImportCount;
             int totalArtists = 0;
-            foreach ((LastFmArtist artist, int count, int bestRank) rec in sortedRecommended)
+            foreach ((LastFmArtist artist, int count, int bestRank) in sortedRecommended)
             {
                 items.Add(new ImportListItemInfo
                 {
-                    Artist = rec.artist.Name,
-                    ArtistMusicBrainzId = rec.artist.Mbid
+                    Artist = artist.Name,
+                    ArtistMusicBrainzId = artist.Mbid
                 });
                 totalArtists++;
                 if (totalArtists >= overallCap)
@@ -170,10 +170,10 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             return items;
         }
 
-        private List<(LastFmArtist artist, int count, int bestRank)> GroupAndSortSimilarArtists(List<List<LastFmArtist>> similarLists)
+        private static List<(LastFmArtist artist, int count, int bestRank)> GroupAndSortSimilarArtists(List<List<LastFmArtist>> similarLists)
         {
-            Dictionary<string, (LastFmArtist artist, int count, int bestRank)> recommendedDict = new();
-            int maxRank = similarLists.Any() ? similarLists.Max(list => list.Count) : 0;
+            Dictionary<string, (LastFmArtist artist, int count, int bestRank)> recommendedDict = [];
+            int maxRank = similarLists.Count != 0 ? similarLists.Max(list => list.Count) : 0;
 
             for (int rank = 0; rank < maxRank; rank++)
             {
@@ -183,9 +183,8 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
                     {
                         LastFmArtist simArtist = list[rank];
                         string key = !string.IsNullOrEmpty(simArtist.Mbid) ? simArtist.Mbid : simArtist.Name;
-                        if (recommendedDict.ContainsKey(key))
+                        if (recommendedDict.TryGetValue(key, out (LastFmArtist artist, int count, int bestRank) entry))
                         {
-                            (LastFmArtist artist, int count, int bestRank) entry = recommendedDict[key];
                             entry.count++;
                             entry.bestRank = Math.Min(entry.bestRank, rank);
                             recommendedDict[key] = entry;
@@ -198,10 +197,9 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
                 }
             }
 
-            return recommendedDict.Values
+            return [.. recommendedDict.Values
                 .OrderByDescending(x => x.count)
-                .ThenBy(x => x.bestRank)
-                .ToList();
+                .ThenBy(x => x.bestRank)];
         }
 
         private List<LastFmAlbum> FetchTopAlbumsForArtist(LastFmArtist artist)
@@ -209,10 +207,10 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             _logger.Trace("Fetching top albums for artist '{0}'.", artist.Name);
             HttpRequest request = BuildRequest("artist.gettopalbums", new Dictionary<string, string> { { "artist", artist.Name } });
             ImportListResponse response = FetchImportListResponse(request);
-            return Json.Deserialize<LastFmTopAlbumsResponse>(response.Content)?.TopAlbums?.Album ?? new List<LastFmAlbum>();
+            return Json.Deserialize<LastFmTopAlbumsResponse>(response.Content)?.TopAlbums?.Album ?? [];
         }
 
-        private ImportListItemInfo ConvertAlbumToImportListItems(LastFmAlbum album) => new()
+        private static ImportListItemInfo ConvertAlbumToImportListItems(LastFmAlbum album) => new()
         {
             Album = album.Name,
             AlbumMusicBrainzId = album.Mbid,

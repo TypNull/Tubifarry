@@ -4,12 +4,9 @@ using NzbDrone.Core.ImportLists.LastFm;
 
 namespace Tubifarry.ImportLists.LastFmRecommendation
 {
-    public class LastFmRecomendRequestGenerator : IImportListRequestGenerator
+    public class LastFmRecomendRequestGenerator(LastFmRecommendSettings settings) : IImportListRequestGenerator
     {
-        private readonly LastFmRecommendSettings _settings;
-
-        public LastFmRecomendRequestGenerator(LastFmRecommendSettings settings) => _settings = settings;
-
+        private readonly LastFmRecommendSettings _settings = settings;
 
         public virtual ImportListPageableRequestChain GetListItems()
         {

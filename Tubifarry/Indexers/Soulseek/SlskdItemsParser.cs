@@ -9,7 +9,7 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Soulseek
 {
-    public static class SlskdItemsParser
+    public static partial class SlskdItemsParser
     {
         private static readonly Logger Logger = NzbDroneLogger.GetLogger(typeof(SlskdItemsParser));
 
@@ -26,52 +26,11 @@ namespace Tubifarry.Indexers.Soulseek
             { 'C', 100 }, { 'D', 500 }, { 'M', 1000 }
         };
 
-        private static readonly string[] _nonArtistFolders = new[]
-        {
+        private static readonly string[] _nonArtistFolders =
+        [
             "music", "mp3", "flac", "audio", "compilations", "soundtracks",
             "pop", "rock", "jazz", "classical", "various", "downloads"
-        };
-
-        private static readonly Regex NormalizeCharactersRegex = new(@"[._/]+", RegexOptions.Compiled);
-        private static readonly Regex RemoveNonAlphanumericRegex = new(@"[^\w\s$-]", RegexOptions.Compiled);
-        private static readonly Regex ReduceWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
-
-        private static readonly Regex RomanNumeralRegex = new(@"^M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex VolumeRangeRegex = new(@"(\d+)(?:[-to&]\s*\d+)?",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex RemoveWordsRegex = new(@"\b(?:the|a|an|feat|featuring|ft|presents|pres|with|and)\b",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex YearExtractionRegex = new(@"(?<year>19\d{2}|20\d{2})",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex ArtistAlbumYearPattern = new(
-            @"^(?<artist>[^-]+)\s*-\s*(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex YearArtistAlbumPattern = new(
-            @"^(?<year>19\d{2}|20\d{2})\s*-\s*(?<artist>[^-]+)\s*-\s*(?<album>.+)(?:\s*[\(\[].+[\)\]])*$",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-        private static readonly Regex AlbumYearPattern = new(
-            @"^(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?",
-            RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-
-        private static readonly Regex VolumeRegex = new(
-            @"(?ix)
-            (?<=\b(?:volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)\s*[.,\-_:#]*\s*)
-            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)(?!\w)|
-            (\d+(?:\.\d+)?|[IVXLCDM]+)(?=\s*$)", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
-
-        private static readonly Regex CleanComponentRegex = new(
-            @"(?ix)
-            \[(?:FLAC|MP3|320|WEB|CD)[^\]]*\]|           # Audio format tags
-            \(\d{5,}\)|                                  # Long numbers in parentheses
-            \(\d+bit[\/\s]\d+[^\)]*\)|                   # Bit depth/sample rate
-            \((?:DELUXE_)?EDITION\)|                     # Edition markers
-            \s*\([^)]*edition[^)]*\)|                    # Any edition in parentheses
-            \((?:Album|Single|EP|LP)\)|                  # Release type
-            \s*\(remaster(?:ed)?\)|                      # Remaster tags
-            \s*[\(\[][^)\]]*(?:version|reissue)[^)\]]*[\)\]]| # Version/reissue in brackets/parens
-            \s*\d{4}\s*remaster|                        # Year remaster
-            \s-\s.*$", RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+        ];
 
         public static SlskdFolderData ParseFolderName(string folderPath)
         {
@@ -94,11 +53,11 @@ namespace Tubifarry.Indexers.Soulseek
                 HasFreeUploadSlot: false,
                 UploadSpeed: 0,
                 LockedFileCount: 0,
-                LockedFiles: new List<SlskdLockedFile>(),
+                LockedFiles: [],
                 QueueLength: 0,
                 Token: 0,
                 FileCount: 0,
-                Files: new List<SlskdFileData>());
+                Files: []);
         }
 
         public static AlbumData CreateAlbumData(string searchId, IGrouping<string, SlskdFileData> directory, SlskdSearchData searchData, SlskdFolderData folderData, SlskdSettings? settings = null)
@@ -109,7 +68,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             Logger.Trace($"Creating album data - Dir: '{dirNameNorm}', Search artist: '{searchArtistNorm}', Search album: '{searchAlbumNorm}'");
 
-            bool isVolumeSearch = !string.IsNullOrEmpty(searchData.Album) && VolumeRegex.Match(searchData.Album).Success;
+            bool isVolumeSearch = !string.IsNullOrEmpty(searchData.Album) && VolumeRegex().Match(searchData.Album).Success;
 
             bool isAlbumMatch = isVolumeSearch ? CheckVolumeSeriesMatch(directory.Key, searchData.Album) : !string.IsNullOrEmpty(searchAlbumNorm) && (Fuzz.PartialRatio(dirNameNorm, searchAlbumNorm) > 85 || Fuzz.TokenSortRatio(dirNameNorm, searchAlbumNorm) > 80);
             bool isArtistMatch = IsFuzzyArtistMatch(dirNameNorm, searchArtistNorm);
@@ -154,12 +113,12 @@ namespace Tubifarry.Indexers.Soulseek
                 InfoUrl = infoUrl,
                 Priotity = folderData.CalculatePriority(),
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
-                ExtraInfo = new List<string>() { $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}" },
+                ExtraInfo = [$"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
                 Duration = TotalDuration
             };
         }
 
-        private static string[] SplitPathIntoComponents(string path) => path.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+        private static string[] SplitPathIntoComponents(string path) => path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
 
         private static (string? artist, string? album, string? year) ParseFromRegexPatterns(string[] pathComponents)
         {
@@ -169,7 +128,7 @@ namespace Tubifarry.Indexers.Soulseek
             string lastComponent = pathComponents[^1];
 
             // Try artist-album-year pattern
-            Match? match = TryMatchRegex(lastComponent, ArtistAlbumYearPattern);
+            Match? match = TryMatchRegex(lastComponent, ArtistAlbumYearRegex());
             if (match != null)
             {
                 return (
@@ -179,7 +138,7 @@ namespace Tubifarry.Indexers.Soulseek
             }
 
             // Try year-artist-album pattern
-            match = TryMatchRegex(lastComponent, YearArtistAlbumPattern);
+            match = TryMatchRegex(lastComponent, YearArtistAlbumRegex());
             if (match != null)
             {
                 return (
@@ -189,7 +148,7 @@ namespace Tubifarry.Indexers.Soulseek
             }
 
             // Try album-year pattern
-            match = TryMatchRegex(lastComponent, AlbumYearPattern);
+            match = TryMatchRegex(lastComponent, AlbumYearRegex());
             if (match?.Groups["album"].Success == true)
             {
                 string? artist = null;
@@ -219,12 +178,12 @@ namespace Tubifarry.Indexers.Soulseek
             if (string.IsNullOrEmpty(searchAlbum))
                 return false;
 
-            bool isVolumeSeries = VolumeRegex.Match(searchAlbum).Success;
+            bool isVolumeSeries = VolumeRegex().Match(searchAlbum).Success;
             if (!isVolumeSeries)
                 return false;
 
-            Match? searchMatch = VolumeRegex.Match(searchAlbum);
-            Match dirMatch = VolumeRegex.Match(directoryPath);
+            Match? searchMatch = VolumeRegex().Match(searchAlbum);
+            Match dirMatch = VolumeRegex().Match(directoryPath);
 
             if (!dirMatch.Success)
                 return false;
@@ -232,8 +191,8 @@ namespace Tubifarry.Indexers.Soulseek
             string? normSearchVol = NormalizeVolume(searchMatch.Value);
             string? normDirVol = NormalizeVolume(dirMatch.Value);
 
-            string? searchBaseAlbum = VolumeRegex.Replace(searchAlbum, "").Trim();
-            string? dirBaseAlbum = VolumeRegex.Replace(directoryPath, "").Trim();
+            string? searchBaseAlbum = VolumeRegex().Replace(searchAlbum, "").Trim();
+            string? dirBaseAlbum = VolumeRegex().Replace(directoryPath, "").Trim();
 
             bool baseAlbumMatch = Fuzz.PartialRatio(
                 NormalizeString(dirBaseAlbum),
@@ -252,13 +211,13 @@ namespace Tubifarry.Indexers.Soulseek
                 return num.ToString();
 
             string normalizedRoman = NormalizeRomanNumeral(volume);
-            if (RomanNumeralRegex.IsMatch(normalizedRoman))
+            if (RomanNumeralRegex().IsMatch(normalizedRoman))
             {
                 int value = ConvertRomanToNumber(normalizedRoman);
                 if (value > 0)
                     return value.ToString();
             }
-            Match rangeMatch = VolumeRangeRegex.Match(volume);
+            Match rangeMatch = VolumeRangeRegex().Match(volume);
             if (rangeMatch.Success && int.TryParse(rangeMatch.Groups[1].Value, out int firstNum))
                 return firstNum.ToString();
             return volume.Trim().ToUpperInvariant();
@@ -308,11 +267,11 @@ namespace Tubifarry.Indexers.Soulseek
         {
             if (string.IsNullOrEmpty(input))
                 return string.Empty;
-            string normalized = NormalizeCharactersRegex.Replace(input, " ");
-            normalized = RemoveNonAlphanumericRegex.Replace(normalized, "");
-            normalized = ReduceWhitespaceRegex.Replace(normalized.ToLowerInvariant(), " ").Trim();
-            normalized = RemoveWordsRegex.Replace(normalized, "");
-            return ReduceWhitespaceRegex.Replace(normalized, " ").Trim();
+            string normalized = NormalizeCharactersRegex().Replace(input, " ");
+            normalized = RemoveNonAlphanumericRegex().Replace(normalized, "");
+            normalized = ReduceWhitespaceRegex().Replace(normalized.ToLowerInvariant(), " ").Trim();
+            normalized = RemoveWordsRegex().Replace(normalized, "");
+            return ReduceWhitespaceRegex().Replace(normalized, " ").Trim();
         }
 
 
@@ -320,13 +279,13 @@ namespace Tubifarry.Indexers.Soulseek
         {
             if (string.IsNullOrEmpty(component))
                 return string.Empty;
-            component = CleanComponentRegex.Replace(component, "");
-            return ReduceWhitespaceRegex.Replace(component.Trim(), " ");
+            component = CleanComponentRegex().Replace(component, "");
+            return ReduceWhitespaceRegex().Replace(component.Trim(), " ");
         }
 
         private static string? ExtractYearFromPath(string path)
         {
-            Match yearMatch = YearExtractionRegex.Match(path);
+            Match yearMatch = YearExtractionRegex().Match(path);
             return yearMatch.Success ? yearMatch.Groups["year"].Value : null;
         }
 
@@ -356,7 +315,11 @@ namespace Tubifarry.Indexers.Soulseek
         private static string DetermineFinalAlbum(bool isAlbumMatch, SlskdFolderData folderData, SlskdSearchData searchData)
         {
             if (isAlbumMatch && !string.IsNullOrEmpty(searchData.Album))
-                return searchData.Album;
+            {
+                Match folderVersion = VolumeRegex().Match(folderData.Album ?? "");
+                Match searchVersion = VolumeRegex().Match(searchData.Album);
+                return folderVersion.Success && !searchVersion.Success ? $"{searchData.Album} {folderVersion.Value}" : searchData.Album;
+            }
             if (!string.IsNullOrEmpty(folderData.Album))
                 return folderData.Album;
             return searchData.Album ?? "Unknown Album";
@@ -392,7 +355,7 @@ namespace Tubifarry.Indexers.Soulseek
                 .Where(ext => !string.IsNullOrEmpty(ext))
                 .ToList();
 
-            if (!extensions.Any())
+            if (extensions.Count == 0)
                 return null;
 
             return extensions
@@ -412,5 +375,60 @@ namespace Tubifarry.Indexers.Soulseek
 
             return codec.ToString();
         }
+
+
+        [GeneratedRegex(@"(?ix)
+            \[(?:FLAC|MP3|320|WEB|CD)[^\]]*\]|           # Audio format tags
+            \(\d{5,}\)|                                  # Long numbers in parentheses
+            \(\d+bit[\/\s]\d+[^\)]*\)|                   # Bit depth/sample rate
+            \((?:DELUXE_)?EDITION\)|                     # Edition markers
+            \s*\([^)]*edition[^)]*\)|                    # Any edition in parentheses
+            \((?:Album|Single|EP|LP)\)|                  # Release type
+            \s*\(remaster(?:ed)?\)|                      # Remaster tags
+            \s*[\(\[][^)\]]*(?:version|reissue)[^)\]]*[\)\]]| # Version/reissue in brackets/parens
+            \s*\d{4}\s*remaster|                        # Year remaster
+            \s-\s.*$", RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex CleanComponentRegex();
+
+        [GeneratedRegex(@"(?ix)
+            (?<=\b(?:volume|vol|part|pt|chapter|ep|sampler|remix(?:es)?|mix(?:es)?|edition|ed|version|ver|v|release|issue|series|no|num|phase|stage|book|side|disc|cd|dvd|track|season|installment|\#)\s*[.,\-_:#]*\s*)
+            (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)(?!\w)|
+            (\d+(?:\.\d+)?|[IVXLCDM]+)(?=\s*$)", RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex VolumeRegex();
+
+
+        [GeneratedRegex(@"^(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex AlbumYearRegex();
+
+        [GeneratedRegex(@"^(?<year>19\d{2}|20\d{2})\s*-\s*(?<artist>[^-]+)\s*-\s*(?<album>.+)(?:\s*[\(\[].+[\)\]])*$", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex YearArtistAlbumRegex();
+
+        [GeneratedRegex(@"^(?<artist>[^-]+)\s*-\s*(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex ArtistAlbumYearRegex();
+
+        [GeneratedRegex(@"(?<year>19\d{2}|20\d{2})", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex YearExtractionRegex();
+
+        [GeneratedRegex(@"(?:^|\s|\(|\[)(?<negation>Non-?|Not\s+)?Explicit(?:\s|\)|\]|$)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex ExplicitTagRegex();
+
+
+        [GeneratedRegex(@"\b(?:the|a|an|feat|featuring|ft|presents|pres|with|and)\b", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex RemoveWordsRegex();
+
+        [GeneratedRegex(@"(\d+)(?:[-to&]\s*\d+)?", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex VolumeRangeRegex();
+
+        [GeneratedRegex(@"^M{0,4}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
+        private static partial Regex RomanNumeralRegex();
+
+        [GeneratedRegex(@"\s+", RegexOptions.Compiled)]
+        private static partial Regex ReduceWhitespaceRegex();
+
+        [GeneratedRegex(@"[^\w\s$-]", RegexOptions.Compiled)]
+        private static partial Regex RemoveNonAlphanumericRegex();
+
+        [GeneratedRegex(@"[._/]+", RegexOptions.Compiled)]
+        private static partial Regex NormalizeCharactersRegex();
     }
 }

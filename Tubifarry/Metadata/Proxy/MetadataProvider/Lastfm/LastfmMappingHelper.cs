@@ -19,10 +19,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 ForeignAlbumId = $"{SanitizeName(lastfmAlbum.ArtistName)}::{SanitizeName(lastfmAlbum.Name)}{_identifier}",
                 Title = lastfmAlbum.Name ?? string.Empty,
-                CleanTitle = lastfmAlbum.Name.CleanArtistName(), // Use CleanArtistName instead of CleanAlbumTitle, as lidar utilizes it too.
-                Links = new List<Links>(),
-                Genres = lastfmAlbum.Tags?.Tag?.Select(g => g.Name).ToList() ?? new List<string>(),
-                SecondaryTypes = new List<SecondaryAlbumType>(),
+                CleanTitle = lastfmAlbum.Name.CleanArtistName(),
+                Links = [],
+                Genres = lastfmAlbum.Tags?.Tag?.Select(g => g.Name).ToList() ?? [],
+                SecondaryTypes = [],
                 AnyReleaseOk = true,
                 Ratings = ComputeLastfmRating(lastfmAlbum.Listeners, lastfmAlbum.PlayCount)
             };
@@ -34,12 +34,12 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             }
             else
             {
-                List<string> overviewParts = new();
+                List<string> overviewParts = [];
                 if (lastfmAlbum.PlayCount != 0)
                     overviewParts.Add($"Playcount: {lastfmAlbum.PlayCount}");
                 if (!string.IsNullOrEmpty(lastfmAlbum.Listeners))
                     overviewParts.Add($"Listeners: {lastfmAlbum.Listeners}");
-                album.Overview = overviewParts.Any() ?
+                album.Overview = overviewParts.Count != 0 ?
                     string.Join(" • ", overviewParts) : "Found on Last.fm";
             }
 
@@ -53,13 +53,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 ForeignReleaseId = album.ForeignAlbumId,
                 Title = lastfmAlbum.Name,
-                Media = new List<Medium> {
+                Media = [
                     new() {
                         Format = "Digital Media",
                         Name = "Digital Media",
                         Number = 1
                     }
-                },
+                ],
                 Album = album,
                 Status = "Official"
             };
@@ -100,12 +100,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 bool isSingle = true;
                 for (int i = 0; i < albumRelease.TrackCount - 1 && isSingle; i++)
+                {
                     for (int j = i + 1; j < albumRelease.TrackCount && isSingle; j++)
+                    {
                         if (FuzzySharp.Fuzz.Ratio(albumRelease.Tracks.Value[i].Title, albumRelease.Tracks.Value[j].Title) < 80)
                         {
                             isSingle = false;
                             break;
                         }
+                    }
+                }
 
                 album.AlbumType = isSingle ? "Single" : "Album";
             }
@@ -119,7 +123,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             }
 
             album.SecondaryTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(album.Title);
-            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease> { albumRelease });
+            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>([albumRelease]);
             return album;
         }
 
@@ -132,14 +136,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 ForeignArtistId = SanitizeName(lastfmArtist.Name) + _identifier,
                 Name = lastfmArtist.Name ?? string.Empty,
-                Links = new List<Links>
-                {
+                Links =
+                [
                     new() { Url = lastfmArtist.Url, Name = "Last.fm" }
-                },
-                Genres = lastfmArtist.Tags?.Tag?.Select(t => t.Name).ToList() ?? new List<string>(),
-                Members = new List<Member>(),
+                ],
+                Genres = lastfmArtist.Tags?.Tag?.Select(t => t.Name).ToList() ?? [],
+                Members = [],
                 Aliases = lastfmArtist.Similar?.Artists?.Where(a => !string.IsNullOrEmpty(a.Name))
-                    .Select(a => a.Name).Take(5).ToList() ?? new List<string>(),
+                    .Select(a => a.Name).Take(5).ToList() ?? [],
                 Status = ArtistStatusType.Continuing,
                 Type = string.Empty
             };
@@ -151,7 +155,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             }
             else
             {
-                List<string> overviewParts = new();
+                List<string> overviewParts = [];
                 if (lastfmArtist.Stats != null)
                 {
                     if (lastfmArtist.Stats.PlayCount != 0)
@@ -159,7 +163,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                     if (!string.IsNullOrEmpty(lastfmArtist.Stats.Listeners))
                         overviewParts.Add($"Listeners: {lastfmArtist.Stats.Listeners}");
                 }
-                metadata.Overview = overviewParts.Any() ?
+                metadata.Overview = overviewParts.Count != 0 ?
                     string.Join(" • ", overviewParts) : "Found on Last.fm";
             }
 
@@ -189,16 +193,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 ForeignAlbumId = $"{artist.ForeignArtistId.Replace(_identifier, "")}::{SanitizeName(topAlbum.Name)}{_identifier}",
                 Title = topAlbum.Name ?? string.Empty,
                 CleanTitle = topAlbum.Name.CleanArtistName(),
-                Links = new List<Links> { new() { Url = topAlbum.Url, Name = "Last.fm" } },
+                Links = [new() { Url = topAlbum.Url, Name = "Last.fm" }],
                 AlbumType = "Album",
                 Ratings = new(),
-                SecondaryTypes = new List<SecondaryAlbumType>(),
+                SecondaryTypes = [],
                 Overview = $"Found on Last.fm • Playcount: {topAlbum.PlayCount}"
             };
 
             AlbumRelease albumRelease = new()
             {
-                ForeignReleaseId = $"{SanitizeName(topAlbum.ArtistName)}::{SanitizeName(topAlbum.Name)}{_identifier}",
+                ForeignReleaseId = $"{SanitizeName(topAlbum.ArtistName)}::{SanitizeName(topAlbum.Name!)}{_identifier}",
                 Title = topAlbum.Name,
                 Album = album,
                 Status = "Official",
@@ -214,7 +218,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
             album.SecondaryTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(album.Title);
 
-            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease> { albumRelease });
+            album.AlbumReleases = new LazyLoaded<List<AlbumRelease>>([albumRelease]);
             return album;
         }
 
@@ -249,7 +253,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (existingAlbum == null)
                 return mappedAlbum;
             DateTime? existingReleaseDate = existingAlbum.ReleaseDate;
-            List<MediaCover> existingImages = existingAlbum.Images.ToList();
+            List<MediaCover> existingImages = [.. existingAlbum.Images];
 
             existingAlbum.UseMetadataFrom(mappedAlbum);
             if (existingReleaseDate > DateTime.MinValue)
@@ -277,7 +281,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                     Url = i.Url,
                     CoverType = MapCoverType(i.Size + $"{FlexibleHttpDispatcher.UA_PARAM}={userAgent}", isArtist)
                 })
-                .ToList() ?? new List<MediaCover>();
+                .ToList() ?? [];
         }
 
         /// <summary>

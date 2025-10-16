@@ -20,10 +20,11 @@ namespace Tubifarry.Download.Clients.Soulseek
 {
     public class SlskdClient : DownloadClientBase<SlskdProviderSettings>
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly IHttpClient _httpClient;
         private readonly IDownloadHistoryService _downloadService;
 
-        private static readonly Dictionary<DownloadKey<int, string>, SlskdDownloadItem> _downloadMappings = new();
+        private static readonly Dictionary<DownloadKey<int, string>, SlskdDownloadItem> _downloadMappings = [];
 
         public override string Name => "Slskd";
         public override string Protocol => nameof(SoulseekDownloadProtocol);
@@ -127,7 +128,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             {
                 string localPath = _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(directoryPath)).FullPath;
                 await Task.Delay(1000);
-                HttpRequest request = BuildHttpRequest($"/api/v0/transfers/downloads/");
+                HttpRequest request = BuildHttpRequest("/api/v0/transfers/downloads/");
                 HttpResponse response = await ExecuteAsync(request);
 
                 if (response.StatusCode != HttpStatusCode.OK)
@@ -136,7 +137,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                     return;
                 }
 
-                List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, _jsonOptions);
                 bool hasRemainingDownloads = false;
                 downloads?.ForEach(user =>
                 {
@@ -181,15 +182,15 @@ namespace Tubifarry.Download.Clients.Soulseek
             if (response.StatusCode != HttpStatusCode.OK)
                 throw new DownloadClientException($"Failed to fetch downloads. Status Code: {response.StatusCode}");
 
-            List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            HashSet<string> currentDownloadIds = new();
+            List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, _jsonOptions);
+            HashSet<string> currentDownloadIds = [];
 
             downloads?.ForEach(user =>
             {
                 user.TryGetProperty("directories", out JsonElement directoriesElement);
                 foreach (SlskdDownloadDirectory dir in SlskdDownloadDirectory.GetDirectories(directoriesElement))
                 {
-                    string hash = SlskdDownloadItem.GetStableMD5Id(dir.Files?.Select(file => file.Filename) ?? new List<string>());
+                    string hash = SlskdDownloadItem.GetStableMD5Id(dir.Files?.Select(file => file.Filename) ?? []);
                     currentDownloadIds.Add(hash);
 
                     SlskdDownloadItem? item = GetDownloadItem(hash);
@@ -217,7 +218,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             }
         }
 
-        private ReleaseInfo CreateReleaseInfoFromDownloadDirectory(string username, SlskdDownloadDirectory dir)
+        private static ReleaseInfo CreateReleaseInfoFromDownloadDirectory(string username, SlskdDownloadDirectory dir)
         {
             SlskdFolderData folderData = dir.CreateFolderData(username);
 
@@ -261,7 +262,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         public override DownloadClientInfo GetStatus() => new()
         {
             IsLocalhost = Settings.IsLocalhost,
-            OutputRootFolders = new List<OsPath> { _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath)) }
+            OutputRootFolders = [_remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath))]
         };
 
         private SlskdDownloadItem? GetDownloadItem(string downloadId) => _downloadMappings.TryGetValue(new DownloadKey<int, string>(Definition.Id, downloadId), out SlskdDownloadItem? item) ? item : null;
@@ -345,7 +346,7 @@ namespace Tubifarry.Download.Clients.Soulseek
 
         private async Task RemoveItemAsync(SlskdDownloadItem downloadItem)
         {
-            List<SlskdDownloadFile> files = downloadItem.SlskdDownloadDirectory?.Files ?? new List<SlskdDownloadFile>();
+            List<SlskdDownloadFile> files = downloadItem.SlskdDownloadDirectory?.Files ?? [];
 
             await Task.WhenAll(files.Select(async file =>
             {

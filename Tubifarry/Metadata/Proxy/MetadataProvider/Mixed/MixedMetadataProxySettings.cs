@@ -57,10 +57,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 if (value != null)
                 {
                     Dictionary<string, string> customDict = value.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-                    _customConversion = _priotities
+                    _customConversion = [.. _priotities
                         .Select(kvp => new KeyValuePair<string, string>(kvp.Key, customDict.TryGetValue(kvp.Key, out string? customValue) ? customValue : kvp.Value))
-                        .OrderBy(x => x.Value)
-                        .ToList();
+                        .OrderBy(x => x.Value)];
                 }
             }
         }

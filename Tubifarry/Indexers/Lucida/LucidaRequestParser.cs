@@ -12,21 +12,16 @@ namespace Tubifarry.Indexers.Lucida
 {
     public interface ILucidaParser : IParseIndexerResponse { }
 
-    public class LucidaParser : ILucidaParser
+    public partial class LucidaParser(Logger logger) : ILucidaParser
     {
-        private readonly Logger _logger;
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+        private readonly Logger _logger = logger;
 
-        private static readonly Regex[] SearchDataPatterns =
-        {
-            new(@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);", RegexOptions.Compiled | RegexOptions.Singleline),
-            new(@"__INITIAL_DATA__\s*=\s*({.+?});", RegexOptions.Compiled | RegexOptions.Singleline)
-        };
-
-        public LucidaParser(Logger logger) => _logger = logger;
+        private static readonly Regex[] SearchDataPatterns = [Data1Regex(), Data2Regex()];
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<ReleaseInfo> releases = new();
+            List<ReleaseInfo> releases = [];
             LucidaRequestData? requestData = GetRequestData(indexerResponse);
             if (requestData == null) return releases;
 
@@ -66,7 +61,7 @@ namespace Tubifarry.Indexers.Lucida
                 try
                 {
                     string raw = NormalizeJsonData(match.Groups[1].Value);
-                    List<LucidaDataWrapper>? wrapperList = JsonSerializer.Deserialize<List<LucidaDataWrapper>>(raw, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    List<LucidaDataWrapper>? wrapperList = JsonSerializer.Deserialize<List<LucidaDataWrapper>>(raw, _jsonOptions);
                     if (wrapperList != null)
                     {
                         LucidaDataWrapper? dataWrapper = wrapperList
@@ -131,10 +126,10 @@ namespace Tubifarry.Indexers.Lucida
             NzbDroneLogger.GetLogger(nameof(LucidaParser)).Info(tracksJson);
 
             if (!string.IsNullOrEmpty(albumsJson) && albumsJson != "[]")
-                albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, _jsonOptions);
 
             if (!string.IsNullOrEmpty(tracksJson) && tracksJson != "[]")
-                tracks = JsonSerializer.Deserialize<List<LucidaTrack>>(tracksJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                tracks = JsonSerializer.Deserialize<List<LucidaTrack>>(tracksJson, _jsonOptions);
 
             return (albums, tracks);
         }
@@ -170,7 +165,7 @@ namespace Tubifarry.Indexers.Lucida
 
         private AlbumData CreateAlbumData(LucidaAlbum album, LucidaRequestData rd, AudioFormat format, int bitrate, int bitDepth)
         {
-            List<LucidaArtist> artists = album.Artists ?? new List<LucidaArtist>();
+            List<LucidaArtist> artists = album.Artists ?? [];
 
             string artist = artists.FirstOrDefault()?.Name ?? "Unknown Artist";
 
@@ -193,7 +188,7 @@ namespace Tubifarry.Indexers.Lucida
 
         private AlbumData CreateTrackData(LucidaTrack track, LucidaRequestData rd, AudioFormat format, int bitrate, int bitDepth)
         {
-            List<LucidaArtist> artists = track.Artists ?? new List<LucidaArtist>();
+            List<LucidaArtist> artists = track.Artists ?? [];
             string artist = artists.FirstOrDefault()?.Name ?? "Unknown Artist";
             string resolution = string.Empty;
 
@@ -221,19 +216,19 @@ namespace Tubifarry.Indexers.Lucida
                 albumData.ReleaseDate = DateTime.Now.Year.ToString();
                 albumData.ReleaseDatePrecision = "year";
             }
-            else if (Regex.IsMatch(releaseDate, "^\\d{4}-\\d{2}-\\d{2}$"))
+            else if (ReleaseDateDayRegex().IsMatch(releaseDate))
             {
                 albumData.ReleaseDate = releaseDate;
                 albumData.ReleaseDatePrecision = "day";
             }
-            else if (Regex.IsMatch(releaseDate, "^\\d{4}$"))
+            else if (ReleaseDateYearRegex().IsMatch(releaseDate))
             {
                 albumData.ReleaseDate = releaseDate;
                 albumData.ReleaseDatePrecision = "year";
             }
             else
             {
-                Match match = Regex.Match(releaseDate, "\\b(\\d{4})\\b");
+                Match match = ReleaseDateYear2Regex().Match(releaseDate);
                 albumData.ReleaseDate = match.Success ? match.Groups[1].Value : DateTime.Now.Year.ToString();
                 albumData.ReleaseDatePrecision = "year";
             }
@@ -249,5 +244,19 @@ namespace Tubifarry.Indexers.Lucida
             js = Regex.Replace(js, @":\s*False\b", ":false");
             return js;
         }
+
+        [GeneratedRegex("^\\d{4}-\\d{2}-\\d{2}$")]
+        private static partial Regex ReleaseDateDayRegex();
+        [GeneratedRegex("^\\d{4}$")]
+        private static partial Regex ReleaseDateYearRegex();
+        [GeneratedRegex("\\b(\\d{4})\\b")]
+        private static partial Regex ReleaseDateYear2Regex();
+
+
+        [GeneratedRegex(@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);", RegexOptions.Compiled | RegexOptions.Singleline)]
+        private static partial Regex Data1Regex();
+
+        [GeneratedRegex(@"__INITIAL_DATA__\s*=\s*({.+?});", RegexOptions.Compiled | RegexOptions.Singleline)]
+        private static partial Regex Data2Regex();
     }
 }

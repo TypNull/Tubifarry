@@ -3,12 +3,10 @@ using System.Reflection;
 
 namespace Tubifarry.Metadata.Proxy
 {
-    public abstract class ProxyWrapperBase
+    public abstract class ProxyWrapperBase(Lazy<IProxyService> proxyService)
     {
-        protected readonly Lazy<IProxyService> ProxyService;
+        protected readonly Lazy<IProxyService> ProxyService = proxyService;
         private readonly ConcurrentDictionary<string, MethodInfo> _methodCache = new();
-
-        protected ProxyWrapperBase(Lazy<IProxyService> proxyService) => ProxyService = proxyService;
 
         protected T InvokeProxyMethod<T>(Type interfaceType, string methodName, params object[] args)
         {
@@ -110,9 +108,7 @@ namespace Tubifarry.Metadata.Proxy
                 current = current.BaseType;
             }
 
-            return type.GetInterfaces()
-                       .Where(i => i.IsGenericType)
-                       .Any(i => i.GetGenericTypeDefinition() == genericDefinition);
+            return type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == genericDefinition);
         }
 
         private static Type[] InferGenericArguments(MethodInfo genericMethod, object[] args)

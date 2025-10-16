@@ -8,10 +8,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCFRecommendations
         private readonly ListenBrainzCFRecommendationsSettings _settings;
         private const int MaxItemsPerRequest = 100;
 
-        public ListenBrainzCFRecommendationsRequestGenerator(ListenBrainzCFRecommendationsSettings settings)
-        {
-            _settings = settings;
-        }
+        public ListenBrainzCFRecommendationsRequestGenerator(ListenBrainzCFRecommendationsSettings settings) => _settings = settings;
 
         public virtual ImportListPageableRequestChain GetListItems()
         {

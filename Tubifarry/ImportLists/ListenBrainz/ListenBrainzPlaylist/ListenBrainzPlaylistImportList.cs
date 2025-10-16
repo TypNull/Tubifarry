@@ -102,7 +102,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
 
         private List<dynamic> FetchAvailablePlaylists()
         {
-            List<dynamic> allPlaylists = new();
+            List<dynamic> allPlaylists = [];
             int offset = 0;
             const int count = 100;
 
@@ -114,11 +114,8 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
             if (thisOperationToken != _currentOperation)
                 return null!;
 
-            while (true)
+            while (thisOperationToken == _currentOperation)
             {
-                if (thisOperationToken != _currentOperation)
-                    break;
-
                 ListenBrainzPlaylistRequestGenerator generator = new(Settings);
                 ImportListRequest request = generator.CreateDiscoveryRequest(count, offset);
 

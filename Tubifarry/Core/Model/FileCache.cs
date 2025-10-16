@@ -31,9 +31,7 @@ namespace Tubifarry.Core.Model
                     File.Delete(file);
             }
             catch
-            {
-
-            }
+            { }
         }
 
         /// <summary>
@@ -105,11 +103,10 @@ namespace Tubifarry.Core.Model
         /// </summary>
         private string GetCacheFilePath(string cacheKey)
         {
-            using MD5 md5 = MD5.Create();
-            byte[] hashBytes = md5.ComputeHash(Encoding.UTF8.GetBytes(cacheKey));
+            byte[] hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(cacheKey));
             string hashString = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
 
-            string subdirectory = hashString.Substring(0, 2);
+            string subdirectory = hashString[..2];
             string fileName = $"{hashString}.json";
 
             return Path.Combine(_cacheDirectory, subdirectory, fileName);
@@ -122,7 +119,6 @@ namespace Tubifarry.Core.Model
         {
             try
             {
-
                 if (!Directory.Exists(_cacheDirectory))
                     Directory.CreateDirectory(_cacheDirectory);
 
@@ -134,7 +130,6 @@ namespace Tubifarry.Core.Model
                 int maxCachePathLength = _cacheDirectory.Length + 40;
                 if (maxCachePathLength >= maxPath)
                     throw new PathTooLongException($"Cache path exceeds OS limits ({maxCachePathLength} characters). Use a shorter base directory.");
-
             }
             catch (Exception ex)
             {

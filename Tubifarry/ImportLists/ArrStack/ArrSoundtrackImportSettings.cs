@@ -15,7 +15,7 @@ namespace Tubifarry.ImportLists.ArrStack
                 .NotEmpty()
                 .WithMessage("Base URL is required")
                 .ValidRootUrl()
-                .Must(url => !url.EndsWith("/"))
+                .Must(url => !url.EndsWith('/'))
                 .WithMessage("Base URL must not end with a slash");
 
             // API Key validation
@@ -47,7 +47,7 @@ namespace Tubifarry.ImportLists.ArrStack
             RuleFor(c => c.APIItemEndpoint)
                 .NotEmpty()
                 .WithMessage("API Item Endpoint is required")
-                .Must(endpoint => endpoint.StartsWith("/"))
+                .Must(endpoint => endpoint.StartsWith('/'))
                 .WithMessage("API Item Endpoint must start with '/'")
                 .Must(endpoint => endpoint.Contains("/api/"))
                 .WithMessage("API Item Endpoint must contain '/api/'");
@@ -55,7 +55,7 @@ namespace Tubifarry.ImportLists.ArrStack
             RuleFor(c => c.APIStatusEndpoint)
                 .NotEmpty()
                 .WithMessage("API Status Endpoint is required")
-                .Must(endpoint => endpoint.StartsWith("/"))
+                .Must(endpoint => endpoint.StartsWith('/'))
                 .WithMessage("API Status Endpoint must start with '/'")
                 .Must(endpoint => endpoint.Contains("/api/"))
                 .WithMessage("API Status Endpoint must contain '/api/'");

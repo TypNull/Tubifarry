@@ -59,7 +59,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 artistAlbumsCacheKey,
                 () => apiService.GetArtistDataAsync<DeezerAlbum>(int.Parse(RemoveIdentifier(artist.ForeignArtistId)))!);
 
-            List<Album> albums = new();
+            List<Album> albums = [];
             foreach (DeezerAlbum albumD in albumResults)
             {
                 if (albumD.Artist?.Id != null && RemoveIdentifier(artist.ForeignArtistId) != albumD.Artist.Id.ToString())
@@ -127,19 +127,19 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                     {
                         Artist artist = GetArtistInfoAsync(settings, deezerId.ToString(), 0).GetAwaiter().GetResult();
                         if (artist != null)
-                            return new List<object> { artist };
+                            return [artist];
                     }
                     catch { }
 
                     DeezerAlbum? albumResult = apiService.GetAlbumAsync(deezerId).GetAwaiter().GetResult();
                     if (albumResult != null)
-                        return new List<object> { DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumResult) };
+                        return [DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumResult)];
                 }
             }
 
             List<DeezerAlbum> searchItems = CachedSearchAsync<DeezerAlbum, DeezerAlbum>(settings, query, x => x).GetAwaiter().GetResult();
-            List<Artist> artists = new();
-            List<object> results = new();
+            List<Artist> artists = [];
+            List<object> results = [];
 
             foreach (DeezerAlbum? item in searchItems.DistinctBy(x => x.Id))
             {
@@ -181,14 +181,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             if (existingArtist == null)
             {
                 _logger.Debug("Artist {0} not found, returning empty album", albumDetails.Artist.Name);
-                return Tuple.Create("", new Album() { AlbumReleases = new LazyLoaded<List<AlbumRelease>>(new List<AlbumRelease>()) }, new List<ArtistMetadata>());
+                return Tuple.Create("", new Album() { AlbumReleases = new LazyLoaded<List<AlbumRelease>>([]) }, new List<ArtistMetadata>());
             }
 
             Album mappedAlbum = DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumDetails, existingArtist);
             Album finalAlbum = existingAlbum != null ? DeezerMappingHelper.MergeAlbums(existingAlbum, mappedAlbum) : mappedAlbum;
 
             _logger.Trace("Completed processing for AlbumId: {0}", foreignAlbumId);
-            return new Tuple<string, Album, List<ArtistMetadata>>(existingArtist.ForeignArtistId, finalAlbum, new List<ArtistMetadata> { existingArtist.Metadata.Value });
+            return new Tuple<string, Album, List<ArtistMetadata>>(existingArtist.ForeignArtistId, finalAlbum, [existingArtist.Metadata.Value]);
         }
 
         private async Task<DeezerAlbum> EnsureAllTracksAsync(DeezerAlbum album, DeezerApiService apiService)

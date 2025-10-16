@@ -15,7 +15,7 @@ namespace Tubifarry.Metadata.Proxy
         public string Name { get; }
     }
 
-    public interface IMixedProxy : IProxy { }
+    public interface IMixedProxy : IProxy;
 
     public enum ProxyStatusAction
     {
@@ -23,16 +23,10 @@ namespace Tubifarry.Metadata.Proxy
         Disabled
     }
 
-    public class ProxyStatusChangedEvent : IEvent
+    public class ProxyStatusChangedEvent(IProxy proxy, ProxyStatusAction action) : IEvent
     {
-        public IProxy Proxy { get; }
-        public ProxyStatusAction Action { get; }
-
-        public ProxyStatusChangedEvent(IProxy proxy, ProxyStatusAction action)
-        {
-            Proxy = proxy;
-            Action = action;
-        }
+        public IProxy Proxy { get; } = proxy;
+        public ProxyStatusAction Action { get; } = action;
     }
 
     public class ProxyServiceStarter : IHandle<ApplicationStartedEvent>

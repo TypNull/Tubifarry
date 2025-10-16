@@ -74,7 +74,7 @@ namespace Tubifarry
             if (AvailableVersion > InstalledVersion)
                 _commandQueueManager.Push(new InstallPluginCommand() { GithubUrl = GithubUrl });
 #endif
-            List<DateTime> lastStarted = _pluginSettings.GetValue<List<DateTime>>("lastStarted") ?? new List<DateTime>();
+            List<DateTime> lastStarted = _pluginSettings.GetValue<List<DateTime>>("lastStarted") ?? [];
 
             LastStarted = DateTime.UtcNow;
             lastStarted.Add(LastStarted);

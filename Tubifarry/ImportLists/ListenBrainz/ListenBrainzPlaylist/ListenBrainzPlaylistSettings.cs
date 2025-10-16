@@ -22,7 +22,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
         public ListenBrainzPlaylistSettings()
         {
             BaseUrl = "https://api.listenbrainz.org";
-            PlaylistIds = Array.Empty<string>();
+            PlaylistIds = [];
         }
 
         public string BaseUrl { get; set; }

@@ -25,7 +25,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
             // When using Permanent cache, require a valid CacheDirectory.
             RuleFor(x => x.CacheDirectory)
-                .Must((settings, path) => settings.RequestCacheType != (int)CacheType.Permanent || !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                .Must((settings, path) => settings.RequestCacheType != (int)CacheType.Permanent || (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path)))
                 .WithMessage("A valid Cache Directory is required for Permanent caching.");
 
             // Validate the system stability for Memory cache

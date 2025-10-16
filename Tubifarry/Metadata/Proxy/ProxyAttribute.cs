@@ -3,23 +3,16 @@
 namespace Tubifarry.Metadata.Proxy
 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-    public class ProxyAttribute : Attribute
+    public class ProxyAttribute(ProxyMode mode) : Attribute
     {
-        public ProxyMode Mode { get; }
-        public ProxyAttribute(ProxyMode mode) => Mode = mode;
+        public ProxyMode Mode { get; } = mode;
     }
 
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
-    public class ProxyForAttribute : Attribute
+    public class ProxyForAttribute(Type originalInterface, int priority = 0) : Attribute
     {
-        public Type OriginalInterface { get; }
-        public int Priority { get; }
-
-        public ProxyForAttribute(Type originalInterface, int priority = 0)
-        {
-            OriginalInterface = originalInterface;
-            Priority = priority;
-        }
+        public Type OriginalInterface { get; } = originalInterface;
+        public int Priority { get; } = priority;
     }
 
     public static class ProxyAttributeExtensions
@@ -34,7 +27,7 @@ namespace Tubifarry.Metadata.Proxy
                 .SelectMany(interfaceInfo => GetMissingMethodsForInterface(interfaceInfo.OriginalInterface, publicMethods))
                 .ToList();
 
-            if (missingMethods.Any())
+            if (missingMethods.Count != 0)
                 throw new InvalidOperationException($"Proxy class {proxyType.Name} is missing required methods: {string.Join(", ", missingMethods)}");
         }
 

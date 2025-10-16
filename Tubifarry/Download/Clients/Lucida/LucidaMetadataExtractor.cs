@@ -18,11 +18,11 @@ namespace Tubifarry.Download.Clients.Lucida
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
         // Regex patterns for JavaScript data extraction
-        private static readonly Regex[] DataExtractionRegexes = new[]
-        {
+        private static readonly Regex[] DataExtractionRegexes =
+        [
             new Regex (@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);", RegexOptions.Compiled | RegexOptions.Singleline),
             new Regex(@"__INITIAL_DATA__\s*=\s*({.+?});", RegexOptions.Compiled | RegexOptions.Singleline)
-        };
+        ];
 
 
         /// <summary>
@@ -147,7 +147,7 @@ namespace Tubifarry.Download.Clients.Lucida
 
             LucidaAlbumModel album = new()
             {
-                Id = info.Id.ToString(),
+                Id = info.Id,
                 Title = info.Title,
                 Artist = info.Artists.FirstOrDefault()?.Name ?? string.Empty,
                 TrackCount = info.TrackCount,
@@ -166,7 +166,7 @@ namespace Tubifarry.Download.Clients.Lucida
             {
                 LucidaTrackModel track = new()
                 {
-                    Id = trackInfo.Id.ToString(),
+                    Id = trackInfo.Id,
                     Title = trackInfo.Title,
                     Artist = trackInfo.Artists.FirstOrDefault()?.Name ?? string.Empty,
                     DurationMs = trackInfo.DurationMs,

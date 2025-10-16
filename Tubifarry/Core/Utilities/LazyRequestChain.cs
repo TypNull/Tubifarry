@@ -8,23 +8,18 @@ namespace Tubifarry.Core.Utilities
     /// <summary>
     /// Lazy version of IndexerPageableRequest that defers execution until enumerated
     /// </summary>
-    public class LazyIndexerPageableRequest : IndexerPageableRequest
+    public class LazyIndexerPageableRequest(Func<IEnumerable<IndexerRequest>> requestFactory, int minimumResultsThreshold = 0) : IndexerPageableRequest(new LazyEnumerable(requestFactory))
     {
-        public int MinimumResultsThreshold { get; }
-
-        public LazyIndexerPageableRequest(Func<IEnumerable<IndexerRequest>> requestFactory, int minimumResultsThreshold = 0)
-            : base(new LazyEnumerable(requestFactory)) => MinimumResultsThreshold = minimumResultsThreshold;
+        public int MinimumResultsThreshold { get; } = minimumResultsThreshold;
 
         public bool AreResultsUsable(int resultsCount) => MinimumResultsThreshold == 0 ? resultsCount > 0 : resultsCount >= MinimumResultsThreshold;
 
         /// <summary>
         /// Helper class that wraps the lazy factory for the base constructor
         /// </summary>
-        private class LazyEnumerable : IEnumerable<IndexerRequest>
+        private class LazyEnumerable(Func<IEnumerable<IndexerRequest>> factory) : IEnumerable<IndexerRequest>
         {
-            private readonly Func<IEnumerable<IndexerRequest>> _factory;
-
-            public LazyEnumerable(Func<IEnumerable<IndexerRequest>> factory) => _factory = factory;
+            private readonly Func<IEnumerable<IndexerRequest>> _factory = factory;
 
             public IEnumerator<IndexerRequest> GetEnumerator() => _factory().GetEnumerator();
 
@@ -40,7 +35,7 @@ namespace Tubifarry.Core.Utilities
         protected List<List<TRequest>> _chains;
         private static readonly Logger Logger = NzbDroneLogger.GetLogger(typeof(IndexerPageableRequestChain<TRequest>));
 
-        public IndexerPageableRequestChain() => _chains = new List<List<TRequest>> { new() };
+        public IndexerPageableRequestChain() => _chains = [[]];
 
         public virtual int Tiers => _chains.Count;
 
@@ -57,10 +52,6 @@ namespace Tubifarry.Core.Utilities
                 _chains[^1].Add(lazyRequest);
                 Logger.Trace($"Added request to current tier. Current tier now has {_chains[^1].Count} requests.");
             }
-            //else if (new ExtendedIndexerPageableRequest(request) is TRequest pageableRequest)
-            //{
-            //    _chains[^1].Add(pageableRequest);
-            //}
         }
 
         public virtual void AddTier(IEnumerable<IndexerRequest> request)
@@ -73,7 +64,7 @@ namespace Tubifarry.Core.Utilities
         {
             if (_chains[^1].Count == 0) return;
 
-            _chains.Add(new List<TRequest>());
+            _chains.Add([]);
             Logger.Trace($"Added new tier. Total tiers: {_chains.Count}");
         }
 
@@ -112,15 +103,10 @@ namespace Tubifarry.Core.Utilities
     /// <summary>
     /// Lazy request chain that generates tiers on-demand
     /// </summary>
-    public class LazyIndexerPageableRequestChain : IndexerPageableRequestChain<LazyIndexerPageableRequest>
+    public class LazyIndexerPageableRequestChain(int defaultThreshold = 0) : IndexerPageableRequestChain<LazyIndexerPageableRequest>
     {
-        private readonly int _defaultThreshold;
+        private readonly int _defaultThreshold = defaultThreshold;
         private static readonly Logger Logger = NzbDroneLogger.GetLogger(typeof(LazyIndexerPageableRequestChain));
-
-        public LazyIndexerPageableRequestChain(int defaultThreshold = 0)
-        {
-            _defaultThreshold = defaultThreshold;
-        }
 
         /// <summary>
         /// Add a request factory to the current tier
@@ -177,7 +163,7 @@ namespace Tubifarry.Core.Utilities
         /// <summary>
         /// Creates a conditional tier that only executes if the condition is met
         /// </summary>
-        public static Func<IEnumerable<IndexerRequest>> CreateConditionalTier(Func<bool> condition, Func<IEnumerable<IndexerRequest>> requestGenerator) => () => condition() ? requestGenerator() : Enumerable.Empty<IndexerRequest>();
+        public static Func<IEnumerable<IndexerRequest>> CreateConditionalTier(Func<bool> condition, Func<IEnumerable<IndexerRequest>> requestGenerator) => () => condition() ? requestGenerator() : [];
 
         /// <summary>
         /// Creates a simple tier that always executes

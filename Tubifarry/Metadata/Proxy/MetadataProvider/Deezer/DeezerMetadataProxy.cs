@@ -13,7 +13,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
     [ProxyFor(typeof(ISearchForNewArtist))]
     [ProxyFor(typeof(ISearchForNewAlbum))]
     [ProxyFor(typeof(ISearchForNewEntity))]
-    public class DeezerMetadataProxy : ProxyBase<DeezerMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    public partial class DeezerMetadataProxy : ProxyBase<DeezerMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly IDeezerProxy _deezerProxy;
         private readonly Logger _logger;
@@ -40,19 +40,19 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         public HashSet<string> GetChangedAlbums(DateTime startTime)
         {
             _logger.Warn("GetChangedAlbums: Deezer API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public HashSet<string> GetChangedArtists(DateTime startTime)
         {
             _logger.Warn("GetChangedArtists: Deezer API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
         {
             _logger.Warn("SearchNewAlbumByRecordingIds: Deezer API does not support fingerprint search; returning empty list.");
-            return new List<Album>();
+            return [];
         }
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
@@ -60,7 +60,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             if (DeezerProxy.IsDeezerIdQuery(albumTitle) || DeezerProxy.IsDeezerIdQuery(artistName))
                 return MetadataSupportLevel.Supported;
 
-            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
+            if ((albumTitle != null && FormatRegex().IsMatch(albumTitle)) || (artistName != null && FormatRegex().IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.ImplicitSupported;
@@ -94,7 +94,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = _deezerRegex.Match(link.Url);
+                Match match = DeezerRegex().Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
@@ -102,7 +102,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             return null;
         }
 
-        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
-        private static readonly Regex _deezerRegex = new(@"deezer\.com\/(?:album|artist|track)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        [GeneratedRegex(@"deezer\.com\/(?:album|artist|track)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex DeezerRegex();
+        [GeneratedRegex(@"^\s*\w+:\s*\w+", RegexOptions.Compiled)]
+        private static partial Regex FormatRegex();
     }
 }

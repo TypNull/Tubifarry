@@ -24,7 +24,7 @@ namespace Tubifarry.Indexers.Lucida
             RuleFor(x => x.CountryCode)
                 .NotEmpty().WithMessage("Country code is required.")
                 .Must(cc => cc
-                    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Split([';', ','], StringSplitOptions.RemoveEmptyEntries)
                     .All(code => code.Trim().Length == 2))
                 .WithMessage("Country code must be a semicolon or comma-separated list of 2-letter country codes.");
         }
@@ -50,7 +50,7 @@ namespace Tubifarry.Indexers.Lucida
             CountryCode = "US";
             RequestTimeout = 60;
             BaseUrl = "https://lucida.to";
-            _servicePriorities = _defaultPriorities.ToList();
+            _servicePriorities = [.. _defaultPriorities];
         }
 
         [FieldDefinition(0, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the Lucida instance", Placeholder = "https://lucida.to")]
@@ -79,7 +79,7 @@ namespace Tubifarry.Indexers.Lucida
                 }
                 else
                 {
-                    _servicePriorities = _defaultPriorities.ToList();
+                    _servicePriorities = [.. _defaultPriorities];
                 }
             }
         }

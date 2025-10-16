@@ -16,12 +16,12 @@ namespace Tubifarry.Download.Base
     /// <summary>
     /// Base class for download requests containing common functionality
     /// </summary>
-    public abstract class BaseDownloadRequest<TOptions> : Request<TOptions, string, string> where TOptions : BaseDownloadOptions, new()
+    public abstract partial class BaseDownloadRequest<TOptions> : Request<TOptions, string, string> where TOptions : BaseDownloadOptions, new()
     {
         protected readonly OsPath _destinationPath;
         protected readonly StringBuilder _message = new();
-        protected readonly RequestContainer<IRequest> _requestContainer = new();
-        protected readonly RequestContainer<LoadRequest> _trackContainer = new();
+        protected readonly RequestContainer<IRequest> _requestContainer = [];
+        protected readonly RequestContainer<LoadRequest> _trackContainer = [];
         protected readonly RemoteAlbum _remoteAlbum;
         protected readonly Album _albumData;
         protected readonly DownloadClientItem _clientItem;
@@ -30,13 +30,9 @@ namespace Tubifarry.Download.Base
         protected int _expectedTrackCount;
         protected byte[]? _albumCover;
 
-        // Regex pattern for sanitizing filenames
-        protected static readonly Regex FileNameSanitizer = new(@"[\\/:\*\?""<>\|]", RegexOptions.Compiled);
-
         // Progress tracking
         private DateTime _lastUpdateTime = DateTime.MinValue;
         private long _lastRemainingSize;
-
 
         protected ReleaseInfo ReleaseInfo => _remoteAlbum.Release;
         public override Task Task => _requestContainer.Task;
@@ -89,7 +85,7 @@ namespace Tubifarry.Download.Base
         /// <summary>
         /// Sanitizes a filename by removing invalid characters
         /// </summary>
-        protected static string SanitizeFileName(string fileName) => string.IsNullOrEmpty(fileName) ? "Unknown" : FileNameSanitizer.Replace(fileName, "_").Trim();
+        protected static string SanitizeFileName(string fileName) => string.IsNullOrEmpty(fileName) ? "Unknown" : FileNameSanitizerRegex().Replace(fileName, "_").Trim();
 
         /// <summary>
         /// Logs a message and appends it to the client message buffer
@@ -183,5 +179,8 @@ namespace Tubifarry.Download.Base
         public override void Start() => throw new NotImplementedException();
         public override void Pause() => throw new NotImplementedException();
         protected override Task<RequestReturn> RunRequestAsync() => throw new NotImplementedException();
+
+        [GeneratedRegex(@"[\\/:\*\?""<>\|]", RegexOptions.Compiled)]
+        private static partial Regex FileNameSanitizerRegex();
     }
 }

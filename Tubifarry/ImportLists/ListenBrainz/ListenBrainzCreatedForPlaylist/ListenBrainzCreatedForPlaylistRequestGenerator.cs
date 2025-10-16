@@ -8,10 +8,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
         private readonly ListenBrainzCreatedForPlaylistSettings _settings;
         private const int DefaultPlaylistsPerCall = 25;
 
-        public ListenBrainzCreatedForPlaylistRequestGenerator(ListenBrainzCreatedForPlaylistSettings settings)
-        {
-            _settings = settings;
-        }
+        public ListenBrainzCreatedForPlaylistRequestGenerator(ListenBrainzCreatedForPlaylistSettings settings) => _settings = settings;
 
         public virtual ImportListPageableRequestChain GetListItems()
         {
@@ -20,10 +17,10 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
             return pageableRequests;
         }
 
-        private IEnumerable<ImportListRequest> GetPagedRequests() => (List<ImportListRequest>)new()
-        {
+        private IEnumerable<ImportListRequest> GetPagedRequests() => (List<ImportListRequest>)
+        [
             CreateRequest(0, DefaultPlaylistsPerCall)
-        };
+        ];
 
         private ImportListRequest CreateRequest(int offset, int count)
         {

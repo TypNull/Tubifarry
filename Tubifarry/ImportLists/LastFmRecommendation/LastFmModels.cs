@@ -11,7 +11,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
     public class LastFmTrackList
     {
-        public List<LastFmTrack> Track { get; set; } = new();
+        public List<LastFmTrack> Track { get; set; } = [];
     }
 
     public class LastFmTrack

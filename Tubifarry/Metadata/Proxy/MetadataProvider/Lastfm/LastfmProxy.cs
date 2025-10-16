@@ -44,7 +44,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             {
                 LastfmApiService apiService = GetApiService(settings);
 
-                List<Album> albums = new();
+                List<Album> albums = [];
                 List<LastfmAlbum>? lastfmAlbums = _cache.FetchAndCacheAsync($"search:album:{title}:{settings.PageSize}:{settings.PageNumber}",
                     () => apiService.SearchAlbumsAsync(title, settings.PageSize, settings.PageNumber)).GetAwaiter().GetResult();
 
@@ -55,7 +55,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                         a.ArtistName.Contains(artist, StringComparison.OrdinalIgnoreCase)).ToList();
                 }
 
-                foreach (LastfmAlbum lastfmAlbum in lastfmAlbums ?? new())
+                foreach (LastfmAlbum lastfmAlbum in lastfmAlbums ?? [])
                 {
                     LastfmAlbum? detailedAlbum = _cache.FetchAndCacheAsync($"album:{lastfmAlbum.ArtistName}:{lastfmAlbum.Name}",
                         () => apiService.GetAlbumInfoAsync(lastfmAlbum.ArtistName, lastfmAlbum.Name)).GetAwaiter().GetResult();
@@ -81,11 +81,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             try
             {
                 LastfmApiService apiService = GetApiService(settings);
-                List<Artist> artists = new();
+                List<Artist> artists = [];
                 List<LastfmArtist>? lastfmArtists = _cache.FetchAndCacheAsync($"search:artist:{title}:{settings.PageSize}:{settings.PageNumber}",
                     () => apiService.SearchArtistsAsync(title, settings.PageSize, settings.PageNumber)).GetAwaiter().GetResult();
 
-                foreach (LastfmArtist lastfmArtist in lastfmArtists ?? new())
+                foreach (LastfmArtist lastfmArtist in lastfmArtists ?? [])
                 {
                     LastfmArtist? detailedArtist = _cache.FetchAndCacheAsync($"artist:{lastfmArtist.Name}", () => apiService.GetArtistInfoAsync(lastfmArtist.Name)).GetAwaiter().GetResult();
                     if (detailedArtist != null)
@@ -106,7 +106,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             _logger.Info($"SearchNewEntity invoked: query '{query}'");
             UpdateCache(settings);
             query = SanitizeToUnicode(query);
-            List<object> results = new();
+            List<object> results = [];
 
             try
             {
@@ -161,7 +161,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 List<LastfmArtist>? lastfmArtists = _cache.FetchAndCacheAsync($"search:artist:{query}:{settings.PageSize}:{settings.PageNumber}",
                     () => apiService.SearchArtistsAsync(query, settings.PageSize, settings.PageNumber)).GetAwaiter().GetResult();
 
-                foreach (LastfmArtist lastfmArtist in lastfmArtists ?? new())
+                foreach (LastfmArtist lastfmArtist in lastfmArtists ?? [])
                 {
                     try
                     {
@@ -173,7 +173,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 List<LastfmAlbum>? lastfmAlbums = _cache.FetchAndCacheAsync($"search:album:{query}:{settings.PageSize}:{settings.PageNumber}",
                     () => apiService.SearchAlbumsAsync(query, settings.PageSize, settings.PageNumber)).GetAwaiter().GetResult();
 
-                foreach (LastfmAlbum lastfmAlbum in lastfmAlbums ?? new())
+                foreach (LastfmAlbum lastfmAlbum in lastfmAlbums ?? [])
                 {
                     try
                     {
@@ -204,7 +204,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 if (imageUrls == null || imageUrls.Count == 0)
                     return;
 
-                List<MediaCover> newImages = new();
+                List<MediaCover> newImages = [];
                 for (int i = 0; i < Math.Min(imageUrls.Count, 3); i++)
                 {
                     MediaCoverTypes type = i == 0 ? MediaCoverTypes.Poster : MediaCoverTypes.Fanart;
@@ -246,7 +246,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 }
                 else if (albumIdentifier.Contains("::"))
                 {
-                    string[] parts = albumIdentifier.Split(new[] { "::" }, StringSplitOptions.None);
+                    string[] parts = albumIdentifier.Split(["::"], StringSplitOptions.None);
                     artistName = parts[0].Trim();
                     albumName = parts.Length > 1 ? parts[1].Trim() : string.Empty;
                     if (!string.IsNullOrEmpty(artistName) && !string.IsNullOrEmpty(albumName))
@@ -286,7 +286,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 _logger.Trace($"Completed processing for AlbumId: {foreignAlbumId}");
                 return new Tuple<string, Album, List<ArtistMetadata>>(artist.ForeignArtistId,
                     mappedAlbum,
-                    new List<ArtistMetadata> { artist.Metadata.Value });
+                    [artist.Metadata.Value]);
             }
             catch (Exception ex)
             {
@@ -380,9 +380,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                     () => apiService.GetTopAlbumsAsync(artistName, mbid, 100, null, true));
 
                 _logger.Info("Found: " + topAlbums?.Count);
-                List<Album> albums = new();
+                List<Album> albums = [];
 
-                foreach (LastfmTopAlbum topAlbum in topAlbums ?? new())
+                foreach (LastfmTopAlbum topAlbum in topAlbums ?? [])
                 {
                     LastfmAlbum? detailedAlbum = await _cache.GetAsync<LastfmAlbum>($"album:{topAlbum.ArtistName}::{topAlbum.Name}");
                     if (detailedAlbum != null)
@@ -396,7 +396,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             catch (Exception ex)
             {
                 _logger.Error($"Error fetching top albums for artist {artist.Name}: {ex.Message}");
-                artist.Albums = new LazyLoaded<List<Album>>(new List<Album>());
+                artist.Albums = new LazyLoaded<List<Album>>([]);
             }
         }
 

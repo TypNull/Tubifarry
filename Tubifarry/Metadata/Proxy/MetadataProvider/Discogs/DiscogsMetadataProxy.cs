@@ -6,7 +6,7 @@ using Tubifarry.Metadata.Proxy.MetadataProvider.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 {
-    public class DiscogsMetadataProxy : ProxyBase<DiscogsMetadataProxySettings>, IMetadata, ISupportMetadataMixing
+    public partial class DiscogsMetadataProxy : ProxyBase<DiscogsMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly IDiscogsProxy _discogsProxy;
         private readonly Logger _logger;
@@ -33,19 +33,19 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         public HashSet<string> GetChangedAlbums(DateTime startTime)
         {
             _logger.Warn("GetChangedAlbums: Discogs API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public HashSet<string> GetChangedArtists(DateTime startTime)
         {
             _logger.Warn("GetChangedArtists: Discogs API does not support change tracking; returning empty set.");
-            return new HashSet<string>();
+            return [];
         }
 
         public List<Album> SearchForNewAlbumByRecordingIds(List<string> recordingIds)
         {
             _logger.Warn("SearchNewAlbumByRecordingIds: Discogs API does not support fingerprint search; returning empty list.");
-            return new List<Album>();
+            return [];
         }
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
@@ -53,7 +53,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             if (_discogsProxy.IsDiscogsidQuery(albumTitle) || _discogsProxy.IsDiscogsidQuery(artistName))
                 return MetadataSupportLevel.Supported;
 
-            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
+            if ((albumTitle != null && FormatRegex().IsMatch(albumTitle)) || (artistName != null && FormatRegex().IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.ImplicitSupported;
@@ -81,14 +81,17 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = _discogsRegex.Match(link.Url);
+                Match match = DiscogsRegex().Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
             return null;
         }
 
-        private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
-        private static readonly Regex _discogsRegex = new(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        [GeneratedRegex(@"^\s*\w+:\s*\w+", RegexOptions.Compiled)]
+        private static partial Regex FormatRegex();
+        [GeneratedRegex(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex DiscogsRegex();
     }
 }

@@ -11,19 +11,13 @@ namespace Tubifarry.Core.Model
         void Reset();
     }
 
-    public class ApiCircuitBreaker : ICircuitBreaker
+    public class ApiCircuitBreaker(int failureThreshold = 5, int resetTimeoutMinutes = 5) : ICircuitBreaker
     {
         private int _failureCount;
         private DateTime _lastFailure = DateTime.MinValue;
-        private readonly int _failureThreshold;
-        private readonly TimeSpan _resetTimeout;
+        private readonly int _failureThreshold = failureThreshold;
+        private readonly TimeSpan _resetTimeout = TimeSpan.FromMinutes(resetTimeoutMinutes);
         private readonly object _lock = new();
-
-        public ApiCircuitBreaker(int failureThreshold = 5, int resetTimeoutMinutes = 5)
-        {
-            _failureThreshold = failureThreshold;
-            _resetTimeout = TimeSpan.FromMinutes(resetTimeoutMinutes);
-        }
 
         public bool IsOpen
         {
@@ -67,7 +61,7 @@ namespace Tubifarry.Core.Model
 
     public static class CircuitBreakerFactory
     {
-        private static readonly ConditionalWeakTable<Type, ICircuitBreaker> _typeBreakers = new();
+        private static readonly ConditionalWeakTable<Type, ICircuitBreaker> _typeBreakers = [];
         private static readonly ConcurrentDictionary<string, WeakReference<ICircuitBreaker>> _namedBreakers = new();
 
         private static readonly object _cleanupLock = new();

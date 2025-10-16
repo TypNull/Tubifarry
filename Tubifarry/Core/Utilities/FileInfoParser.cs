@@ -10,11 +10,11 @@ namespace Tubifarry.Core.Utilities
         public int DiscNumber { get; private set; }
         public string? Tag { get; private set; }
 
-        private static readonly List<Tuple<string, string>> CharsAndSeps = new()
-        {
+        private static readonly List<Tuple<string, string>> CharsAndSeps =
+        [
             Tuple.Create(@"a-z0-9,\(\)\.&'’\s", @"\s_-"),
             Tuple.Create(@"a-z0-9,\(\)\.\&'’_", @"\s-")
-        };
+        ];
 
         public FileInfoParser(string filePath)
         {
@@ -28,8 +28,7 @@ namespace Tubifarry.Core.Utilities
         {
             foreach (Tuple<string, string> charSep in CharsAndSeps)
             {
-                Regex[] patterns = GeneratePatterns(charSep.Item1, charSep.Item2);
-                foreach (Regex pattern in patterns)
+                foreach (Regex pattern in GeneratePatterns(charSep.Item1, charSep.Item2))
                 {
                     Match match = pattern.Match(filename);
                     if (match.Success)
@@ -41,7 +40,7 @@ namespace Tubifarry.Core.Utilities
                         if (TrackNumber > 100)
                         {
                             DiscNumber = TrackNumber / 100;
-                            TrackNumber = TrackNumber % 100;
+                            TrackNumber %= 100;
                         }
                         return;
                     }
@@ -51,33 +50,33 @@ namespace Tubifarry.Core.Utilities
 
         private static Regex[] GeneratePatterns(string chars, string sep)
         {
-            string sep1 = $@"(?<sep>[{sep}]+)";
-            string sepn = @"\k<sep>";
-            string artist = $@"(?<artist>[{chars}]+)";
-            string track = $@"(?<track>\d+)";
-            string title = $@"(?<title>[{chars}]+)";
-            string tag = $@"(?<tag>[{chars}]+)";
+            string sep1 = $"(?<sep>[{sep}]+)";
+            const string sepn = @"\k<sep>";
+            string artist = $"(?<artist>[{chars}]+)";
+            const string track = @"(?<track>\d+)";
+            string title = $"(?<title>[{chars}]+)";
+            string tag = $"(?<tag>[{chars}]+)";
 
-            return new[]
-            {
-                new Regex($@"^{track}{sep1}{artist}{sepn}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{track}{sep1}{artist}{sepn}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{track}{sep1}{artist}{sepn}{title}$", RegexOptions.IgnoreCase),
+            return
+            [
+                new Regex($"^{track}{sep1}{artist}{sepn}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
+                new Regex($"^{track}{sep1}{artist}{sepn}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{track}{sep1}{artist}{sepn}{title}$", RegexOptions.IgnoreCase),
 
-                new Regex($@"^{artist}{sep1}{tag}{sepn}{track}{sepn}{title}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{artist}{sep1}{track}{sepn}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{artist}{sep1}{track}{sepn}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{tag}{sepn}{track}{sepn}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{track}{sepn}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{track}{sepn}{title}$", RegexOptions.IgnoreCase),
 
-                new Regex($@"^{artist}{sep1}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{artist}{sep1}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{artist}{sep1}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{artist}{sep1}{title}$", RegexOptions.IgnoreCase),
 
-                new Regex($@"^{track}{sep1}{title}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{track}{sep1}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
-                new Regex($@"^{track}{sep1}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
+                new Regex($"^{track}{sep1}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{track}{sep1}{tag}{sepn}{title}$", RegexOptions.IgnoreCase),
+                new Regex($"^{track}{sep1}{title}{sepn}{tag}$", RegexOptions.IgnoreCase),
 
-                new Regex($@"^{title}$", RegexOptions.IgnoreCase),
-            };
+                new Regex($"^{title}$", RegexOptions.IgnoreCase),
+            ];
         }
     }
 }

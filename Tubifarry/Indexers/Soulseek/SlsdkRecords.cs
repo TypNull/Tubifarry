@@ -41,7 +41,9 @@ namespace Tubifarry.Indexers.Soulseek
                 if (onlyIncludeAudio &&
                     AudioFormatHelper.GetAudioCodecFromExtension(extension ?? "") == AudioFormat.Unknown &&
                     !(includedFileExtensions?.Contains(extension, StringComparer.OrdinalIgnoreCase) ?? false))
+                {
                     continue;
+                }
 
                 yield return file with { Extension = extension };
             }
@@ -98,12 +100,13 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
         [property: JsonPropertyName("mimimumFiles")] int MinimumFiles)
     {
-        public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, new JsonSerializerOptions() { PropertyNameCaseInsensitive = true })!;
+        private readonly static JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+        public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, _jsonOptions)!;
     }
 
     public record SlskdDirectoryApiResponse(
       [property: JsonPropertyName("files")] List<SlskdDirectoryApiFile> Files
-  );
+    );
 
     public record SlskdDirectoryApiFile(
         [property: JsonPropertyName("filename")] string Filename,

@@ -51,7 +51,7 @@ namespace Tubifarry.Download.Clients.YouTube
                 }
                 bool result = await TrimSegmentsAsync(segments, cancellationToken);
 
-                _logger.Debug($"SponsorBlock processing completed");
+                _logger.Debug("SponsorBlock processing completed");
                 return result;
             }
             catch (Exception ex)
@@ -71,28 +71,28 @@ namespace Tubifarry.Download.Clients.YouTube
                 HttpResponseMessage response = await client.GetAsync(url, cancellationToken);
 
                 if (response.StatusCode == HttpStatusCode.NotFound)
-                    return new List<SponsorSegment>();
+                    return [];
 
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Warn($"SponsorBlock API returned {response.StatusCode} for video {_videoId}");
-                    return new List<SponsorSegment>();
+                    return [];
                 }
 
                 string jsonContent = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(jsonContent))
-                    return new List<SponsorSegment>();
+                    return [];
 
                 List<SponsorSegment>? segments = JsonSerializer.Deserialize<List<SponsorSegment>>(jsonContent);
                 if (segments == null)
-                    return new List<SponsorSegment>();
+                    return [];
 
                 return segments.Where(s => s.Segment?.Length == 2 && s.Segment[0] < s.Segment[1]).ToList();
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to fetch SponsorBlock data for video {_videoId}");
-                return new List<SponsorSegment>();
+                return [];
             }
         }
 
@@ -105,8 +105,8 @@ namespace Tubifarry.Download.Clients.YouTube
 
             try
             {
-                List<string> segmentFiles = new();
-                List<SponsorSegment> sortedSegments = segments.OrderBy(s => s.Segment![0]).ToList();
+                List<string> segmentFiles = [];
+                List<SponsorSegment> sortedSegments = [.. segments.OrderBy(s => s.Segment![0])];
                 double previousEnd = 0.0;
                 int segmentIndex = 0;
 

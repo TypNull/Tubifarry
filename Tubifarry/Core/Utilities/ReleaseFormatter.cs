@@ -5,18 +5,11 @@ using System.Text.RegularExpressions;
 
 namespace Tubifarry.Core.Utilities
 {
-    public class ReleaseFormatter
+    public partial class ReleaseFormatter(ReleaseInfo releaseInfo, Artist artist, NamingConfig? namingConfig)
     {
-        private readonly ReleaseInfo _releaseInfo;
-        private readonly Artist _artist;
-        private readonly NamingConfig? _namingConfig;
-
-        public ReleaseFormatter(ReleaseInfo releaseInfo, Artist artist, NamingConfig? namingConfig)
-        {
-            _releaseInfo = releaseInfo;
-            _artist = artist;
-            _namingConfig = namingConfig;
-        }
+        private readonly ReleaseInfo _releaseInfo = releaseInfo;
+        private readonly Artist _artist = artist;
+        private readonly NamingConfig? _namingConfig = namingConfig;
 
         public string BuildTrackFilename(string? pattern, Track track, Album album)
         {
@@ -42,9 +35,7 @@ namespace Tubifarry.Core.Utilities
             return CleanFileName(formattedString);
         }
 
-        private Dictionary<string, Func<string>> GetTokenHandlers(Track? track, Album? album)
-        {
-            return new Dictionary<string, Func<string>>(StringComparer.OrdinalIgnoreCase)
+        private Dictionary<string, Func<string>> GetTokenHandlers(Track? track, Album? album) => new(StringComparer.OrdinalIgnoreCase)
         {
             // Album Tokens (only added if album is provided)
             { "{Album Title}", () => album?.Title ?? string.Empty },
@@ -84,15 +75,11 @@ namespace Tubifarry.Core.Utilities
             // Release Info Tokens
             { "{Original Title}", () => _releaseInfo?.Title ?? string.Empty }
         };
-        }
 
-        private static string ReplaceTokens(string pattern, Dictionary<string, Func<string>> tokenHandlers) => Regex.Replace(pattern, @"\{([^}]+)\}", match =>
+        private static string ReplaceTokens(string pattern, Dictionary<string, Func<string>> tokenHandlers) => ReplaceTokensRegex().Replace(pattern, match =>
         {
             string token = match.Groups[1].Value;
-            if (tokenHandlers.TryGetValue($"{{{token}}}", out Func<string>? handler))
-                return handler();
-
-            return string.Empty;
+            return tokenHandlers.TryGetValue($"{{{token}}}", out Func<string>? handler) ? handler() : string.Empty;
         });
 
         private string CleanFileName(string fileName)
@@ -117,7 +104,7 @@ namespace Tubifarry.Core.Utilities
                     fileName = fileName.Replace(":", " - ");
                     break;
                 case ColonReplacementFormat.Smart:
-                    fileName = Regex.Replace(fileName, @":\s*", " - ");
+                    fileName = ColonReplaceRegex().Replace(fileName, " - ");
                     break;
             }
 
@@ -133,7 +120,7 @@ namespace Tubifarry.Core.Utilities
         private static string TitleThe(string? title)
         {
             if (string.IsNullOrEmpty(title)) return string.Empty;
-            return Regex.Replace(title, @"^(The|A|An)\s+(.+)$", "$2, $1", RegexOptions.IgnoreCase);
+            return TitleTheRegex().Replace(title, "$2, $1");
         }
 
         private static string CleanTitleThe(string? title) => CleanTitle(TitleThe(title));
@@ -151,5 +138,12 @@ namespace Tubifarry.Core.Utilities
                 return trackNumberInt.ToString(format);
             return trackNumber;
         }
+
+        [GeneratedRegex(@"\{([^}]+)\}")]
+        private static partial Regex ReplaceTokensRegex();
+        [GeneratedRegex(@"^(The|A|An)\s+(.+)$", RegexOptions.IgnoreCase, "de-DE")]
+        private static partial Regex TitleTheRegex();
+        [GeneratedRegex(@":\s*")]
+        private static partial Regex ColonReplaceRegex();
     }
 }

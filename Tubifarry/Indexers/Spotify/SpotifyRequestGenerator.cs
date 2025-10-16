@@ -18,7 +18,7 @@ namespace Tubifarry.Indexers.Spotify
         void UpdateSettings(SpotifyIndexerSettings settings);
     }
 
-    internal class SpotifyRequestGenerator : ISpotifyRequestGenerator
+    internal class SpotifyRequestGenerator(Logger logger) : ISpotifyRequestGenerator
     {
         private const int MaxPages = 3;
         private const int DefaultPageSize = 20;
@@ -29,9 +29,7 @@ namespace Tubifarry.Indexers.Spotify
         private OwnRequest? _tokenRequest;
         private SpotifyIndexerSettings? _settings;
 
-        private readonly Logger _logger;
-
-        public SpotifyRequestGenerator(Logger logger) => _logger = logger;
+        private readonly Logger _logger = logger;
 
         public void UpdateSettings(SpotifyIndexerSettings settings) => _settings = settings;
 

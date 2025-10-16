@@ -50,7 +50,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             if (reader.TokenType == JsonTokenType.String)
+            {
                 reader.GetString();
+            }
             else if (reader.TokenType == JsonTokenType.StartObject)
             {
                 using JsonDocument doc = JsonDocument.ParseValue(ref reader);
@@ -72,7 +74,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             if (reader.TokenType != JsonTokenType.StartObject)
                 throw new JsonException($"Expected StartObject but got {reader.TokenType}");
 
-            List<LastfmTrack> tracks = new();
+            List<LastfmTrack> tracks = [];
             bool foundTrackProperty = false;
 
             while (reader.Read())
@@ -91,7 +93,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
                     if (reader.TokenType == JsonTokenType.StartArray)
                     {
-                        tracks = JsonSerializer.Deserialize<List<LastfmTrack>>(ref reader, options) ?? new List<LastfmTrack>();
+                        tracks = JsonSerializer.Deserialize<List<LastfmTrack>>(ref reader, options) ?? [];
                     }
                     else if (reader.TokenType == JsonTokenType.StartObject)
                     {
@@ -101,7 +103,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                     }
                     else if (reader.TokenType == JsonTokenType.Null)
                     {
-                        tracks = new List<LastfmTrack>();
+                        tracks = [];
                     }
                 }
                 else
@@ -111,7 +113,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
             }
 
             if (!foundTrackProperty)
-                tracks = new List<LastfmTrack>();
+                tracks = [];
 
             return new LastfmTracks(tracks);
         }

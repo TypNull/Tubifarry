@@ -143,15 +143,12 @@ namespace Tubifarry.Metadata.Converter
         GreaterThanOrEqual
     }
 
-    public static class RuleParser
+    public static partial class RuleParser
     {
         public const string GlobalRuleIdentifier = "all";
         public const string LossyRuleIdentifier = "lossy";
         public const string LosslessRuleIdentifier = "lossless";
         public const string NoConversionTag = "no-conversion";
-        private static readonly Regex SourceFormatPattern = new(@"^([a-zA-Z0-9]+)(?:([!<>=]{1,2})(\d+))?$", RegexOptions.Compiled);
-        private static readonly Regex TargetFormatPattern = new(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?$", RegexOptions.Compiled);
-        private static readonly Regex ArtistTagPattern = new(@"^([a-zA-Z]+)(?:-(\d+)k?)?$", RegexOptions.Compiled);
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(RuleParser));
 
         public static bool TryParseRule(string sourceKey, string targetValue, out ConversionRule rule)
@@ -184,7 +181,7 @@ namespace Tubifarry.Metadata.Converter
             }
 
             // Match format like "opus" or format+bitrate like "opus192"
-            Match match = ArtistTagPattern.Match(tagLabel.Trim());
+            Match match = ArtistTagRegex().Match(tagLabel.Trim());
             if (!match.Success)
             {
                 _logger.Debug("Invalid artist tag format: {0}", tagLabel);
@@ -212,7 +209,7 @@ namespace Tubifarry.Metadata.Converter
 
         private static bool ParseSourcePart(string sourceKey, ConversionRule rule)
         {
-            Match sourceMatch = SourceFormatPattern.Match(sourceKey);
+            Match sourceMatch = SourceFormatRegex().Match(sourceKey);
             if (!sourceMatch.Success)
             {
                 _logger.Debug("Invalid source format pattern: {0}", sourceKey);
@@ -299,7 +296,7 @@ namespace Tubifarry.Metadata.Converter
 
         private static bool ParseTargetPart(string targetValue, ConversionRule rule)
         {
-            Match targetMatch = TargetFormatPattern.Match(targetValue);
+            Match targetMatch = TargetFormatRegex().Match(targetValue);
             if (!targetMatch.Success)
             {
                 _logger.Debug("Invalid target format pattern: {0}", targetValue);
@@ -346,5 +343,13 @@ namespace Tubifarry.Metadata.Converter
             rule.TargetBitrate = AudioFormatHelper.RoundToStandardBitrate(targetBitrate);
             return true;
         }
+
+        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?:([!<>=]{1,2})(\d+))?$", RegexOptions.Compiled)]
+        private static partial Regex SourceFormatRegex();
+
+        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?$", RegexOptions.Compiled)]
+        private static partial Regex TargetFormatRegex();
+        [GeneratedRegex(@"^([a-zA-Z]+)(?:-(\d+)k?)?$", RegexOptions.Compiled)]
+        private static partial Regex ArtistTagRegex();
     }
 }

@@ -148,7 +148,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
     {
         public Dictionary<string, string> ToDictionary()
         {
-            Dictionary<string, string> dict = new();
+            Dictionary<string, string> dict = [];
 
             if (!string.IsNullOrEmpty(Query))
                 dict["q"] = Query;

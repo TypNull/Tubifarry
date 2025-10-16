@@ -4,10 +4,8 @@ using NzbDrone.Core.Music;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider
 {
-    public class MetadataProviderWrapper : ProxyWrapperBase, IProvideArtistInfo, IProvideAlbumInfo, ISearchForNewArtist, ISearchForNewAlbum, ISearchForNewEntity
+    public class MetadataProviderWrapper(Lazy<IProxyService> proxyService) : ProxyWrapperBase(proxyService), IProvideArtistInfo, IProvideAlbumInfo, ISearchForNewArtist, ISearchForNewAlbum, ISearchForNewEntity
     {
-        public MetadataProviderWrapper(Lazy<IProxyService> proxyService) : base(proxyService) { }
-
         // IProvideArtistInfo implementation
         public Artist GetArtistInfo(string lidarrId, int metadataProfileId) =>
             InvokeProxyMethod<Artist>(
@@ -62,10 +60,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
                 title);
     }
 
-    public class MetadataRequestBuilderWrapper : ProxyWrapperBase, IMetadataRequestBuilder
+    public class MetadataRequestBuilderWrapper(Lazy<IProxyService> proxyService) : ProxyWrapperBase(proxyService), IMetadataRequestBuilder
     {
-        public MetadataRequestBuilderWrapper(Lazy<IProxyService> proxyService) : base(proxyService) { }
-
         public IHttpRequestBuilderFactory GetRequestBuilder() =>
            InvokeProxyMethod<IHttpRequestBuilderFactory>(
                typeof(IMetadataRequestBuilder),

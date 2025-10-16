@@ -7,11 +7,11 @@ namespace Tubifarry.Core.Model
     /// <summary>
     /// Contains combined information about an album, search parameters, and search results.
     /// </summary>
-    public class AlbumData
+    public partial class AlbumData(string name, string downloadProtocol)
     {
         public string? Guid { get; set; }
+        public string IndexerName { get; } = name;
 
-        public string IndexerName { get; }
         // Mixed
         public string AlbumId { get; set; } = string.Empty;
 
@@ -37,16 +37,10 @@ namespace Tubifarry.Core.Model
         public int Priotity { get; set; }
         public List<string>? ExtraInfo { get; set; }
 
-        public string DownloadProtocol { get; set; }
+        public string DownloadProtocol { get; set; } = downloadProtocol;
 
         // Not used
         public AudioFormat Codec { get; set; } = AudioFormat.AAC;
-
-        public AlbumData(string name, string downloadProtocol)
-        {
-            IndexerName = name;
-            DownloadProtocol = downloadProtocol;
-        }
 
         /// <summary>
         /// Converts AlbumData into a ReleaseInfo object.
@@ -120,15 +114,19 @@ namespace Tubifarry.Core.Model
         /// <returns>The normalized album name.</returns>
         private static string NormalizeAlbumName(string albumName)
         {
-            Regex featRegex = new(@"(?i)\b(feat\.|ft\.|featuring)\b", RegexOptions.IgnoreCase);
-            if (featRegex.IsMatch(albumName))
+            if (FeatRegex().IsMatch(albumName)) // TODO ISMatch vs Match
             {
-                Match match = featRegex.Match(albumName);
+                Match match = FeatRegex().Match(albumName);
                 string featuringArtist = albumName[(match.Index + match.Length)..].Trim();
 
                 albumName = $"{albumName[..match.Index].Trim()} (feat. {featuringArtist})";
             }
-            return Regex.Replace(albumName, @"\((?!feat\.)[^)]*\)", match => $"{{{match.Value.Trim('(', ')')}}}");
+            return FeatReplaceRegex().Replace(albumName, match => $"{{{match.Value.Trim('(', ')')}}}");
         }
+
+        [GeneratedRegex(@"(?i)\b(feat\.|ft\.|featuring)\b", RegexOptions.IgnoreCase, "de-DE")]
+        private static partial Regex FeatRegex();
+        [GeneratedRegex(@"\((?!feat\.)[^)]*\)")]
+        private static partial Regex FeatReplaceRegex();
     }
 }

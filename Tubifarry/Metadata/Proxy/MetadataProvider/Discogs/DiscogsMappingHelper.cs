@@ -68,7 +68,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
             string[] parts = duration.Split(':');
             if (parts.Length == 2 && int.TryParse(parts[0], out int m) && int.TryParse(parts[1], out int s))
-                return m * 60 + s;
+                return (m * 60) + s;
 
             return 0;
         }
@@ -76,7 +76,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         /// <summary>
         /// Maps a Discogs image to a MediaCover object.
         /// </summary>
-        public static MediaCover? MapImage(DiscogsImage img, bool isArtist, string userAgent) => new()
+        public static MediaCover? MapImage(DiscogsImage img, bool isArtist) => new()
         {
             Url = img.Uri,
             RemoteUrl = img.Uri,
@@ -127,11 +127,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 ForeignAlbumId = "m" + masterRelease.Id + _identifier,
                 Title = masterRelease.Title ?? string.Empty,
                 ReleaseDate = ParseReleaseDate(masterRelease.Year),
-                Genres = masterRelease.Genres != null || masterRelease.Styles != null ? new List<string>(masterRelease.Genres ?? Enumerable.Empty<string>()).Concat(masterRelease.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
+                Genres = masterRelease.Genres != null || masterRelease.Styles != null ? new List<string>(masterRelease.Genres ?? Enumerable.Empty<string>()).Concat(masterRelease.Styles ?? Enumerable.Empty<string>()).ToList() : [],
                 CleanTitle = masterRelease.Title.CleanArtistName() ?? string.Empty,
                 Overview = "Found on Discogs",
-                Images = masterRelease.Images?.Take(2).Select(img => MapImage(img, false, masterRelease.UserAgent)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
-                Links = new List<Links> { new() { Url = masterRelease.ResourceUrl, Name = "Discogs" } },
+                Images = masterRelease.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Links = [new() { Url = masterRelease.ResourceUrl, Name = "Discogs" }],
                 AlbumType = "Album",
                 Ratings = new Ratings(),
             };
@@ -141,14 +141,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 ForeignReleaseId = "m" + masterRelease.Id + _identifier,
                 Title = masterRelease.Title,
                 Status = "Official",
-                Media = new List<Medium> { new() { Format = "Digital Media", Name = "Digital Media", Number = 1 } },
+                Media = [new() { Format = "Digital Media", Name = "Digital Media", Number = 1 }],
                 ReleaseDate = ParseReleaseDate(masterRelease.Year),
             };
 
             album.AlbumReleases = new List<AlbumRelease> { albumRelease };
             album.AnyReleaseOk = true;
 
-            album.SecondaryTypes = new List<SecondaryAlbumType> { AlbumMapper.SecondaryTypeMap["master"] };
+            album.SecondaryTypes = [AlbumMapper.SecondaryTypeMap["master"]];
             List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(masterRelease.Title ?? string.Empty);
             album.SecondaryTypes.AddRange(titleTypes);
             if (album.SecondaryTypes.Count == 1)
@@ -172,16 +172,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 ForeignAlbumId = "r" + release.Id + _identifier,
                 Title = release.Title,
                 ReleaseDate = ParseReleaseDate(release),
-                Genres = release.Genres != null || release.Styles != null ? new List<string>(release.Genres ?? Enumerable.Empty<string>()).Concat(release.Styles ?? Enumerable.Empty<string>()).ToList() : new List<string>(),
+                Genres = release.Genres != null || release.Styles != null ? new List<string>(release.Genres ?? Enumerable.Empty<string>()).Concat(release.Styles ?? Enumerable.Empty<string>()).ToList() : [],
                 CleanTitle = release.Title.CleanArtistName() ?? string.Empty,
                 Overview = release.Notes?.Trim(),
-                Images = release.Images?.Take(2).Select(img => MapImage(img, false, release.UserAgent)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
-                Links = new List<Links> { new() { Url = release.ResourceUrl, Name = "Discogs" } },
+                Images = release.Images?.Take(2).Select(img => MapImage(img, false)).Where(x => x != null).ToList() ?? new List<MediaCover>()!,
+                Links = [new() { Url = release.ResourceUrl, Name = "Discogs" }],
                 Ratings = ComputeCommunityRating(release.Community),
-                SecondaryTypes = new(),
+                SecondaryTypes = [],
             };
 
-            album.SecondaryTypes = new List<SecondaryAlbumType> { AlbumMapper.SecondaryTypeMap["release"] };
+            album.SecondaryTypes = [AlbumMapper.SecondaryTypeMap["release"]];
             MapAlbumTypes(release, album);
             List<SecondaryAlbumType> titleTypes = AlbumMapper.DetermineSecondaryTypesFromTitle(release.Title ?? string.Empty);
             album.SecondaryTypes.AddRange(titleTypes);
@@ -197,10 +197,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                     Format = MapFormat(f.Name ?? string.Empty),
                     Name = MapFormat(f.Name ?? string.Empty),
                     Number = int.TryParse(f.Qty, out int number) ? number : 1,
-                }).ToList() ?? new List<Medium> { new() { Format = "Digital Media", Name = "Digital Media", Number = 1 } },
+                }).ToList() ?? [new() { Format = "Digital Media", Name = "Digital Media", Number = 1 }],
                 Label = release.Labels?.Select(l => l.Name).Where(l => !string.IsNullOrWhiteSpace(l)).ToList() ?? new List<string>()!,
                 ReleaseDate = ParseReleaseDate(release),
-                Country = !string.IsNullOrWhiteSpace(release.Country) ? new List<string> { release.Country } : new List<string>()
+                Country = !string.IsNullOrWhiteSpace(release.Country) ? [release.Country] : []
             };
 
             album.AlbumReleases = new List<AlbumRelease> { albumRelease };
@@ -282,8 +282,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 ReleaseDate = ParseReleaseDate(release.Year),
                 CleanTitle = release.Title.CleanArtistName() ?? string.Empty,
                 Ratings = new Ratings(),
-                Genres = new List<string> { release.Label ?? string.Empty },
-                Images = new List<MediaCover> { new() { Url = release.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={release.UserAgent}" } },
+                Genres = [release.Label ?? string.Empty],
+                Images = [new() { Url = release.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={release.UserAgent}" }],
             };
 
             album.AlbumReleases = new List<AlbumRelease>()
@@ -316,14 +316,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             {
                 Name = discogsArtist.Name ?? string.Empty,
                 ForeignArtistId = "a" + discogsArtist.Id + _identifier,
-                Aliases = discogsArtist.NameVariations ?? new List<string>(),
-                Images = discogsArtist.Images?.Select(img => MapImage(img, true, discogsArtist.UserAgent)).ToList() ?? new List<MediaCover>()!,
+                Aliases = discogsArtist.NameVariations ?? [],
+                Images = discogsArtist.Images?.Select(img => MapImage(img, true)).ToList() ?? new List<MediaCover>()!,
                 Ratings = new Ratings(),
-                Links = discogsArtist.Urls?.Select(url => new Links { Url = url, Name = AlbumMapper.GetLinkNameFromUrl(url) }).ToList() ?? new List<Links>(),
+                Links = discogsArtist.Urls?.Select(url => new Links { Url = url, Name = AlbumMapper.GetLinkNameFromUrl(url) }).ToList() ?? [],
                 Type = discogsArtist.Role ?? string.Empty,
-                Genres = new List<string>(),
+                Genres = [],
                 Overview = BuildArtistOverview(discogsArtist),
-                Members = discogsArtist.Members?.Select(member => MapDiscogsMember(member)).ToList() ?? new List<Member>(),
+                Members = discogsArtist.Members?.Select(member => MapDiscogsMember(member)).ToList() ?? [],
                 Status = discogsArtist.Members?.Any(x => x.Active) == false ? ArtistStatusType.Ended : ArtistStatusType.Continuing,
             },
             Name = discogsArtist.Name,
@@ -344,9 +344,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
         public static List<Track> MapTracks(object releaseForTracks, Album album, AlbumRelease albumRelease) => releaseForTracks switch
         {
-            DiscogsMasterRelease master => master.Tracklist?.Select(t => MapTrack(t, master, album, albumRelease)).ToList() ?? new List<Track>(),
-            DiscogsRelease release => release.Tracklist?.Select(t => MapTrack(t, release, album, albumRelease)).ToList() ?? new List<Track>(),
-            _ => new List<Track>()
+            DiscogsMasterRelease master => master.Tracklist?.Select(t => MapTrack(t, master, album, albumRelease)).ToList() ?? [],
+            DiscogsRelease release => release.Tracklist?.Select(t => MapTrack(t, release, album, albumRelease)).ToList() ?? [],
+            _ => []
         };
 
         /// <summary>
@@ -384,8 +384,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 Name = searchItem.Title ?? string.Empty,
                 ForeignArtistId = "a" + searchItem.Id + _identifier,
                 Overview = "Found on Discogs",
-                Images = new List<MediaCover> { new() { Url = searchItem.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={searchItem.UserAgent}", CoverType = MapCoverType("primary", true) } },
-                Links = new List<Links> { new() { Url = searchItem.ResourceUrl, Name = "Discogs" } },
+                Images = [new() { Url = searchItem.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={searchItem.UserAgent}", CoverType = MapCoverType("primary", true) }],
+                Links = [new() { Url = searchItem.ResourceUrl, Name = "Discogs" }],
                 Ratings = ComputeCommunityRating(searchItem.Community),
                 Genres = searchItem.Genre,
             }
@@ -411,7 +411,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             decimal normalizedRatio = ratio / (ratio + 1);
             decimal proportion = smoothWant / (smoothWant + smoothHave);
 
-            decimal computedValue = 0.7m * normalizedRatio + 0.3m * proportion;
+            decimal computedValue = (0.7m * normalizedRatio) + (0.3m * proportion);
             decimal roundedValue = Math.Round(computedValue * 100m, 2);
             return new Ratings { Value = roundedValue, Votes = want + have };
         }

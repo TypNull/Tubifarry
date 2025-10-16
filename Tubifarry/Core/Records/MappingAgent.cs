@@ -2,7 +2,7 @@
 {
     public record MappingAgent
     {
-        public string UserAgent { get; set; } = "Tubifarry/" + PluginInfo.Version;
+        public string UserAgent { get; set; } = Tubifarry.UserAgent;
 
         public static T? MapAgent<T>(T? mappingAgent, string userAgent) where T : MappingAgent
         {

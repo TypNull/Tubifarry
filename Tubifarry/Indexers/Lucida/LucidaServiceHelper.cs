@@ -13,6 +13,7 @@ namespace Tubifarry.Indexers.Lucida
     /// </summary>
     public static class LucidaServiceHelper
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private static readonly ConcurrentDictionary<string, Task<Dictionary<string, List<ServiceCountry>>>> _cache
             = new(StringComparer.OrdinalIgnoreCase);
 
@@ -59,7 +60,7 @@ namespace Tubifarry.Indexers.Lucida
             string key = baseUrl.TrimEnd('/');
             if (_cache.TryGetValue(key, out Task<Dictionary<string, List<ServiceCountry>>>? task) && task.Status == TaskStatus.RanToCompletion)
             {
-                return task.Result.Any();
+                return task.Result.Count != 0;
             }
             return false;
         }
@@ -110,7 +111,7 @@ namespace Tubifarry.Indexers.Lucida
         private static async Task<Dictionary<string, List<ServiceCountry>>> FetchServicesAsync(string baseUrl, IHttpClient httpClient, Logger logger)
         {
             Dictionary<string, List<ServiceCountry>> result = new(StringComparer.OrdinalIgnoreCase);
-            RequestContainer<OwnRequest> container = new();
+            RequestContainer<OwnRequest> container = [];
             foreach (string service in _knownServices.Keys)
             {
                 container.Add(new OwnRequest(async _ =>
@@ -129,7 +130,7 @@ namespace Tubifarry.Indexers.Lucida
                             return true;
                         }
 
-                        CountryResponse? payload = JsonSerializer.Deserialize<CountryResponse>(response.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        CountryResponse? payload = JsonSerializer.Deserialize<CountryResponse>(response.Content, _jsonOptions);
                         if (payload?.Success == true && payload.Countries?.Count > 0)
                         {
                             result[service] = payload.Countries;

@@ -7,10 +7,8 @@ using System.Text.RegularExpressions;
 
 namespace Tubifarry.Core.Utilities
 {
-    public class FlexiblePluginService : PluginService, IPluginService
+    public partial class FlexiblePluginService : PluginService, IPluginService
     {
-        private static readonly Regex MinVersionRegex = new(@"Minimum Lidarr Version:?\s*(?:\*\*)?[\s]*(?<version>\d+\.\d+\.\d+\.\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private static readonly Regex RepoRegex = new(@"https://github\.com/(?<owner>[^/]+)/(?<name>[^/]+)(?:/tree/(?<branch>[^/\s]+))?", RegexOptions.Compiled);
         private readonly Logger _logger;
         private readonly IHttpClient _httpClient;
 
@@ -66,7 +64,7 @@ namespace Tubifarry.Core.Utilities
 
         public (string?, string?, string?) ParseBranchUrl(string repoUrl)
         {
-            Match match = RepoRegex.Match(repoUrl);
+            Match match = RepoRegex().Match(repoUrl);
             if (!match.Success)
             {
                 _logger.Warn("Invalid plugin repo URL");
@@ -80,7 +78,7 @@ namespace Tubifarry.Core.Utilities
 
         private static bool IsSupported(Release release, string? branch)
         {
-            Match match = MinVersionRegex.Match(release.Body);
+            Match match = MinVersionRegex().Match(release.Body);
             if (match.Success)
             {
                 Version minVersion = Version.Parse(match.Groups["version"].Value);
@@ -92,5 +90,10 @@ namespace Tubifarry.Core.Utilities
             Asset? asset = release.Assets.FirstOrDefault(x => x.Name.EndsWith($"{framework}.zip"));
             return asset != null;
         }
+
+        [GeneratedRegex(@"https://github\.com/(?<owner>[^/]+)/(?<name>[^/]+)(?:/tree/(?<branch>[^/\s]+))?", RegexOptions.Compiled)]
+        private static partial Regex RepoRegex();
+        [GeneratedRegex(@"Minimum Lidarr Version:?\s*(?:\*\*)?[\s]*(?<version>\d+\.\d+\.\d+\.\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex MinVersionRegex();
     }
 }

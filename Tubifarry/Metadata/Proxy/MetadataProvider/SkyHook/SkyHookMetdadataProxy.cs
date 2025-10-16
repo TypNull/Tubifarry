@@ -86,7 +86,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
             if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true)
                 return MetadataSupportLevel.Supported;
 
-            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || artistName != null && _formatRegex.IsMatch(artistName))
+            if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || (artistName != null && _formatRegex.IsMatch(artistName)))
                 return MetadataSupportLevel.Unsupported;
 
             return MetadataSupportLevel.Supported;

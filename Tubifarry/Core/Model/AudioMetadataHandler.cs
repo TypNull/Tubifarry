@@ -51,8 +51,8 @@ namespace Tubifarry.Core.Model
             {
                 AudioFormat.AAC,
                 bitrate => bitrate < 256
-                    ? new[] { $"-b:a {bitrate}k" }
-                    : new[] { "-q:a 2" } // 2 is highest quality for AAC
+                    ? [$"-b:a {bitrate}k"]
+                    : ["-q:a 2"] // 2 is highest quality for AAC
             },
 
             {
@@ -70,42 +70,39 @@ namespace Tubifarry.Core.Model
                         >= 65 => 8,    // V8 (~65-105kbps)
                         _ => 9         // V9 (~45-85kbps)
                     };
-                    return new[] { $"-q:a {qualityLevel}" };
+                    return [$"-q:a {qualityLevel}"];
                 }
             },
 
             {
                 AudioFormat.Opus,
-                bitrate => new[] {
-                    $"-b:a {bitrate}k",
-                    "-compression_level 10"
-                }
+                bitrate => [$"-b:a {bitrate}k", "-compression_level 10"]
             },
 
             {
                 AudioFormat.Vorbis,
-                bitrate => new[] { $"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}" }
+                bitrate => [$"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}"]
             },
 
-            { AudioFormat.MP4, bitrate => new[] { $"-b:a {bitrate}k" } },
+            { AudioFormat.MP4, bitrate => [$"-b:a {bitrate}k"] },
             {
                 AudioFormat.OGG,
-                bitrate => new[] { $"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}" }
+                bitrate => [$"-q:a {AudioFormatHelper.MapBitrateToVorbisQuality(bitrate)}"]
             },
-            { AudioFormat.AMR, bitrate => new[] { $"-ab {bitrate}k" } },
-            { AudioFormat.WMA, bitrate => new[] { $"-b:a {bitrate}k" } }
+            { AudioFormat.AMR, bitrate => [$"-ab {bitrate}k"]},
+            { AudioFormat.WMA, bitrate => [$"-b:a {bitrate}k"]}
         };
 
-        private static readonly string[] ExtractionParameters = new[]
-        {
+        private static readonly string[] ExtractionParameters =
+        [
             "-codec:a copy",
             "-vn",
             "-movflags +faststart"
-        };
+        ];
 
 
-        private static readonly string[] VideoFormats = new[]
-        {
+        private static readonly string[] VideoFormats =
+        [
             "matroska", "webm",           // Matroska/WebM containers
             "mov", "mp4", "m4a",          // QuickTime/MP4 containers  
             "avi",                        // AVI containers
@@ -114,7 +111,7 @@ namespace Tubifarry.Core.Model
             "3gp", "3g2",                 // 3GPP containers
             "mxf",                        // Material Exchange Format
             "ts", "m2ts"                  // Transport streams
-        };
+        ];
 
         /// <summary>
         /// Converts audio to the specified format with optional bitrate control.
@@ -372,7 +369,7 @@ namespace Tubifarry.Core.Model
                     file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3v2Tag)
                 {
                     TagLib.Id3v2.UserTextInformationFrame mbFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "MusicBrainz Recording Id", true);
-                    mbFrame.Text = new[] { trackInfo.ForeignRecordingId };
+                    mbFrame.Text = [trackInfo.ForeignRecordingId];
                 }
 
                 try
@@ -384,7 +381,7 @@ namespace Tubifarry.Core.Model
                             Type = TagLib.PictureType.FrontCover,
                             Description = "Album Cover"
                         };
-                        file.Tag.Pictures = new TagLib.IPicture[] { picture };
+                        file.Tag.Pictures = [picture];
                     }
                 }
                 catch (Exception ex)
@@ -450,7 +447,7 @@ namespace Tubifarry.Core.Model
 
             if (!string.IsNullOrEmpty(FFmpeg.ExecutablesPath) && Directory.Exists(FFmpeg.ExecutablesPath))
             {
-                string[] ffmpegPatterns = new[] { "ffmpeg", "ffmpeg.exe", "ffmpeg.bin" };
+                string[] ffmpegPatterns = ["ffmpeg", "ffmpeg.exe", "ffmpeg.bin"];
                 string[] files = Directory.GetFiles(FFmpeg.ExecutablesPath);
                 if (files.Any(file => ffmpegPatterns.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase) && IsExecutable(file)))
                 {
@@ -460,11 +457,11 @@ namespace Tubifarry.Core.Model
 
             if (!isInstalled)
             {
-                foreach (string path in Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>())
+                foreach (string path in Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? [])
                 {
                     if (Directory.Exists(path))
                     {
-                        string[] ffmpegPatterns = new[] { "ffmpeg", "ffmpeg.exe", "ffmpeg.bin" };
+                        string[] ffmpegPatterns = ["ffmpeg", "ffmpeg.exe", "ffmpeg.bin"];
                         string[] files = Directory.GetFiles(path);
 
                         if (files.Any(file => ffmpegPatterns.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase) && IsExecutable(file)))

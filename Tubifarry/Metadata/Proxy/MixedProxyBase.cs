@@ -31,11 +31,9 @@ namespace Tubifarry.Metadata.Proxy
         protected void InvokeProxyMethodVoid(Type interfaceType, string methodName, params object[] args) =>
                 _proxyWrapper.InvokeProxyMethodVoid(interfaceType, methodName, args);
 
-        private class InternalProxyWrapper : ProxyWrapperBase
+        private class InternalProxyWrapper(Lazy<IProxyService> proxyService) : ProxyWrapperBase(proxyService)
         {
             private readonly ConcurrentDictionary<string, MethodInfo> _directMethodCache = new();
-
-            public InternalProxyWrapper(Lazy<IProxyService> proxyService) : base(proxyService) { }
 
             public T InvokeProxyMethodDirect<T>(IProxy proxy, string methodName, params object[] args)
             {

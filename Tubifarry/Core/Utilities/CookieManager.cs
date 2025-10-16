@@ -7,15 +7,15 @@ namespace Tubifarry.Core.Utilities
         internal static Cookie[] ParseCookieFile(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-                return Array.Empty<Cookie>();
+                return [];
 
-            List<Cookie> cookies = new();
+            List<Cookie> cookies = [];
 
             try
             {
                 foreach (string line in File.ReadLines(filePath))
                 {
-                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
                         continue;
 
                     string[] parts = line.Split('\t');
@@ -50,7 +50,7 @@ namespace Tubifarry.Core.Utilities
                 }
             }
             catch { }
-            return cookies.ToArray();
+            return [.. cookies];
         }
     }
 }

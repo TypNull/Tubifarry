@@ -24,12 +24,12 @@ namespace Tubifarry.Metadata.Proxy
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
 
-        private readonly Dictionary<Type, List<IProxy>> _interfaceToProxyMap = new();
-        private readonly Dictionary<Type, IProxy> _activeProxyForInterface = new();
-        private readonly List<IProxy> _activeProxies = new();
-        private readonly HashSet<IProxy> _defaultProxies = new();
+        private readonly Dictionary<Type, List<IProxy>> _interfaceToProxyMap = [];
+        private readonly Dictionary<Type, IProxy> _activeProxyForInterface = [];
+        private readonly List<IProxy> _activeProxies = [];
+        private readonly HashSet<IProxy> _defaultProxies = [];
 
-        public IEnumerable<IProxy> Proxies { get; private set; } = Enumerable.Empty<IProxy>();
+        public IEnumerable<IProxy> Proxies { get; private set; } = [];
         public IEnumerable<IProxy> ActiveProxies => _activeProxies;
 
         public ProxyService(IMetadataFactory metadataFactory, IEnumerable<IProxy> proxies, IEventAggregator eventAggregator, Logger logger)
@@ -93,7 +93,7 @@ namespace Tubifarry.Metadata.Proxy
 
         private void AddProxyToInterfaceMapping(IProxy proxy, Type originalInterface, int priority)
         {
-            _interfaceToProxyMap.TryAdd(originalInterface, new List<IProxy>());
+            _interfaceToProxyMap.TryAdd(originalInterface, []);
 
             if (!_interfaceToProxyMap[originalInterface].Contains(proxy))
             {
@@ -109,7 +109,7 @@ namespace Tubifarry.Metadata.Proxy
 
             proxies.Remove(proxy);
 
-            if (!proxies.Any())
+            if (proxies.Count == 0)
                 RemoveInterfaceMapping(interfaceType);
             else if (_activeProxyForInterface.GetValueOrDefault(interfaceType) == proxy)
                 SetNewActiveProxyForInterface(interfaceType, proxies);
@@ -141,7 +141,7 @@ namespace Tubifarry.Metadata.Proxy
         }
 
         private List<IProxy> GetActiveProxiesForInterface(Type interfaceType) =>
-            _interfaceToProxyMap.GetValueOrDefault(interfaceType, new List<IProxy>())
+            _interfaceToProxyMap.GetValueOrDefault(interfaceType, [])
                 .Where(p => _activeProxies.Contains(p))
                 .ToList();
 
@@ -199,7 +199,7 @@ namespace Tubifarry.Metadata.Proxy
         }
 
         private IEnumerable<IProxy> GetAllNonMixedProxiesForInterface(Type interfaceType) =>
-            _interfaceToProxyMap.GetValueOrDefault(interfaceType, new List<IProxy>())
+            _interfaceToProxyMap.GetValueOrDefault(interfaceType, [])
                 .Where(p => p is not IMixedProxy);
 
         private static IProxy? GetHighestPriorityProxy(IEnumerable<IProxy> proxies, Type interfaceType) =>

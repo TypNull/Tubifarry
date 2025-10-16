@@ -21,10 +21,7 @@ namespace Tubifarry.Core.Utilities
             };
         }
 
-        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-        {
-            writer.WriteStringValue(value);
-        }
+        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) => writer.WriteStringValue(value);
     }
 
     /// <summary>
@@ -43,10 +40,7 @@ namespace Tubifarry.Core.Utilities
             };
         }
 
-        public override void Write(Utf8JsonWriter writer, float value, JsonSerializerOptions options)
-        {
-            writer.WriteNumberValue(value);
-        }
+        public override void Write(Utf8JsonWriter writer, float value, JsonSerializerOptions options) => writer.WriteNumberValue(value);
     }
 
 }

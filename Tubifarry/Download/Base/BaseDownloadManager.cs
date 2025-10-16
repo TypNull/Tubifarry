@@ -22,20 +22,13 @@ namespace Tubifarry.Download.Base
     /// <summary>
     /// Generic base download manager implementation with common functionality
     /// </summary>
-    public abstract class BaseDownloadManager<TDownloadRequest, TOptions, TClient> : IBaseDownloadManager<TDownloadRequest, TOptions, TClient>
+    public abstract class BaseDownloadManager<TDownloadRequest, TOptions, TClient>(Logger logger) : IBaseDownloadManager<TDownloadRequest, TOptions, TClient>
         where TDownloadRequest : BaseDownloadRequest<TOptions>
         where TOptions : BaseDownloadOptions, new()
     {
-        private readonly RequestContainer<TDownloadRequest> _queue;
-        protected readonly Logger _logger;
-        protected readonly RequestHandler _requesthandler;
-
-        protected BaseDownloadManager(Logger logger)
-        {
-            _queue = new RequestContainer<TDownloadRequest>();
-            _requesthandler = new RequestHandler();
-            _logger = logger;
-        }
+        private readonly RequestContainer<TDownloadRequest> _queue = [];
+        protected readonly Logger _logger = logger;
+        protected readonly RequestHandler _requesthandler = [];
 
         /// <summary>
         /// Factory method to create download request instances

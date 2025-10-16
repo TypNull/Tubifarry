@@ -2,7 +2,6 @@
 
 namespace Tubifarry.Core.Records
 {
-
     /// <summary>
     /// Represents session token data for transportation and caching
     /// </summary>

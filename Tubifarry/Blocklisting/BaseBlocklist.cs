@@ -6,11 +6,9 @@ using NzbDrone.Core.Parser.Model;
 
 namespace Tubifarry.Blocklisting
 {
-    public abstract class BaseBlocklist<TProtocol> : IBlocklistForProtocol where TProtocol : IDownloadProtocol
+    public abstract class BaseBlocklist<TProtocol>(IBlocklistRepository blocklistRepository) : IBlocklistForProtocol where TProtocol : IDownloadProtocol
     {
-        private readonly IBlocklistRepository _blocklistRepository;
-
-        public BaseBlocklist(IBlocklistRepository blocklistRepository) => _blocklistRepository = blocklistRepository;
+        private readonly IBlocklistRepository _blocklistRepository = blocklistRepository;
 
         public string Protocol => typeof(TProtocol).Name;
 

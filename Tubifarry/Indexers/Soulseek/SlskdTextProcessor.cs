@@ -7,7 +7,7 @@ namespace Tubifarry.Indexers.Soulseek
     /// <summary>
     /// Handles text processing, normalization, and variations for search queries
     /// </summary>
-    public static class SlskdTextProcessor
+    public static partial class SlskdTextProcessor
     {
         private static readonly Dictionary<string, int> RomanNumerals = new(StringComparer.OrdinalIgnoreCase)
         {
@@ -61,7 +61,7 @@ namespace Tubifarry.Indexers.Soulseek
             if (string.IsNullOrEmpty(input)) return string.Empty;
 
             string stripped = PunctuationPattern.Replace(input, "");
-            return Regex.Replace(stripped, @"\s+", " ").Trim();
+            return StripPunctuationRegex().Replace(stripped, " ").Trim();
         }
 
         public static string NormalizeSpecialCharacters(string? input)
@@ -143,10 +143,13 @@ namespace Tubifarry.Indexers.Soulseek
                 return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             return content
-                .Split(new[] { '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(['\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                 .Where(username => !string.IsNullOrWhiteSpace(username))
                 .Select(username => username.Trim())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
+
+        [GeneratedRegex(@"\s+")]
+        private static partial Regex StripPunctuationRegex();
     }
 }

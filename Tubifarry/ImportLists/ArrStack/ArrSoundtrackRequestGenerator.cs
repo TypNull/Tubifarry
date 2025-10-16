@@ -6,11 +6,9 @@ namespace Tubifarry.ImportLists.ArrStack
     /// <summary>
     /// Generates HTTP requests for fetching media items from Arr applications.
     /// </summary>
-    internal class ArrSoundtrackRequestGenerator : IImportListRequestGenerator
+    internal class ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings) : IImportListRequestGenerator
     {
-        private readonly ArrSoundtrackImportSettings _settings;
-
-        public ArrSoundtrackRequestGenerator(ArrSoundtrackImportSettings settings) => _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        private readonly ArrSoundtrackImportSettings _settings = settings;
 
         public ImportListPageableRequestChain GetListItems()
         {

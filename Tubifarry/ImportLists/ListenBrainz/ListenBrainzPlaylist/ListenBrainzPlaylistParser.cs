@@ -20,11 +20,11 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
         public IList<ImportListItemInfo> ParseResponse(ImportListResponse importListResponse)
         {
             if (!PreProcess(importListResponse))
-                return new List<ImportListItemInfo>();
+                return [];
 
             try
             {
-                IList<ImportListItemInfo> items = ParsePlaylistTracks(importListResponse.Content);
+                List<ImportListItemInfo> items = ParsePlaylistTracks(importListResponse.Content);
                 _logger.Debug("Successfully parsed {0} items from ListenBrainz playlist", items.Count);
                 return items;
             }
@@ -35,7 +35,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
             }
         }
 
-        private IList<ImportListItemInfo> ParsePlaylistTracks(string content)
+        private List<ImportListItemInfo> ParsePlaylistTracks(string content)
         {
             PlaylistResponse? playlistResponse = JsonSerializer.Deserialize<PlaylistResponse>(content, GetJsonOptions());
             IReadOnlyList<TrackData>? tracks = playlistResponse?.Playlist?.Tracks;
@@ -43,7 +43,7 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzPlaylist
             if (tracks?.Any() != true)
             {
                 _logger.Debug("No tracks found in playlist response");
-                return new List<ImportListItemInfo>();
+                return [];
             }
 
             _logger.Trace("Processing {0} tracks from playlist", tracks.Count);

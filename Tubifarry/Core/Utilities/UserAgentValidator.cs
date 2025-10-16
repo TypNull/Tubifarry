@@ -45,13 +45,12 @@ namespace Tubifarry.Core.Utilities
     /// <summary>
     /// Validates User-Agents against allow/block lists
     /// </summary>
-    public class UserAgentValidator : IUserAgentValidator
+    public partial class UserAgentValidator : IUserAgentValidator
     {
-        static readonly Regex _tokenPattern = new(@"^[!#$%&'*+\-.0-9A-Z^_`a-z|~]+$");
         readonly HashSet<string> _allowedExact = new(StringComparer.OrdinalIgnoreCase);
-        readonly List<Regex> _allowedRegex = new();
+        readonly List<Regex> _allowedRegex = [];
         readonly HashSet<string> _blackExact = new(StringComparer.OrdinalIgnoreCase);
-        readonly List<Regex> _blackRegex = new();
+        readonly List<Regex> _blackRegex = [];
 
         public static UserAgentValidator Instance { get; private set; } = new();
 
@@ -74,13 +73,13 @@ namespace Tubifarry.Core.Utilities
             if (!IsValidFormat(userAgent)) return false;
             if (_blackExact.Contains(userAgent)) return false;
             if (_blackRegex.Any(p => p.IsMatch(userAgent))) return false;
-            if (!_allowedExact.Any() && !_allowedRegex.Any()) return true;
+            if (_allowedExact.Count == 0 && _allowedRegex.Count == 0) return true;
             return _allowedExact.Contains(userAgent) || _allowedRegex.Any(p => p.IsMatch(userAgent));
         }
 
         /// <inheritdoc/>
         public IEnumerable<UserAgentProduct> Parse(string userAgent) => userAgent.Split(' ')
-            .Select(t => t.Split(new[] { '/' }, 2))
+            .Select(t => t.Split(['/'], 2))
             .Where(p => p.Length > 0 && !string.IsNullOrWhiteSpace(p[0]))
             .Select(p => new UserAgentProduct(p[0], p.Length > 1 ? p[1] : string.Empty));
 
@@ -92,7 +91,7 @@ namespace Tubifarry.Core.Utilities
 
         bool IsValidFormat(string ua)
         {
-            try { return Parse(ua).All(p => _tokenPattern.IsMatch(p.Name) && (p.Version == null || _tokenPattern.IsMatch(p.Version))); }
+            try { return Parse(ua).All(p => TokenPattern().IsMatch(p.Name) && (p.Version == null || TokenPattern().IsMatch(p.Version))); }
             catch { return false; }
         }
 
@@ -102,12 +101,15 @@ namespace Tubifarry.Core.Utilities
         static void AddPattern(string p, HashSet<string> exact, List<Regex> regex)
         {
             if (string.IsNullOrWhiteSpace(p)) throw new ArgumentException("Pattern required", nameof(p));
-            if (p.IndexOfAny(new[] { '*', '?', '+', '(', '[', '\\', '.' }) >= 0)
+            if (p.IndexOfAny(['*', '?', '+', '(', '[', '\\', '.']) >= 0)
             {
                 try { regex.Add(new Regex(p, RegexOptions.IgnoreCase | RegexOptions.Compiled)); }
                 catch { exact.Add(p); }
             }
-            else exact.Add(p);
+            else { exact.Add(p); }
         }
+
+        [GeneratedRegex(@"^[!#$%&'*+\-.0-9A-Z^_`a-z|~]+$")]
+        private static partial Regex TokenPattern();
     }
 }

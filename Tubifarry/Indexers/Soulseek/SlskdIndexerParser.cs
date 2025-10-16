@@ -15,12 +15,13 @@ namespace Tubifarry.Indexers.Soulseek
 {
     public class SlskdIndexerParser : IParseIndexerResponse, IHandle<AlbumGrabbedEvent>, IHandle<ApplicationShutdownRequested>
     {
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
         private readonly Lazy<IIndexerFactory> _indexerFactory;
         private readonly IHttpClient _httpClient;
 
-        private static readonly Dictionary<int, string> _interactiveResults = new();
+        private static readonly Dictionary<int, string> _interactiveResults = [];
         private static readonly Dictionary<string, (HashSet<string> IgnoredUsers, long LastFileSize)> _ignoreListCache = new();
 
         private SlskdSettings Settings => _indexer.Settings;
@@ -35,15 +36,15 @@ namespace Tubifarry.Indexers.Soulseek
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<AlbumData> albumDatas = new();
+            List<AlbumData> albumDatas = [];
             try
             {
-                SlskdSearchResponse? searchResponse = JsonSerializer.Deserialize<SlskdSearchResponse>(indexerResponse.Content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                SlskdSearchResponse? searchResponse = JsonSerializer.Deserialize<SlskdSearchResponse>(indexerResponse.Content, _jsonOptions);
 
                 if (searchResponse == null)
                 {
                     _logger.Error("Failed to deserialize slskd search response.");
-                    return new List<ReleaseInfo>();
+                    return [];
                 }
 
                 SlskdSearchData searchTextData = SlskdSearchData.FromJson(indexerResponse.HttpRequest.ContentSummary);
@@ -81,7 +82,7 @@ namespace Tubifarry.Indexers.Soulseek
                     }
                 }
 
-                RemoveSearch(searchResponse.Id, albumDatas.Any() && searchTextData.Interactive);
+                RemoveSearch(searchResponse.Id, albumDatas.Count != 0 && searchTextData.Interactive);
             }
             catch (Exception ex)
             {
