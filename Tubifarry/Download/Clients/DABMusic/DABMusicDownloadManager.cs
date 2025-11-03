@@ -4,14 +4,20 @@ using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using Tubifarry.Download.Base;
+using Tubifarry.Indexers.DABMusic;
 
 namespace Tubifarry.Download.Clients.DABMusic
 {
-    public interface IDABMusicDownloadManager : IBaseDownloadManager<DABMusicDownloadRequest, BaseDownloadOptions, DABMusicClient> { }
+    public interface IDABMusicDownloadManager : IBaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient> { }
 
-    public class DABMusicDownloadManager : BaseDownloadManager<DABMusicDownloadRequest, BaseDownloadOptions, DABMusicClient>, IDABMusicDownloadManager
+    public class DABMusicDownloadManager : BaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>, IDABMusicDownloadManager
     {
-        public DABMusicDownloadManager(Logger logger) : base(logger) { }
+        private readonly IDABMusicSessionManager _sessionManager;
+
+        public DABMusicDownloadManager(IDABMusicSessionManager sessionManager, Logger logger) : base(logger)
+        {
+            _sessionManager = sessionManager;
+        }
 
         protected override async Task<DABMusicDownloadRequest> CreateDownloadRequest(
             RemoteAlbum remoteAlbum,
@@ -25,7 +31,7 @@ namespace Tubifarry.Download.Clients.DABMusic
 
             _logger.Trace($"Type from URL: {(isTrack ? "Track" : "Album")}, Extracted ID: {itemId}");
 
-            BaseDownloadOptions options = new()
+            DABMusicDownloadOptions options = new()
             {
                 Handler = _requesthandler,
                 DownloadPath = provider.Settings.DownloadPath,
@@ -37,11 +43,13 @@ namespace Tubifarry.Download.Clients.DABMusic
                 NumberOfAttempts = (byte)provider.Settings.ConnectionRetries,
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),
                 IsTrack = isTrack,
-                ItemId = itemId
+                ItemId = itemId,
+                Email = provider.Settings.Email,
+                Password = provider.Settings.Password
             };
 
             _requesthandler.MaxParallelism = provider.Settings.MaxParallelDownloads;
-            return new DABMusicDownloadRequest(remoteAlbum, options);
+            return new DABMusicDownloadRequest(remoteAlbum, _sessionManager, options);
         }
     }
 }

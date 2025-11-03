@@ -1,4 +1,4 @@
-﻿using NLog;
+using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Indexers;
@@ -14,12 +14,11 @@ namespace Tubifarry.Indexers.DABMusic
     /// <summary>
     /// Generates DABMusic search requests
     /// </summary>
-    public class DABMusicRequestGenerator : IDABMusicRequestGenerator
+    public class DABMusicRequestGenerator(Logger logger, IDABMusicSessionManager sessionManager) : IDABMusicRequestGenerator
     {
-        private readonly Logger _logger;
+        private readonly Logger _logger = logger;
+        private readonly IDABMusicSessionManager _sessionManager = sessionManager;
         private DABMusicIndexerSettings? _settings;
-
-        public DABMusicRequestGenerator(Logger logger) => _logger = logger;
 
         public IndexerPageableRequestChain GetRecentRequests() => new();
 
@@ -47,13 +46,13 @@ namespace Tubifarry.Indexers.DABMusic
 
             string url = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type=album&limit={_settings.SearchLimit}";
             _logger.Trace("Creating DABMusic search request: {Url}", url);
-            chain.Add(new[] { CreateRequest(url, baseUrl, "album") });
+            chain.Add([CreateRequest(url, baseUrl, "album")]);
 
             if (isSingle)
             {
                 string fallbackUrl = $"{baseUrl}/api/search?q={Uri.EscapeDataString(query)}&type=all&limit={_settings.SearchLimit}";
                 _logger.Trace("Adding fallback search request: {Url}", fallbackUrl);
-                chain.AddTier(new[] { CreateRequest(fallbackUrl, baseUrl, "all") });
+                chain.AddTier([CreateRequest(fallbackUrl, baseUrl, "all")]);
             }
             return chain;
         }
@@ -66,6 +65,19 @@ namespace Tubifarry.Indexers.DABMusic
                 ContentSummary = new DABMusicRequestData(baseUrl, searchType, _settings.SearchLimit).ToJson()
             };
             req.Headers["User-Agent"] = Tubifarry.UserAgent;
+
+            DABMusicSession? session = _sessionManager.GetOrCreateSession(baseUrl, _settings.Email, _settings.Password);
+
+            if (session?.IsValid == true)
+            {
+                req.Headers["Cookie"] = session.SessionCookie;
+                _logger.Trace($"Added session cookie to request for {session.Email}");
+            }
+            else
+            {
+                _logger.Warn("No valid session available for request");
+            }
+
             return new IndexerRequest(req);
         }
     }

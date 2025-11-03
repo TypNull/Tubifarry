@@ -1,4 +1,4 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
@@ -12,9 +12,10 @@ namespace Tubifarry.Indexers.DABMusic
     {
         private readonly IDABMusicRequestGenerator _requestGenerator;
         private readonly IDABMusicParser _parser;
+        private readonly IDABMusicSessionManager _sessionManager;
 
         public override string Name => "DABMusic";
-        public override string Protocol => "QobuzDownloadProtocol";
+        public override string Protocol => nameof(QobuzDownloadProtocol);
         public override bool SupportsRss => false;
         public override bool SupportsSearch => true;
         public override int PageSize => 50;
@@ -25,6 +26,7 @@ namespace Tubifarry.Indexers.DABMusic
         public DABMusicIndexer(
             IDABMusicRequestGenerator requestGenerator,
             IDABMusicParser parser,
+            IDABMusicSessionManager sessionManager,
             IHttpClient httpClient,
             IIndexerStatusService statusService,
             IConfigService configService,
@@ -34,28 +36,22 @@ namespace Tubifarry.Indexers.DABMusic
         {
             _requestGenerator = requestGenerator;
             _parser = parser;
+            _sessionManager = sessionManager;
         }
 
         protected override async Task Test(List<ValidationFailure> failures)
         {
-            string? baseUrl = Settings.BaseUrl?.Trim();
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                failures.Add(new ValidationFailure("BaseUrl", "Base URL is required"));
-                return;
-            }
-
             try
             {
-                HttpRequest req = new(baseUrl);
-                req.Headers["User-Agent"] = Tubifarry.UserAgent;
-                HttpResponse response = await _httpClient.ExecuteAsync(req);
+                DABMusicSession? session = _sessionManager.GetOrCreateSession(Settings.BaseUrl.Trim(), Settings.Email, Settings.Password, true);
 
-                if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                if (session == null)
                 {
-                    failures.Add(new ValidationFailure("BaseUrl", $"Cannot connect to DABMusic: {(int)response.StatusCode}"));
+                    failures.Add(new ValidationFailure("Email", "Failed to authenticate with DABMusic. Check your email and password."));
                     return;
                 }
+
+                _logger.Debug($"Successfully authenticated with DABMusic as {Settings.Email}");
             }
             catch (Exception ex)
             {

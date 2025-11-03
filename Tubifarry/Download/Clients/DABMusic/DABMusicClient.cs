@@ -10,6 +10,7 @@ using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using System.Text.RegularExpressions;
 using Tubifarry.Download.Base;
+using Tubifarry.Indexers.DABMusic;
 
 namespace Tubifarry.Download.Clients.DABMusic
 {
@@ -21,9 +22,11 @@ namespace Tubifarry.Download.Clients.DABMusic
     {
         private readonly IDABMusicDownloadManager _downloadManager;
         private readonly INamingConfigService _namingService;
+        private readonly IDABMusicSessionManager _sessionManager;
 
         public DABMusicClient(
             IDABMusicDownloadManager downloadManager,
+            IDABMusicSessionManager sessionManager,
             IConfigService configService,
             IDiskProvider diskProvider,
             INamingConfigService namingConfigService,
@@ -34,6 +37,7 @@ namespace Tubifarry.Download.Clients.DABMusic
         {
             _downloadManager = downloadManager;
             _namingService = namingConfigService;
+            _sessionManager = sessionManager;
         }
 
         public override string Name => "DABMusic";
@@ -86,6 +90,20 @@ namespace Tubifarry.Download.Clients.DABMusic
                     !Regex.IsMatch(response, "<title>.*?(DAB|Music).*?</title>", RegexOptions.IgnoreCase))
                 {
                     failures.Add(new ValidationFailure("BaseUrl", "The provided URL does not appear to be a DABMusic instance"));
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(Settings.Email) && !string.IsNullOrWhiteSpace(Settings.Password))
+                {
+                    DABMusicSession? session = _sessionManager.GetOrCreateSession(Settings.BaseUrl.Trim(), Settings.Email, Settings.Password, true);
+
+                    if (session == null)
+                    {
+                        failures.Add(new ValidationFailure("Email", "Failed to authenticate with DABMusic. Check your email and password."));
+                        return;
+                    }
+
+                    _logger.Debug($"Successfully authenticated with DABMusic as {Settings.Email}");
                 }
             }
             catch (Exception ex)
