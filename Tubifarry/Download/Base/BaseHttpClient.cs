@@ -5,7 +5,7 @@ namespace Tubifarry.Download.Base
     /// <summary>
     /// HTTP client wrapper for download operations
     /// Provides standardized HTTP operations with proper headers and error handling
-    /// Never modifies the shared HttpClient - uses individual requests with proper headers
+    /// Never modifies the shared HttpClient uses individual requests with proper headers
     /// </summary>
     public class BaseHttpClient
     {
@@ -35,7 +35,7 @@ namespace Tubifarry.Download.Base
         /// <param name="method">HTTP method</param>
         /// <param name="url">The URL to request (can be relative or absolute)</param>
         /// <returns>Configured HttpRequestMessage</returns>
-        private HttpRequestMessage CreateRequest(HttpMethod method, string url)
+        public HttpRequestMessage CreateRequest(HttpMethod method, string url)
         {
             string requestUrl = url.StartsWith("http") ? url : new Uri(new Uri(BaseUrl), url).ToString();
 
@@ -45,6 +45,28 @@ namespace Tubifarry.Download.Base
             request.Headers.Add("Accept", "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
 
             return request;
+        }
+
+        /// <summary>
+        /// Sends an HTTP request with timeout handling
+        /// </summary>
+        /// <param name="request">The HTTP request to send</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>HTTP response message</returns>
+        /// <exception cref="Exception">Thrown when the request fails</exception>
+        public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(_timeout);
+
+                return await _httpClient.SendAsync(request, cts.Token);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"HTTP request failed for URL '{request.RequestUri}': {ex.Message}", ex);
+            }
         }
 
         /// <summary>

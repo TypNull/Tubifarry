@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
@@ -15,6 +15,15 @@ namespace Tubifarry.Indexers.DABMusic
                 .Must(url => Uri.IsWellFormedUriString(url, UriKind.Absolute))
                 .WithMessage("Base URL must be a valid URL.");
 
+            // Validate Email
+            RuleFor(x => x.Email)
+                .NotEmpty().WithMessage("Email is required.")
+                .EmailAddress().WithMessage("Must be a valid email address.");
+
+            // Validate Password
+            RuleFor(x => x.Password)
+                .NotEmpty().WithMessage("Password is required.");
+
             // Validate SearchLimit
             RuleFor(x => x.SearchLimit)
                 .InclusiveBetween(1, 100).WithMessage("Search limit must be between 1 and 100.");
@@ -22,7 +31,6 @@ namespace Tubifarry.Indexers.DABMusic
             // Validate RequestTimeout
             RuleFor(x => x.RequestTimeout)
                 .InclusiveBetween(10, 300).WithMessage("Request timeout must be between 10 and 300 seconds.");
-
         }
     }
 
@@ -35,18 +43,26 @@ namespace Tubifarry.Indexers.DABMusic
             BaseUrl = "https://dabmusic.xyz";
             SearchLimit = 50;
             RequestTimeout = 60;
+            Email = "";
+            Password = "";
         }
 
-        [FieldDefinition(0, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the DABMusic API instance", Placeholder = "https://dabmusic.xyz")]
+        [FieldDefinition(0, Label = "Base URL", Type = FieldType.Textbox, HelpText = "URL of the DABMusic API instance", Placeholder = "https://dab.yeet.su")]
         public string BaseUrl { get; set; }
 
-        [FieldDefinition(1, Label = "Search Limit", Type = FieldType.Number, HelpText = "Maximum number of results to return per search", Hidden = HiddenType.Hidden, Advanced = true)]
+        [FieldDefinition(1, Label = "Email", Type = FieldType.Textbox, HelpText = "Your DABMusic account email")]
+        public string Email { get; set; }
+
+        [FieldDefinition(2, Label = "Password", Type = FieldType.Password, HelpText = "Your DABMusic account password", Privacy = PrivacyLevel.Password)]
+        public string Password { get; set; }
+
+        [FieldDefinition(3, Label = "Search Limit", Type = FieldType.Number, HelpText = "Maximum number of results to return per search", Hidden = HiddenType.Hidden, Advanced = true)]
         public int SearchLimit { get; set; }
 
-        [FieldDefinition(2, Type = FieldType.Number, Label = "Request Timeout", Unit = "seconds", HelpText = "Timeout for requests to DABMusic API", Advanced = true)]
+        [FieldDefinition(4, Type = FieldType.Number, Label = "Request Timeout", Unit = "seconds", HelpText = "Timeout for requests to DABMusic API", Advanced = true)]
         public int RequestTimeout { get; set; }
 
-        [FieldDefinition(3, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
+        [FieldDefinition(5, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; }
 
         public NzbDroneValidationResult Validate() => new(_validator.Validate(this));

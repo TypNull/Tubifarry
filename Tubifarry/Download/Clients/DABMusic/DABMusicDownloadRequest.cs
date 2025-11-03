@@ -16,9 +16,10 @@ namespace Tubifarry.Download.Clients.DABMusic
     /// <summary>
     /// DABMusic download request handling track and album downloads
     /// </summary>
-    public class DABMusicDownloadRequest : BaseDownloadRequest<BaseDownloadOptions>
+    public class DABMusicDownloadRequest : BaseDownloadRequest<DABMusicDownloadOptions>
     {
         private readonly BaseHttpClient _httpClient;
+        private readonly IDABMusicSessionManager _sessionManager;
         private DABMusicAlbum? _currentAlbum;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -28,9 +29,10 @@ namespace Tubifarry.Download.Clients.DABMusic
             NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
         };
 
-        public DABMusicDownloadRequest(RemoteAlbum remoteAlbum, BaseDownloadOptions? options) : base(remoteAlbum, options)
+        public DABMusicDownloadRequest(RemoteAlbum remoteAlbum, IDABMusicSessionManager sessionManager, DABMusicDownloadOptions? options) : base(remoteAlbum, options)
         {
             _httpClient = new BaseHttpClient(Options.BaseUrl, TimeSpan.FromSeconds(Options.RequestTimeout));
+            _sessionManager = sessionManager;
 
             _requestContainer.Add(new OwnRequest(async (token) =>
             {
@@ -101,10 +103,10 @@ namespace Tubifarry.Download.Clients.DABMusic
             _logger.Trace($"Processing album with ID: {albumId}");
 
             _currentAlbum = await GetAlbumAsync(albumId, token);
-            if (_currentAlbum.Tracks?.Any() != true)
+            if ((_currentAlbum.Tracks?.Count ?? 0) == 0)
                 throw new Exception("No tracks found in album");
 
-            _expectedTrackCount = _currentAlbum.Tracks.Count;
+            _expectedTrackCount = _currentAlbum.Tracks!.Count;
             _logger.Trace($"Found {_currentAlbum.Tracks.Count} tracks in album: {_currentAlbum.Title}");
 
             await DownloadAlbumCoverAsync(_currentAlbum.Cover, token);
@@ -136,12 +138,28 @@ namespace Tubifarry.Download.Clients.DABMusic
             _requestContainer.Add(_trackContainer);
         }
 
+        private async Task<string> RequestAsync(string url, CancellationToken token)
+        {
+            using HttpRequestMessage request = _httpClient.CreateRequest(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(Options.Email) && !string.IsNullOrWhiteSpace(Options.Password))
+            {
+                DABMusicSession? session = _sessionManager.GetOrCreateSession(Options.BaseUrl, Options.Email, Options.Password);
+                if (session?.IsValid == true)
+                    request.Headers.Add("Cookie", session.SessionCookie);
+            }
+
+            using HttpResponseMessage response = await _httpClient.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync(token);
+        }
+
+
         private async Task<DABMusicTrack> GetTrackAsync(string trackId, CancellationToken token)
         {
             try
             {
                 string url = $"/api/track?trackId={Uri.EscapeDataString(trackId)}";
-                string response = await _httpClient.GetStringAsync(url, token);
+                string response = await RequestAsync(url, token);
 
                 DABMusicTrack? track = JsonSerializer.Deserialize<DABMusicTrack>(response, JsonOptions);
                 if (track != null)
@@ -160,7 +178,7 @@ namespace Tubifarry.Download.Clients.DABMusic
             try
             {
                 string url = $"/api/album?albumId={Uri.EscapeDataString(albumId)}";
-                string response = await _httpClient.GetStringAsync(url, token);
+                string response = await RequestAsync(url, token);
 
                 try
                 {
@@ -188,7 +206,7 @@ namespace Tubifarry.Download.Clients.DABMusic
             try
             {
                 string url = $"/api/stream?trackId={Uri.EscapeDataString(trackId)}";
-                string response = await _httpClient.GetStringAsync(url, token);
+                string response = await RequestAsync(url, token);
 
                 DABMusicStreamResponse? result = JsonSerializer.Deserialize<DABMusicStreamResponse>(response, JsonOptions);
                 return result?.Url ?? string.Empty;
