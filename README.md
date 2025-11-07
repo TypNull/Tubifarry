@@ -21,7 +21,8 @@ For further customization, Codec Tinker lets you convert audio files between for
 7. [Lyrics Fetcher 📜](#lyrics-fetcher-)
 8. [Search Sniper 🏹](#search-sniper-)
 9. [Custom Metadata Sources 🧩](#custom-metadata-sources-)
-10. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
+10. [Similar Artists 🧷](#similar-artists-)
+11. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
 
 ----
 
@@ -226,6 +227,28 @@ MetaMix is an advanced feature that intelligently combines metadata from multipl
    - **Multi-Source Population**: When enabled, missing album information from your primary source will be automatically supplemented with data from secondary sources.
 
 The feature currently works best with artists that are properly linked across different metadata systems. Which is typically the case on MusicBrainz.
+
+---
+
+### Similar Artists 🧷
+
+**Similar Artists** lets you discover related artists using Last.fm's
+recommendation data directly in Lidarr's search. Search for an artist
+with the `~` prefix and get back a list of similar musicians ready to
+be added to your library.
+
+#### How to Enable Similar Artists
+
+1. Go to `Settings > Metadata` in Lidarr.
+2. Enable these three metadata sources:
+   - **Similar Artists** - Enter your Last.fm API key
+   - **Lidarr Default** - Required to handle normal searches
+   - **MetaMix** - Required to coordinate the search
+3. Optional: Adjust result limit, enable image fetching, and configure caching.
+
+**Examples:**
+- `similar:Pink Floyd`
+- `~20244d07-534f-4eff-b4d4-930878889970`
 
 ---
 
