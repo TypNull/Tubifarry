@@ -431,7 +431,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                     _circuitBreaker.RecordFailure();
                     return default;
                 }
-                _logger.Debug(response.Content);
+                _logger.Trace(response.Content);
                 using JsonDocument jsonDoc = JsonDocument.Parse(response.Content);
                 _circuitBreaker.RecordSuccess();
                 return jsonDoc.RootElement.Clone();
