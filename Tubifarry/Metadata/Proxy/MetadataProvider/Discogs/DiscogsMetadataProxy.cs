@@ -1,11 +1,18 @@
 ﻿using NLog;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.MetadataSource;
 using NzbDrone.Core.Music;
 using System.Text.RegularExpressions;
 using Tubifarry.Metadata.Proxy.MetadataProvider.Mixed;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 {
+    [Proxy(ProxyMode.Public)]
+    [ProxyFor(typeof(IProvideArtistInfo))]
+    [ProxyFor(typeof(IProvideAlbumInfo))]
+    [ProxyFor(typeof(ISearchForNewArtist))]
+    [ProxyFor(typeof(ISearchForNewAlbum))]
+    [ProxyFor(typeof(ISearchForNewEntity))]
     public partial class DiscogsMetadataProxy : ProxyBase<DiscogsMetadataProxySettings>, IMetadata, ISupportMetadataMixing
     {
         private readonly IDiscogsProxy _discogsProxy;

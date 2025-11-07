@@ -1,4 +1,5 @@
 ﻿using DryIoc.ImTools;
+using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.Profiles.Metadata;
@@ -145,6 +146,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
             List<string> secondaryTypes = new(metadataProfile.SecondaryAlbumTypes.Where(s => s.Allowed).Select(s => s.SecondaryAlbumType.Name));
             List<string> releaseStatuses = new(metadataProfile.ReleaseStatuses.Where(s => s.Allowed).Select(s => s.ReleaseStatus.Name));
 
+            NzbDroneLogger.GetLogger(typeof(AlbumMapper)).Trace($"Metadata Profile allows: Primary Types: {string.Join(", ", primaryTypes)} | Secondary Types: {string.Join(", ", secondaryTypes)} |  Release Statuses: {string.Join(", ", releaseStatuses)}");
             return albums.Where(album => primaryTypes.Contains(album.AlbumType) &&
                                 ((album.SecondaryTypes.Count == 0 && secondaryTypes.Contains("Studio")) ||
                                  album.SecondaryTypes.Any(x => secondaryTypes.Contains(x.Name))) &&
