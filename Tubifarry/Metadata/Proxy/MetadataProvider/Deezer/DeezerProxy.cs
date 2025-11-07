@@ -143,18 +143,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
 
             foreach (DeezerAlbum? item in searchItems.DistinctBy(x => x.Id))
             {
-                Artist? mappedArtist = artists.Find(x => x.Id == item.Artist.Id);
+                Artist? mappedArtist = artists.Find(x => x.ForeignArtistId.StartsWith(item.Artist.Id.ToString()));
                 if (mappedArtist == null)
                 {
-                    mappedArtist = _artistService.FindById(item.Artist.Id.ToString());
-                    mappedArtist ??= DeezerMappingHelper.MapArtistFromDeezerArtist(item.Artist);
-                    mappedArtist.Albums = GetArtistAlbumsAsync(settings, mappedArtist).GetAwaiter().GetResult();
+                    mappedArtist = DeezerMappingHelper.MapArtistFromDeezerArtist(item.Artist);
                     artists.Add(mappedArtist);
                     results.Add(mappedArtist);
                 }
 
                 DeezerAlbum? albumDetails = item;
-                Album mappedAlbum = DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumDetails ?? item, mappedArtist);
+                Album mappedAlbum = DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumDetails ?? item);
                 mappedAlbum.Artist = mappedArtist;
                 mappedAlbum.ArtistMetadata = mappedArtist.Metadata;
                 results.Add(mappedAlbum);
@@ -180,8 +178,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             Artist? existingArtist = existingAlbum?.Artist?.Value ?? _artistService.FindById(albumDetails.Artist.Id + _identifier);
             if (existingArtist == null)
             {
-                _logger.Debug("Artist {0} not found, returning empty album", albumDetails.Artist.Name);
-                return Tuple.Create("", new Album() { AlbumReleases = new LazyLoaded<List<AlbumRelease>>([]) }, new List<ArtistMetadata>());
+                _logger.Debug("Artist {0} not found in database, mapping from Deezer data", albumDetails.Artist.Name);
+                existingArtist = DeezerMappingHelper.MapArtistFromDeezerArtist(albumDetails.Artist);
             }
 
             Album mappedAlbum = DeezerMappingHelper.MapAlbumFromDeezerAlbum(albumDetails, existingArtist);

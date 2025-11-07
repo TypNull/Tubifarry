@@ -165,7 +165,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 {
                     try
                     {
-                        results.Add(GetArtistInfoAsync(settings, lastfmArtist.Name + _identifier, default).GetAwaiter().GetResult());
+                        Artist artist = LastfmMappingHelper.MapArtistFromLastfmArtist(lastfmArtist);
+                        artist.Albums = new LazyLoaded<List<Album>>([]);
+                        results.Add(artist);
                     }
                     catch { }
                 }

@@ -1,18 +1,21 @@
 ﻿using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
-using NzbDrone.Common.Serializer;
 using NzbDrone.Core.ImportLists;
 using NzbDrone.Core.ImportLists.Exceptions;
 using NzbDrone.Core.ImportLists.LastFm;
 using NzbDrone.Core.Parser.Model;
 using System.Net;
+using System.Text.Json;
 
 namespace Tubifarry.ImportLists.LastFmRecommendation
 {
     internal class LastFmRecommendParser : IParseImportListResponse
     {
-        private readonly LastFmRecommendSettings _settings; private readonly IHttpClient _httpClient; private readonly Logger _logger;
+        private readonly LastFmRecommendSettings _settings;
+        private readonly IHttpClient _httpClient;
+        private readonly Logger _logger;
+        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
 
         public LastFmRecommendParser(LastFmRecommendSettings settings, IHttpClient httpClient)
         {
@@ -28,7 +31,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             if (!PreProcess(importListResponse))
                 return items;
 
-            LastFmTopResponse jsonResponse = Json.Deserialize<LastFmTopResponse>(importListResponse.Content);
+            LastFmTopResponse? jsonResponse = JsonSerializer.Deserialize<LastFmTopResponse>(importListResponse.Content, _jsonOptions);
             if (jsonResponse == null)
                 return items;
 
@@ -63,7 +66,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             {
                 HttpRequest request = BuildRequest("artist.getSimilar", new Dictionary<string, string> { { "artist", artist.Name } });
                 ImportListResponse response = FetchImportListResponse(request);
-                LastFmSimilarArtistsResponse similarResponse = Json.Deserialize<LastFmSimilarArtistsResponse>(response.Content);
+                LastFmSimilarArtistsResponse? similarResponse = JsonSerializer.Deserialize<LastFmSimilarArtistsResponse>(response.Content, _jsonOptions);
                 List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Artist '{0}': Fetched {1} similar artists.", artist.Name, similarList.Count);
@@ -105,7 +108,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             {
                 HttpRequest request = BuildRequest("artist.getSimilar", new Dictionary<string, string> { { "artist", artist.Name } });
                 ImportListResponse response = FetchImportListResponse(request);
-                LastFmSimilarArtistsResponse similarResponse = Json.Deserialize<LastFmSimilarArtistsResponse>(response.Content);
+                LastFmSimilarArtistsResponse? similarResponse = JsonSerializer.Deserialize<LastFmSimilarArtistsResponse>(response.Content, _jsonOptions);
                 List<LastFmArtist> similarList = similarResponse?.SimilarArtists?.Artist ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Artist '{0}': Fetched {1} similar artists.", artist.Name, similarList.Count);
@@ -145,7 +148,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
                 { "track", track.Name }
             });
                 ImportListResponse response = FetchImportListResponse(request);
-                LastFmSimilarTracksResponse similarResponse = Json.Deserialize<LastFmSimilarTracksResponse>(response.Content);
+                LastFmSimilarTracksResponse? similarResponse = JsonSerializer.Deserialize<LastFmSimilarTracksResponse>(response.Content, _jsonOptions);
                 List<LastFmArtist> similarList = similarResponse?.SimilarTracks?.Track.ConvertAll(t => t.Artist) ?? [];
                 similarLists.Add(similarList);
                 _logger.Trace("Track '{0}' by '{1}': Fetched {2} similar artists.", track.Name, track.Artist.Name, similarList.Count);
@@ -207,7 +210,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             _logger.Trace("Fetching top albums for artist '{0}'.", artist.Name);
             HttpRequest request = BuildRequest("artist.gettopalbums", new Dictionary<string, string> { { "artist", artist.Name } });
             ImportListResponse response = FetchImportListResponse(request);
-            return Json.Deserialize<LastFmTopAlbumsResponse>(response.Content)?.TopAlbums?.Album ?? [];
+            return JsonSerializer.Deserialize<LastFmTopAlbumsResponse>(response.Content, _jsonOptions)?.TopAlbums?.Album ?? [];
         }
 
         private static ImportListItemInfo ConvertAlbumToImportListItems(LastFmAlbum album) => new()
@@ -252,5 +255,4 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
             return true;
         }
     }
-
 }
