@@ -71,7 +71,10 @@ namespace Tubifarry.Download.Clients.Soulseek
                 {
                     fileState.UpdateFile(file);
                     if (fileState.State != fileState.PreviousState)
+                    {
+                        _logger.Trace($"State change detected: {Path.GetFileName(file.Filename)} | {fileState.PreviousState} -> {fileState.State}");
                         FileStateChanged?.Invoke(this, fileState);
+                    }
                 }
                 else
                 {
@@ -129,13 +132,17 @@ namespace Tubifarry.Download.Clients.Soulseek
 
             if (allStuckInRemoteQueue && !anyActiveDownload)
             {
+                _logger.Trace($"ID: {ID} | Setting status to Failed: All files stuck in remote queue (allStuckInRemoteQueue={allStuckInRemoteQueue}, anyActiveDownload={anyActiveDownload})");
                 status = DownloadItemStatus.Failed;
             }
             else if (!anyActiveDownload && incompleteFiles.Count != 0)
             {
                 DateTime lastActivity = incompleteFiles.SelectMany(f => new[] { f.EnqueuedAt, f.StartedAt, f.StartedAt + f.ElapsedTime }).Max();
                 if ((now - lastActivity) > (timeout * 2))
+                {
+                    _logger.Trace($"ID: {ID} | Setting status to Failed: Inactivity timeout exceeded");
                     status = DownloadItemStatus.Failed;
+                }
             }
             else if ((double)failedFiles.Count / fileStatuses.Count * 100 > 20)
             {
@@ -156,6 +163,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             }
             else if (fileStatuses.Any(status => status == DownloadItemStatus.Paused))
             {
+                _logger.Trace($"ID: {ID} | Setting status to Paused: At least one file is paused");
                 status = DownloadItemStatus.Paused;
             }
             else if (fileStatuses.Any(status => status == DownloadItemStatus.Warning))
@@ -174,6 +182,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             _downloadClientItem.RemainingTime = remainingTime;
             _downloadClientItem.Status = status;
 
+            _logger.Trace($"ID: {ID} | Status computed: {status} | Progress: {downloadedSize}/{totalSize} ({(totalSize > 0 ? (downloadedSize * 100.0 / totalSize).ToString("F1") : "0")}%)");
             return _downloadClientItem;
         }
     }
@@ -209,7 +218,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             _ => DownloadItemStatus.Queued // Default to "Queued" for unknown states
         };
 
-        public SlskdFileState(SlskdDownloadFile file) => UpdateFile(file);
+        public SlskdFileState(SlskdDownloadFile file) => File = file;
 
         public void UpdateFile(SlskdDownloadFile file)
         {
