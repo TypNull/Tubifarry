@@ -142,7 +142,7 @@ namespace Tubifarry.Metadata.Proxy
 
         private List<IProxy> GetActiveProxiesForInterface(Type interfaceType) =>
             _interfaceToProxyMap.GetValueOrDefault(interfaceType, [])
-                .Where(p => _activeProxies.Contains(p))
+                .Where(_activeProxies.Contains)
                 .ToList();
 
         private IProxy? SelectOptimalProxy(Type interfaceType, List<IProxy> availableProxies)
@@ -311,7 +311,10 @@ namespace Tubifarry.Metadata.Proxy
                 _logger.Trace($"Setting default proxy for {originalInterface.Name}: {defaultProxy.Name}");
                 EnsureProxyIsActive(defaultProxy);
                 _defaultProxies.Add(defaultProxy);
-                RegisterProxy(defaultProxy);
+
+                int priority = defaultProxy.GetType().GetPriorityForInterface(originalInterface);
+                AddProxyToInterfaceMapping(defaultProxy, originalInterface, priority);
+                UpdateActiveProxyForInterface(originalInterface);
             }
             else
             {
