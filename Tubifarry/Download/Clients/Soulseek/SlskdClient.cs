@@ -39,6 +39,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         public override async Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer)
         {
             SlskdDownloadItem item = new(remoteAlbum.Release);
+            _logger.Trace($"Download initiated: {remoteAlbum.Release.Title} | Files: {item.FileData.Count}");
             try
             {
                 HttpRequest request = BuildHttpRequest(remoteAlbum.Release.DownloadUrl, HttpMethod.Post, remoteAlbum.Release.Source);
@@ -66,7 +67,7 @@ namespace Tubifarry.Download.Clients.Soulseek
             fileState.UpdateMaxRetryCount(Settings.RetryAttempts);
             if (fileState.GetStatus() != DownloadItemStatus.Warning)
                 return;
-            _logger.Trace($"Retrying download for file: {fileState.File.Filename}. Attempt {fileState.RetryCount} of {fileState.MaxRetryCount}");
+            _logger.Trace($"Retry triggered: {Path.GetFileName(fileState.File.Filename)} | State: {fileState.State} | Attempt: {fileState.RetryCount + 1}/{fileState.MaxRetryCount}");
             _ = RetryDownloadAsync(fileState, (SlskdDownloadItem)sender!);
         }
 
@@ -185,6 +186,8 @@ namespace Tubifarry.Download.Clients.Soulseek
             List<JsonElement>? downloads = JsonSerializer.Deserialize<List<JsonElement>>(response.Content, _jsonOptions);
             HashSet<string> currentDownloadIds = [];
 
+            _logger.Debug($"Update Items: Slskd returned {downloads?.Count ?? 0} users | Tracked items: {GetDownloadItems().Count()}");
+
             downloads?.ForEach(user =>
             {
                 user.TryGetProperty("directories", out JsonElement directoriesElement);
@@ -196,6 +199,7 @@ namespace Tubifarry.Download.Clients.Soulseek
                     SlskdDownloadItem? item = GetDownloadItem(hash);
                     if (item == null)
                     {
+                        _logger.Trace($"Download item not found, checking history for {hash}");
                         DownloadHistory download = _downloadService.GetLatestGrab(hash);
                         if (download != null)
                             AddDownloadItem(new SlskdDownloadItem(download.Release));
