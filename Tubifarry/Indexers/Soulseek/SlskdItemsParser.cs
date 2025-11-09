@@ -3,9 +3,6 @@ using Newtonsoft.Json;
 using NLog;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Indexers;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
@@ -97,6 +94,7 @@ namespace Tubifarry.Indexers.Soulseek
             Logger.Trace($"Audio: {Codec}, BitRate: {BitRate}, BitDepth: {BitDepth}, Files: {filesToDownload?.Count ?? 0}");
 
             string infoUrl = settings != null ? $"{(string.IsNullOrEmpty(settings.ExternalUrl) ? settings.BaseUrl : settings.ExternalUrl)}/searches/{searchId}" : "";
+            string? edition = ExtractEdition(folderData.Path)?.ToUpper();
 
             return new AlbumData("Slskd", nameof(SoulseekDownloadProtocol))
             {
@@ -117,7 +115,7 @@ namespace Tubifarry.Indexers.Soulseek
                 ExplicitContent = ExtractExplicitTag(folderData.Path),
                 Priotity = folderData.CalculatePriority(expectedTrackCount),
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
-                ExtraInfo = [$"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
+                ExtraInfo = [edition, $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
                 Duration = TotalDuration
             };
         }
@@ -304,6 +302,12 @@ namespace Tubifarry.Indexers.Soulseek
             return false;
         }
 
+        private static string? ExtractEdition(string path)
+        {
+            Match match = EditionRegex().Match(path);
+            return match.Success ? match.Groups["edition"].Value.Trim() : null;
+        }
+
         private static string? ExtractYearFromPath(string path)
         {
             Match yearMatch = YearExtractionRegex().Match(path);
@@ -433,6 +437,8 @@ namespace Tubifarry.Indexers.Soulseek
         [GeneratedRegex(@"(?:^|\s|\(|\[)(?<negation>Non-?|Not\s+)?Explicit(?:\s|\)|\]|$)", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
         private static partial Regex ExplicitTagRegex();
 
+        [GeneratedRegex(@"\((?<edition>(?:Super\s+)?Deluxe|Limited|Special|Expanded|Extended|Anniversary|Remaster(?:ed)?|Live|Acoustic|Unplugged|Japanese|Bonus|Instrumental|Collector'?s)(?:\s+(?:Edition|Version|Album|Tracks?|Exclusive))?\)", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+        private static partial Regex EditionRegex();
 
         [GeneratedRegex(@"\b(?:the|a|an|feat|featuring|ft|presents|pres|with|and)\b", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
         private static partial Regex RemoveWordsRegex();
