@@ -1,6 +1,7 @@
 ﻿using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Extras.Metadata;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
 
@@ -29,6 +30,12 @@ namespace Tubifarry.Metadata.Lyrics
             RuleFor(x => new { x.LrcLibEnabled, x.GeniusEnabled })
                 .Must(x => x.LrcLibEnabled || x.GeniusEnabled)
                 .WithMessage("At least one lyrics provider must be enabled");
+
+            // Validate UpdateInterval when scheduled updates are enabled
+            RuleFor(x => x.UpdateInterval)
+                .GreaterThanOrEqualTo(7)
+                .When(x => x.EnableScheduledUpdates)
+                .WithMessage("Update interval must be at least 1 week");
         }
     }
 
@@ -60,6 +67,30 @@ namespace Tubifarry.Metadata.Lyrics
         [FieldDefinition(6, Label = "Genius API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Your Genius API key", Privacy = PrivacyLevel.ApiKey)]
         public string GeniusApiKey { get; set; } = "";
 
+        // Scheduled Update Settings
+        [FieldDefinition(7, Label = "Enable Scheduled Updates", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable automatic scheduled updates to refresh lyrics for existing files")]
+        public bool EnableScheduledUpdates { get; set; }
+
+        [FieldDefinition(8, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
+        public int UpdateInterval { get; set; } = 7;
+
+        public LyricsEnhancerSettings() => Instance = this;
+        public static LyricsEnhancerSettings? Instance { get; private set; }
+
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
+    }
+
+    /// <summary>
+    /// Command for scheduled lyrics update task.
+    /// </summary>
+    public class LyricsUpdateCommand : Command
+    {
+        public override bool SendUpdatesToClient => true;
+
+        public override bool UpdateScheduledTask => true;
+
+        public override string CompletionMessage => _completionMessage ?? "Lyrics update completed";
+        private string? _completionMessage;
+        public void SetCompletionMessage(string message) => _completionMessage = message;
     }
 }

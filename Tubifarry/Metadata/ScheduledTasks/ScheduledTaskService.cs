@@ -13,7 +13,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
         IEnumerable<IProvideScheduledTask> TaskProviders { get; }
         IEnumerable<IProvideScheduledTask> ActiveTaskProviders { get; }
         void InitializeTasks();
-        void UpdateTaskInterval<T>() where T : IProvideScheduledTask;
+        void UpdateTask<T>() where T : IProvideScheduledTask;
         void EnableTask(IProvideScheduledTask provider);
         void DisableTask(IProvideScheduledTask provider);
     }
@@ -50,12 +50,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
             TaskProviders = taskProviders;
 
             foreach (IProvideScheduledTask provider in taskProviders.Where(x => (x as IProvider)?.Definition?.Enable == true))
-            {
-                _logger.Trace($"Activating task: {(provider as IProvider)?.Name} (Interval: {provider.IntervalMinutes}m)");
-                _activeTaskProviders.Add(provider);
-                RegisterTask(provider);
-            }
-
+                EnableTask(provider);
             _logger.Debug($"Initialized scheduled task system: {_activeTaskProviders.Count} active tasks, {TaskProviders.Count()} total task providers");
         }
 
@@ -100,6 +95,13 @@ namespace Tubifarry.Metadata.ScheduledTasks
 
         public void EnableTask(IProvideScheduledTask provider)
         {
+            if (provider.IntervalMinutes <= 0)
+            {
+                _logger.Trace($"Task has interval <= 0, treating as disabled: {(provider as IProvider)?.Name}");
+                DisableTask(provider);
+                return;
+            }
+
             if (_activeTaskProviders.Contains(provider))
             {
                 _logger.Trace($"Task already enabled: {(provider as IProvider)?.Name}");
@@ -181,7 +183,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
             }
         }
 
-        public void UpdateTaskInterval<T>() where T : IProvideScheduledTask
+        public void UpdateTask<T>() where T : IProvideScheduledTask
         {
             string typeName = typeof(T).FullName!;
 
@@ -197,7 +199,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
                 return;
             }
 
-            UpdateTaskInterval(provider);
+            EnableTask(provider);
         }
 
         private void UpdateTaskInterval(IProvideScheduledTask provider)
@@ -243,7 +245,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
                     return false;
                 }
 
-                if (provider.IntervalMinutes < 1)
+                if (provider.IntervalMinutes < 0)
                 {
                     _logger.Warn($"Task provider {(provider as IProvider)?.Name} has invalid interval ({provider.IntervalMinutes}m). Provider will be excluded.");
                     return false;

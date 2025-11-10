@@ -59,7 +59,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
         private SearchSniperTaskSettings ActiveSettings => Settings ?? SearchSniperTaskSettings.Instance!;
 
-        public override int IntervalMinutes => SearchSniperTaskSettings.Instance.RefreshInterval;
+        public override int IntervalMinutes => SearchSniperTaskSettings.Instance!.RefreshInterval;
 
         public override CommandPriority Priority => CommandPriority.Low;
 
