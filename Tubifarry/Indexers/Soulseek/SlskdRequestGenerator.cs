@@ -151,6 +151,20 @@ namespace Tubifarry.Indexers.Soulseek
 
         private void AddFallbackTiers(LazyIndexerPageableRequestChain chain, SearchParameters searchParams)
         {
+            if (searchParams.Artist != null)
+            {
+                // Artist with wildcard substitution
+                chain.AddTierFactory(SearchTierGenerator.CreateTier(() =>
+                    ExecuteSearch(
+                        $"*{searchParams.Artist[1..]}",
+                        searchParams.Album,
+                        searchParams.Interactive,
+                        false,
+                        searchParams.TrackCount
+                    )
+                ));   
+            }
+            
             // Artist aliases (limit to 2)
             for (int i = 0; i < Math.Min(2, searchParams.Aliases.Count); i++)
             {
