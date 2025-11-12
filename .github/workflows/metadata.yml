@@ -154,7 +154,7 @@ jobs:
           echo "Build suffix: $BUILD_SUFFIX"
           echo "build_suffix=$BUILD_SUFFIX" >> $GITHUB_OUTPUT
 
-- name: Set Minimum Lidarr Version Manually (Workaround for Plugins Branch)
+      - name: Set Minimum Lidarr Version Manually (Workaround for Plugins Branch)
         id: fetch_minimum_lidarr_version
         run: |
           # Lidarr Plugins Branch always accepts Version 0.0.0.0.
