@@ -154,22 +154,10 @@ jobs:
           echo "Build suffix: $BUILD_SUFFIX"
           echo "build_suffix=$BUILD_SUFFIX" >> $GITHUB_OUTPUT
 
-      - name: Fetch Minimum Lidarr Version from Submodule
-        id: fetch_minimum_lidarr_version
-        run: |
-          if [ -f "Submodules/Lidarr/azure-pipelines.yml" ]; then
-            RAW_YAML=$(cat Submodules/Lidarr/azure-pipelines.yml)
-          else
-            echo "Error: Submodules/Lidarr/azure-pipelines.yml not found!"
-            exit 1
-          fi
-          MAJOR_VERSION=$(echo "$RAW_YAML" | grep "majorVersion:" | head -n 1 | sed "s/.*majorVersion: *'\([^']*\)'.*/\1/")
-          echo "Extracted majorVersion: $MAJOR_VERSION"
-          DOT_COUNT=$(echo "$MAJOR_VERSION" | awk -F. '{print NF-1}')
-          if [ "$DOT_COUNT" -eq 2 ]; then
-            MINIMUM_LIDARR_VERSION="${MAJOR_VERSION}.0"
-          else
-            MINIMUM_LIDARR_VERSION="$MAJOR_VERSION"
-          fi
-          echo "Minimum Lidarr Version: $MINIMUM_LIDARR_VERSION"
-          echo "minimum_lidarr_version=$MINIMUM_LIDARR_VERSION" >> $GITHUB_OUTPUT
+- name: Set Minimum Lidarr Version Manually (Workaround for Plugins Branch)
+        id: fetch_minimum_lidarr_version
+        run: |
+          # Lidarr Plugins Branch always accepts Version 0.0.0.0.
+          MINIMUM_LIDARR_VERSION="0.0.0.0"
+          echo "WARNUNG: Minimum Lidarr Version set to 0.0.0.0 to support Plugins Branch!"
+          echo "minimum_lidarr_version=$MINIMUM_LIDARR_VERSION" >> $GITHUB_OUTPUT
