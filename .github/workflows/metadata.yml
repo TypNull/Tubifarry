@@ -155,9 +155,8 @@ jobs:
           echo "build_suffix=$BUILD_SUFFIX" >> $GITHUB_OUTPUT
 
       - name: Set Minimum Lidarr Version Manually (Workaround for Plugins Branch)
-        id: fetch_minimum_lidarr_version
-        run: |
-          # Lidarr Plugins Branch always accepts Version 0.0.0.0.
-          MINIMUM_LIDARR_VERSION="0.0.0.0"
-          echo "WARNUNG: Minimum Lidarr Version set to 0.0.0.0 to support Plugins Branch!"
-          echo "minimum_lidarr_version=$MINIMUM_LIDARR_VERSION" >> $GITHUB_OUTPUT
+        id: fetch_minimum_lidarr_version
+        run: |
+          MINIMUM_LIDARR_VERSION="0.0.0.0"
+          echo "WARNUNG: Minimum Lidarr Version set to 0.0.0.0 to support Plugins Branch!"
+          echo "minimum_lidarr_version=$MINIMUM_LIDARR_VERSION" >> $GITHUB_OUTPUT
