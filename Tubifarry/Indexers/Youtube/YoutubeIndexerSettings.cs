@@ -22,6 +22,11 @@ namespace Tubifarry.Indexers.Youtube
                 .Length(32, 64)
                 .When(x => !string.IsNullOrEmpty(x.PoToken))
                 .WithMessage("Proof of Origin (poToken) must be between 32 and 64 characters if provided.");
+
+            // Validate Unavailable
+            RuleFor(x => x.Unavailable)
+                .Must(unavailable => !unavailable)
+                .WithMessage("This version of Tubifarry does not support YouTube as indexer. If you need YouTube support you need to switch to develop!");
         }
     }
 
@@ -37,6 +42,7 @@ namespace Tubifarry.Indexers.Youtube
 
         [FieldDefinition(2, Label = "PoToken", Type = FieldType.Textbox, HelpText = "A unique token to verify the origin of the request.", Advanced = true)]
         public string PoToken { get; set; } = string.Empty;
+        public bool Unavailable { get; set; } = true;
 
         public string BaseUrl { get; set; } = string.Empty;
 

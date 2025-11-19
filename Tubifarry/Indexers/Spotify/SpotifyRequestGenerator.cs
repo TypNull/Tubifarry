@@ -118,7 +118,7 @@ namespace Tubifarry.Indexers.Spotify
                     return false;
                 }
                 return true;
-            }, new() { NumberOfAttempts = 1 });
+            }, new() { NumberOfAttempts = 1, AutoStart = false });
         }
     }
 }
