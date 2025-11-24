@@ -1,6 +1,7 @@
 ﻿using FluentValidation.Results;
 using NLog;
 using NzbDrone.Common.Disk;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
@@ -23,6 +24,7 @@ namespace Tubifarry.Download.Clients.DABMusic
         private readonly IDABMusicDownloadManager _downloadManager;
         private readonly INamingConfigService _namingService;
         private readonly IDABMusicSessionManager _sessionManager;
+        private readonly IEnumerable<IHttpRequestInterceptor> _requestInterceptors;
 
         public DABMusicClient(
             IDABMusicDownloadManager downloadManager,
@@ -32,10 +34,12 @@ namespace Tubifarry.Download.Clients.DABMusic
             INamingConfigService namingConfigService,
             IRemotePathMappingService remotePathMappingService,
             ILocalizationService localizationService,
+            IEnumerable<IHttpRequestInterceptor> requestInterceptors,
             Logger logger)
             : base(configService, diskProvider, remotePathMappingService, localizationService, logger)
         {
             _downloadManager = downloadManager;
+            _requestInterceptors = requestInterceptors;
             _namingService = namingConfigService;
             _sessionManager = sessionManager;
         }
@@ -58,7 +62,7 @@ namespace Tubifarry.Download.Clients.DABMusic
         public override DownloadClientInfo GetStatus() => new()
         {
             IsLocalhost = false,
-            OutputRootFolders = new() { new OsPath(Settings.DownloadPath) }
+            OutputRootFolders = [new OsPath(Settings.DownloadPath)]
         };
 
         protected override void Test(List<ValidationFailure> failures)
@@ -76,7 +80,7 @@ namespace Tubifarry.Download.Clients.DABMusic
 
             try
             {
-                BaseHttpClient httpClient = new(Settings.BaseUrl, TimeSpan.FromSeconds(30));
+                BaseHttpClient httpClient = new(Settings.BaseUrl, _requestInterceptors, TimeSpan.FromSeconds(30));
                 string response = httpClient.GetStringAsync("/").GetAwaiter().GetResult();
 
                 if (string.IsNullOrEmpty(response))

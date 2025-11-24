@@ -1,4 +1,5 @@
 ﻿using NLog;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
@@ -13,10 +14,12 @@ namespace Tubifarry.Download.Clients.DABMusic
     public class DABMusicDownloadManager : BaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>, IDABMusicDownloadManager
     {
         private readonly IDABMusicSessionManager _sessionManager;
+        private readonly IEnumerable<IHttpRequestInterceptor> _requestInterceptors;
 
-        public DABMusicDownloadManager(IDABMusicSessionManager sessionManager, Logger logger) : base(logger)
+        public DABMusicDownloadManager(IDABMusicSessionManager sessionManager, IEnumerable<IHttpRequestInterceptor> requestInterceptors, Logger logger) : base(logger)
         {
             _sessionManager = sessionManager;
+            _requestInterceptors = requestInterceptors;
         }
 
         protected override async Task<DABMusicDownloadRequest> CreateDownloadRequest(
@@ -39,6 +42,7 @@ namespace Tubifarry.Download.Clients.DABMusic
                 MaxDownloadSpeed = provider.Settings.MaxDownloadSpeed * 1024, // Convert KB/s to bytes/s
                 ConnectionRetries = provider.Settings.ConnectionRetries,
                 NamingConfig = namingConfig,
+                RequestInterceptors = _requestInterceptors,
                 DelayBetweenAttemps = TimeSpan.FromSeconds(2),
                 NumberOfAttempts = (byte)provider.Settings.ConnectionRetries,
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),

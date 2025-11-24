@@ -62,7 +62,10 @@ namespace Tubifarry.Indexers.DABMusic
             HttpRequest req = new(url)
             {
                 RequestTimeout = TimeSpan.FromSeconds(_settings!.RequestTimeout),
-                ContentSummary = new DABMusicRequestData(baseUrl, searchType, _settings.SearchLimit).ToJson()
+                ContentSummary = new DABMusicRequestData(baseUrl, searchType, _settings.SearchLimit).ToJson(),
+                // FlareSolverr interceptor will handle protection challenges
+                SuppressHttpError = false,
+                LogHttpError = true
             };
             req.Headers["User-Agent"] = Tubifarry.UserAgent;
 

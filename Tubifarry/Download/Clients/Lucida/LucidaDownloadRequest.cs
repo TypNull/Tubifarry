@@ -23,7 +23,7 @@ namespace Tubifarry.Download.Clients.Lucida
 
         public LucidaDownloadRequest(RemoteAlbum remoteAlbum, BaseDownloadOptions? options) : base(remoteAlbum, options)
         {
-            _httpClient = new BaseHttpClient(Options.BaseUrl, TimeSpan.FromSeconds(Options.RequestTimeout));
+            _httpClient = new BaseHttpClient(Options.BaseUrl, Options.RequestInterceptors, TimeSpan.FromSeconds(Options.RequestTimeout));
 
             _requestContainer.Add(new OwnRequest(async (token) =>
             {

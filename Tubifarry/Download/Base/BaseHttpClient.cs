@@ -1,4 +1,5 @@
 using DownloadAssistant.Base;
+using NzbDrone.Common.Http;
 
 namespace Tubifarry.Download.Base
 {
@@ -7,20 +8,29 @@ namespace Tubifarry.Download.Base
     /// Provides standardized HTTP operations with proper headers and error handling
     /// Never modifies the shared HttpClient uses individual requests with proper headers
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the BaseHttpClient
-    /// </remarks>
-    /// <param name="baseUrl">Base URL for the service instance</param>
-    /// <param name="timeout">Request timeout (default: 60 seconds)</param>
-    public class BaseHttpClient(string baseUrl, TimeSpan? timeout = null)
+    public class BaseHttpClient
     {
-        private readonly HttpClient _httpClient = HttpGet.HttpClient;
-        private readonly TimeSpan _timeout = timeout ?? TimeSpan.FromSeconds(60);
+        private readonly System.Net.Http.HttpClient _httpClient = HttpGet.HttpClient;
+        private readonly TimeSpan _timeout;
+        private readonly List<IHttpRequestInterceptor> _requestInterceptors;
+
+        /// <summary>
+        /// Initializes a new instance of the BaseHttpClient
+        /// </summary>
+        /// <param name="baseUrl">Base URL for the service instance</param>
+        /// <param name="requestInterceptors">Optional list of request interceptors</param>
+        /// <param name="timeout">Request timeout (default: 60 seconds)</param>
+        public BaseHttpClient(string baseUrl, IEnumerable<IHttpRequestInterceptor> requestInterceptors, TimeSpan? timeout = null)
+        {
+            BaseUrl = baseUrl?.TrimEnd('/') ?? throw new ArgumentNullException(nameof(baseUrl));
+            _timeout = timeout ?? TimeSpan.FromSeconds(60);
+            _requestInterceptors = requestInterceptors?.ToList() ?? [];
+        }
 
         /// <summary>
         /// Gets the base URL for this service instance
         /// </summary>
-        public string BaseUrl { get; } = baseUrl?.TrimEnd('/') ?? throw new ArgumentNullException(nameof(baseUrl));
+        public string BaseUrl { get; }
 
         /// <summary>
         /// Creates a properly configured HttpRequestMessage with standard headers
@@ -41,7 +51,7 @@ namespace Tubifarry.Download.Base
         }
 
         /// <summary>
-        /// Sends an HTTP request with timeout handling
+        /// Sends an HTTP request with timeout handling and interceptor support
         /// </summary>
         /// <param name="request">The HTTP request to send</param>
         /// <param name="cancellationToken">Cancellation token</param>
@@ -51,15 +61,131 @@ namespace Tubifarry.Download.Base
         {
             try
             {
+                HttpRequest nzbRequest = ConvertToNzbRequest(request);
+
+                foreach (IHttpRequestInterceptor interceptor in _requestInterceptors)
+                {
+                    nzbRequest = interceptor.PreRequest(nzbRequest);
+                }
+
+                ApplyNzbRequestToHttpRequestMessage(nzbRequest, request);
+
                 using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(_timeout);
 
-                return await _httpClient.SendAsync(request, cts.Token);
+                HttpResponseMessage response = await _httpClient.SendAsync(request, cts.Token);
+
+                HttpResponse nzbResponse = await ConvertToNzbResponse(nzbRequest, response);
+
+                foreach (IHttpRequestInterceptor interceptor in _requestInterceptors)
+                {
+                    nzbResponse = interceptor.PostResponse(nzbResponse);
+                }
+
+                return ConvertToHttpResponseMessage(nzbResponse);
             }
             catch (Exception ex)
             {
                 throw new Exception($"HTTP request failed for URL '{request.RequestUri}': {ex.Message}", ex);
             }
+        }
+
+        private static HttpRequest ConvertToNzbRequest(HttpRequestMessage httpRequest)
+        {
+            HttpRequest nzbRequest = new(httpRequest.RequestUri?.ToString())
+            {
+                Method = httpRequest.Method
+            };
+
+            foreach (KeyValuePair<string, IEnumerable<string>> header in httpRequest.Headers)
+            {
+                nzbRequest.Headers[header.Key] = string.Join(", ", header.Value);
+            }
+
+            if (httpRequest.Content != null)
+            {
+                foreach (KeyValuePair<string, IEnumerable<string>> header in httpRequest.Content.Headers)
+                {
+                    nzbRequest.Headers[header.Key] = string.Join(", ", header.Value);
+                }
+
+                byte[] contentBytes = httpRequest.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                if (contentBytes.Length > 0)
+                {
+                    nzbRequest.SetContent(contentBytes);
+                }
+            }
+
+            return nzbRequest;
+        }
+
+        private static void ApplyNzbRequestToHttpRequestMessage(HttpRequest nzbRequest, HttpRequestMessage httpRequest)
+        {
+            // Apply modified headers back to HttpRequestMessage
+            foreach (KeyValuePair<string, string> header in nzbRequest.Headers)
+            {
+                if (httpRequest.Headers.Contains(header.Key))
+                {
+                    httpRequest.Headers.Remove(header.Key);
+                }
+                httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+
+            // Apply cookies
+            if (nzbRequest.Cookies.Count > 0)
+            {
+                string cookieHeader = string.Join("; ", nzbRequest.Cookies.Select(c => $"{c.Key}={c.Value}"));
+                if (httpRequest.Headers.Contains("Cookie"))
+                {
+                    httpRequest.Headers.Remove("Cookie");
+                }
+                httpRequest.Headers.Add("Cookie", cookieHeader);
+            }
+        }
+
+        private static async Task<HttpResponse> ConvertToNzbResponse(HttpRequest nzbRequest, HttpResponseMessage httpResponse)
+        {
+            HttpHeader headers = [];
+
+            foreach (KeyValuePair<string, IEnumerable<string>> header in httpResponse.Headers)
+            {
+                headers[header.Key] = string.Join(", ", header.Value);
+            }
+
+            if (httpResponse.Content != null)
+            {
+                foreach (KeyValuePair<string, IEnumerable<string>> header in httpResponse.Content.Headers)
+                {
+                    headers[header.Key] = string.Join(", ", header.Value);
+                }
+            }
+
+            byte[] responseData = [];
+            if (httpResponse.Content != null)
+            {
+                responseData = await httpResponse.Content.ReadAsByteArrayAsync();
+            }
+
+            return new HttpResponse(nzbRequest, headers, responseData, httpResponse.StatusCode, httpResponse.Version);
+        }
+
+        private static HttpResponseMessage ConvertToHttpResponseMessage(HttpResponse nzbResponse)
+        {
+            HttpResponseMessage httpResponse = new(nzbResponse.StatusCode)
+            {
+                Version = nzbResponse.Version,
+                Content = new ByteArrayContent(nzbResponse.ResponseData ?? [])
+            };
+
+            foreach (KeyValuePair<string, string> header in nzbResponse.Headers)
+            {
+                if (!httpResponse.Headers.TryAddWithoutValidation(header.Key, header.Value))
+                {
+                    httpResponse.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+            }
+
+            return httpResponse;
         }
 
         /// <summary>
@@ -74,11 +200,12 @@ namespace Tubifarry.Download.Base
             try
             {
                 using HttpRequestMessage request = CreateRequest(HttpMethod.Get, url);
+                using HttpResponseMessage response = await SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+
                 using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(_timeout);
 
-                using HttpResponseMessage response = await _httpClient.SendAsync(request, cts.Token);
-                response.EnsureSuccessStatusCode();
                 return await response.Content.ReadAsStringAsync(cts.Token);
             }
             catch (Exception ex)
@@ -99,10 +226,7 @@ namespace Tubifarry.Download.Base
             try
             {
                 using HttpRequestMessage request = CreateRequest(HttpMethod.Get, url);
-                using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                cts.CancelAfter(_timeout);
-
-                return await _httpClient.SendAsync(request, cts.Token);
+                return await SendAsync(request, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -127,8 +251,7 @@ namespace Tubifarry.Download.Base
                 if (!request.Headers.Contains("Accept"))
                     request.Headers.Add("Accept", "application/json,text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
 
-                using CancellationTokenSource cts = new(_timeout);
-                return await _httpClient.SendAsync(request, cts.Token);
+                return await SendAsync(request);
             }
             catch (Exception ex)
             {
@@ -151,10 +274,7 @@ namespace Tubifarry.Download.Base
                 using HttpRequestMessage request = CreateRequest(HttpMethod.Post, url);
                 request.Content = content;
 
-                using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                cts.CancelAfter(_timeout);
-
-                return await _httpClient.SendAsync(request, cts.Token);
+                return await SendAsync(request, cancellationToken);
             }
             catch (Exception ex)
             {

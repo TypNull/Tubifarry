@@ -1,4 +1,5 @@
 using NLog;
+using NzbDrone.Common.Http;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
@@ -16,7 +17,7 @@ namespace Tubifarry.Download.Clients.Lucida
     /// <summary>
     /// Lucida download manager using the base download manager implementation
     /// </summary>
-    public class LucidaDownloadManager(Logger logger) : BaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient>(logger), ILucidaDownloadManager
+    public class LucidaDownloadManager(Logger logger, IEnumerable<IHttpRequestInterceptor> requestInterceptors) : BaseDownloadManager<LucidaDownloadRequest, BaseDownloadOptions, LucidaClient>(logger), ILucidaDownloadManager
     {
         protected override async Task<LucidaDownloadRequest> CreateDownloadRequest(
             RemoteAlbum remoteAlbum,
@@ -42,6 +43,7 @@ namespace Tubifarry.Download.Clients.Lucida
                 ConnectionRetries = provider.Settings.ConnectionRetries,
                 NamingConfig = namingConfig,
                 DelayBetweenAttemps = TimeSpan.FromSeconds(2),
+                RequestInterceptors = requestInterceptors,
                 NumberOfAttempts = (byte)provider.Settings.ConnectionRetries,
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),
                 IsTrack = isTrack,

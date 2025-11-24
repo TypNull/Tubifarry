@@ -1,4 +1,5 @@
-﻿using NzbDrone.Core.Download;
+﻿using NzbDrone.Common.Http;
+using NzbDrone.Core.Download;
 using NzbDrone.Core.Organizer;
 using Requests.Options;
 
@@ -60,6 +61,11 @@ namespace Tubifarry.Download.Base
         /// </summary>
         public string ItemId { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Request tnterceptors for requests
+        /// </summary>
+        public IEnumerable<IHttpRequestInterceptor> RequestInterceptors { get; set; } = [];
+
         public BaseDownloadOptions() { }
 
         protected BaseDownloadOptions(BaseDownloadOptions options) : base(options)
@@ -74,6 +80,7 @@ namespace Tubifarry.Download.Base
             IsTrack = options.IsTrack;
             Chunks = options.Chunks;
             ItemId = options.ItemId;
+            RequestInterceptors = options.RequestInterceptors;
         }
     }
 }
