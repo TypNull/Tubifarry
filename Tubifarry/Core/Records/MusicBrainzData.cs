@@ -14,15 +14,32 @@ namespace Tubifarry.Core.Records
         }
     }
 
-    public record MusicBrainzAlbumItem(string? AlbumId, string? Title, string? Type, string? PrimaryType, string? Artist, string? ArtistId, DateTime ReleaseDate)
+    public record MusicBrainzAlbumItem(string? AlbumId, string? Title, string? Type, string? PrimaryType, List<string> SecondaryTypes, string? Artist, string? ArtistId, DateTime ReleaseDate)
     {
         public static MusicBrainzAlbumItem? FromXml(XElement releaseGroup, XNamespace ns)
         {
             if (releaseGroup == null)
                 return null;
 
-            return new MusicBrainzAlbumItem(releaseGroup.Attribute("id")?.Value, releaseGroup.Element(ns + "title")?.Value, releaseGroup.Attribute("type")?.Value,
-                releaseGroup.Element(ns + "primary-type")?.Value, releaseGroup.Element(ns + "artist-credit")?.Element(ns + "name-credit")?.Element(ns + "artist")?.Element(ns + "name")?.Value, releaseGroup.Element(ns + "artist-credit")?.Element(ns + "name-credit")?.Element(ns + "artist")?.Attribute("id")?.Value, DateTime.TryParse(releaseGroup.Element(ns + "first-release-date")?.Value, out DateTime date) ? date : DateTime.MinValue);
+            var secondaryTypes = new List<string>();
+            var secondaryTypeList = releaseGroup.Element(ns + "secondary-type-list");
+            if (secondaryTypeList != null)
+            {
+                secondaryTypes = secondaryTypeList.Elements(ns + "secondary-type")
+                    .Select(e => e.Value)
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .ToList();
+            }
+
+            return new MusicBrainzAlbumItem(
+                releaseGroup.Attribute("id")?.Value,
+                releaseGroup.Element(ns + "title")?.Value,
+                releaseGroup.Attribute("type")?.Value,
+                releaseGroup.Element(ns + "primary-type")?.Value,
+                secondaryTypes,
+                releaseGroup.Element(ns + "artist-credit")?.Element(ns + "name-credit")?.Element(ns + "artist")?.Element(ns + "name")?.Value,
+                releaseGroup.Element(ns + "artist-credit")?.Element(ns + "name-credit")?.Element(ns + "artist")?.Attribute("id")?.Value,
+                DateTime.TryParse(releaseGroup.Element(ns + "first-release-date")?.Value, out DateTime date) ? date : DateTime.MinValue);
         }
     }
 }
