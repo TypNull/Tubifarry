@@ -18,7 +18,9 @@ namespace Tubifarry.Core.Utilities
         AMR,
         WMA,
         ALAC,
-        APE
+        APE,
+        AC3,
+        EAC3
     }
 
     internal static class AudioFormatHelper
@@ -30,7 +32,9 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.Vorbis,
             AudioFormat.MP4,
             AudioFormat.AMR,
-            AudioFormat.WMA
+            AudioFormat.WMA,
+            AudioFormat.AC3,
+            AudioFormat.EAC3
         ];
 
         private static readonly int[] _standardBitrates = [
@@ -55,12 +59,14 @@ namespace Tubifarry.Core.Utilities
         {
             { AudioFormat.AAC,    (256, 64, 320) },
             { AudioFormat.MP3,    (320, 64, 320) },
-            { AudioFormat.Opus,   (96, 32, 510) },
+            { AudioFormat.Opus,   (256, 32, 510) },
             { AudioFormat.Vorbis, (224, 64, 500) },
             { AudioFormat.MP4,    (256, 64, 320) },
             { AudioFormat.AMR,    (12, 5, 12) },
             { AudioFormat.WMA,    (192, 48, 320) },
-            { AudioFormat.OGG,    (224, 64, 500) }
+            { AudioFormat.OGG,    (224, 64, 500) },
+            { AudioFormat.AC3,    (448, 192, 640) },
+            { AudioFormat.EAC3,   (768, 192, 6144) }
         };
 
         /// <summary>
@@ -91,6 +97,7 @@ namespace Tubifarry.Core.Utilities
             "opus" => ".opus",
             "flac" => ".flac",
             "ac3" => ".ac3",
+            "eac3" or "ec3" => ".ec3",
             "alac" => ".m4a",
             "vorbis" => ".ogg",
             "ape" => ".ape",
@@ -116,6 +123,8 @@ namespace Tubifarry.Core.Utilities
             "wma" => AudioFormat.WMA,
             "alac" => AudioFormat.ALAC,
             "ape" => AudioFormat.APE,
+            "ac3" or "ac-3" => AudioFormat.AC3,
+            "eac3" or "eac-3" or "e-ac-3" or "ec-3" or "ec3" => AudioFormat.EAC3,
             _ => AudioFormat.Unknown // Default for unknown formats
         };
 
@@ -138,6 +147,8 @@ namespace Tubifarry.Core.Utilities
             AudioFormat.OGG => ".ogg",
             AudioFormat.ALAC => ".m4a",
             AudioFormat.APE => ".ape",
+            AudioFormat.AC3 => ".ac3",
+            AudioFormat.EAC3 => ".ec3",
             _ => ".aac" // Default to AAC if the format is unknown
         };
 
@@ -176,6 +187,8 @@ namespace Tubifarry.Core.Utilities
             "wma" => AudioFormat.WMA,
             "alac" => AudioFormat.ALAC,
             "ape" => AudioFormat.APE,
+            "ac3" => AudioFormat.AC3,
+            "ec3" or "eac3" => AudioFormat.EAC3,
             _ => AudioFormat.Unknown
         };
 

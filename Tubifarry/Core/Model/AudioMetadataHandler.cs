@@ -392,6 +392,16 @@ namespace Tubifarry.Core.Model
                 file.Save();
                 return true;
             }
+            catch (TagLib.CorruptFileException ex)
+            {
+                _logger?.Error(ex, $"File is corrupted or has incorrect extension: {TrackPath}");
+                return false;
+            }
+            catch (TagLib.UnsupportedFormatException ex)
+            {
+                _logger?.Error(ex, $"File format does not support metadata embedding: {TrackPath}");
+                return false;
+            }
             catch (Exception ex)
             {
                 _logger?.Error(ex, $"Failed to embed metadata in track: {TrackPath}");
@@ -406,6 +416,25 @@ namespace Tubifarry.Core.Model
         /// <returns>True if the format can be used as a conversion target, false otherwise</returns>
         public static bool IsTargetFormatSupportedForEncoding(AudioFormat format) => BaseConversionParameters.ContainsKey(format);
 
+
+        ///// <summary>
+        ///// Checks if a given audio format supports embedded metadata tags.
+        ///// </summary>
+        ///// <param name="format">The audio format to check</param>
+        ///// <returns>True if the format supports metadata tagging, false otherwise</returns>
+        public static bool SupportsMetadataEmbedding(AudioFormat format) => format switch
+        {
+            // Formats that DO NOT support metadata embedding
+            AudioFormat.AC3 or AudioFormat.EAC3 or AudioFormat.MIDI => false,
+
+            // Formats that DO support metadata embedding
+            AudioFormat.AAC or AudioFormat.MP3 or AudioFormat.Opus or AudioFormat.Vorbis or
+            AudioFormat.FLAC or AudioFormat.WAV or AudioFormat.MP4 or AudioFormat.AIFF or
+            AudioFormat.OGG or AudioFormat.WMA or AudioFormat.ALAC or AudioFormat.APE => true,
+
+            // Unknown formats - assume they might support it
+            _ => true
+        };
 
         /// <summary>
         /// Gets the actual audio codec from a file using FFmpeg and returns the corresponding AudioFormat.

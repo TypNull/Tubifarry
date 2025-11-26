@@ -306,6 +306,14 @@ namespace Tubifarry.Download.Clients.SubSonic
             try
             {
                 AudioMetadataHandler audioData = new(trackPath) { AlbumCover = _albumCover };
+
+                AudioFormat detectedFormat = AudioFormatHelper.GetAudioCodecFromExtension(trackPath);
+                if (!AudioMetadataHandler.SupportsMetadataEmbedding(detectedFormat))
+                {
+                    _logger.Warn($"Skipping metadata embedding for {detectedFormat} format. Not supported: {Path.GetFileName(trackPath)}");
+                    return true;
+                }
+
                 Album album = CreateAlbumFromSubSonicData(trackInfo, _currentAlbum);
                 Track track = CreateTrackFromSubSonicData(trackInfo);
 
