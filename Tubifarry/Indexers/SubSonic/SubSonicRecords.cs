@@ -100,31 +100,24 @@ namespace Tubifarry.Indexers.SubSonic
     /// getAlbum response wrapper
     /// </summary>
     internal record SubSonicAlbumResponseWrapper(
-        [property: JsonPropertyName("subsonic-response")] SubSonicAlbumResponse? SubsonicResponse);
-
-    /// <summary>
-    /// getAlbum response data
-    /// </summary>
-    internal record SubSonicAlbumResponse(
-        [property: JsonPropertyName("status")] string Status,
-        [property: JsonPropertyName("version")] string? Version = null,
-        [property: JsonPropertyName("error")] SubSonicError? Error = null,
-        [property: JsonPropertyName("album")] SubSonicAlbumFull? Album = null);
+        [property: JsonPropertyName("subsonic-response")] SubSonicItemResponse? SubsonicResponse);
 
     /// <summary>
     /// getSong response wrapper
     /// </summary>
     internal record SubSonicSongResponseWrapper(
-        [property: JsonPropertyName("subsonic-response")] SubSonicSongResponse? SubsonicResponse);
+        [property: JsonPropertyName("subsonic-response")] SubSonicItemResponse? SubsonicResponse);
+
 
     /// <summary>
     /// getSong response data
     /// </summary>
-    internal record SubSonicSongResponse(
+    internal record SubSonicItemResponse(
         [property: JsonPropertyName("status")] string Status,
         [property: JsonPropertyName("version")] string? Version = null,
         [property: JsonPropertyName("error")] SubSonicError? Error = null,
-        [property: JsonPropertyName("song")] SubSonicSearchSong? Song = null);
+        [property: JsonPropertyName("song")] SubSonicSearchSong? Song = null,
+        [property: JsonPropertyName("album")] SubSonicAlbumFull? Album = null);
 
     /// <summary>
     /// Song/Track model from SubSonic API

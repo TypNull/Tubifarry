@@ -158,7 +158,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
         var urlBuilder = new StringBuilder($"{baseUrl}/rest/getAlbum.view");
 
         urlBuilder.Append($"?id={Uri.EscapeDataString(albumId)}");
-        AddAuthParameters(urlBuilder);
+        SubSonicAuthHelper.AppendAuthParameters(urlBuilder, _settings!.Username, _settings.Password, _settings.UseTokenAuth);
         urlBuilder.Append($"&f={JsonFormat}");
 
         return urlBuilder.ToString();
@@ -206,24 +206,6 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
         }
 
         return null;
-    }
-
-    private void AddAuthParameters(StringBuilder urlBuilder)
-    {
-        urlBuilder.Append($"&u={Uri.EscapeDataString(_settings!.Username)}");
-        urlBuilder.Append($"&v={Uri.EscapeDataString(SubSonicAuthHelper.ApiVersion)}");
-        urlBuilder.Append($"&c={Uri.EscapeDataString(SubSonicAuthHelper.ClientName)}");
-
-        if (_settings.UseTokenAuth)
-        {
-            var (salt, token) = SubSonicAuthHelper.GenerateToken(_settings.Password);
-            urlBuilder.Append($"&t={token}");
-            urlBuilder.Append($"&s={salt}");
-        }
-        else
-        {
-            urlBuilder.Append($"&p={Uri.EscapeDataString(_settings.Password)}");
-        }
     }
 
     private AlbumData CreateAlbumData(SubSonicAlbumFull album)
@@ -282,10 +264,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private AlbumData CreateTrackData(SubSonicSearchSong song)
     {
-        var (format, bitrate, bitDepth) = IndexerParserHelper.GetQualityInfo(
-            song.Suffix,
-            song.ContentType,
-            song.BitRate);
+        var (format, bitrate, bitDepth) = IndexerParserHelper.GetQualityInfo(song.Suffix, song.ContentType, song.BitRate);
 
         var actualSize = song.Size > 0
             ? song.Size

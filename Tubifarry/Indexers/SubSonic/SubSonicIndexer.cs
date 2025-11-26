@@ -5,6 +5,7 @@ using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser;
 using NzbDrone.Core.ThingiProvider;
+using System.Text;
 using System.Text.Json;
 using Tubifarry.Core.Utilities;
 
@@ -46,25 +47,9 @@ namespace Tubifarry.Indexers.SubSonic
             {
                 // Test connection using ping endpoint
                 string baseUrl = Settings.BaseUrl.TrimEnd('/');
-                var urlBuilder = new System.Text.StringBuilder($"{baseUrl}/rest/ping.view");
-
-                // Add authentication parameters
-                urlBuilder.Append($"?u={Uri.EscapeDataString(Settings.Username)}");
-                urlBuilder.Append($"&v={Uri.EscapeDataString(SubSonicAuthHelper.ApiVersion)}");
-                urlBuilder.Append($"&c={Uri.EscapeDataString(SubSonicAuthHelper.ClientName)}");
+                var urlBuilder = new StringBuilder($"{baseUrl}/rest/ping.view");
+                SubSonicAuthHelper.AppendAuthParameters(urlBuilder, Settings.Username, Settings.Password, Settings.UseTokenAuth);
                 urlBuilder.Append("&f=json");
-
-                if (Settings.UseTokenAuth)
-                {
-                    (string salt, string token) = SubSonicAuthHelper.GenerateToken(Settings.Password);
-                    urlBuilder.Append($"&t={token}");
-                    urlBuilder.Append($"&s={salt}");
-                }
-                else
-                {
-                    urlBuilder.Append($"&p={Uri.EscapeDataString(Settings.Password)}");
-                }
-
                 string testUrl = urlBuilder.ToString();
 
                 var request = new HttpRequest(testUrl)

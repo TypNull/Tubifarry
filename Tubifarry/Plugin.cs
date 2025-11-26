@@ -28,7 +28,12 @@ namespace Tubifarry
         public override string Owner => PluginInfo.Author;
         public override string GithubUrl => PluginInfo.RepoUrl;
 
-        private static Type[] ProtocolTypes => new Type[] { typeof(YoutubeDownloadProtocol), typeof(SoulseekDownloadProtocol), typeof(LucidaDownloadProtocol), typeof(QobuzDownloadProtocol) };
+        private static Type[] ProtocolTypes =>
+            [typeof(YoutubeDownloadProtocol),
+            typeof(SoulseekDownloadProtocol),
+            typeof(LucidaDownloadProtocol),
+            typeof(QobuzDownloadProtocol),
+            typeof(SubSonicDownloadProtocol)];
         public static TimeSpan AverageRuntime { get; private set; } = TimeSpan.FromDays(4);
         public static DateTime LastStarted { get; private set; } = DateTime.UtcNow;
 

@@ -71,30 +71,12 @@ namespace Tubifarry.Indexers.SubSonic
         {
             var urlBuilder = new StringBuilder($"{baseUrl}/rest/search3.view");
             urlBuilder.Append($"?query={Uri.EscapeDataString(query)}");
-            AddAuthParameters(urlBuilder);
+            SubSonicAuthHelper.AppendAuthParameters(urlBuilder, _settings!.Username, _settings.Password, _settings.UseTokenAuth);
             urlBuilder.Append($"&artistCount=0");
             urlBuilder.Append($"&albumCount={_settings!.SearchLimit}");
             urlBuilder.Append($"&songCount={(isSingle ? _settings.SearchLimit : 0)}");
             urlBuilder.Append("&f=json");
             return urlBuilder.ToString();
-        }
-
-        private void AddAuthParameters(StringBuilder urlBuilder)
-        {
-            urlBuilder.Append($"&u={Uri.EscapeDataString(_settings!.Username)}");
-            urlBuilder.Append($"&v={Uri.EscapeDataString(SubSonicAuthHelper.ApiVersion)}");
-            urlBuilder.Append($"&c={Uri.EscapeDataString(SubSonicAuthHelper.ClientName)}");
-
-            if (_settings.UseTokenAuth)
-            {
-                (string salt, string token) = SubSonicAuthHelper.GenerateToken(_settings.Password);
-                urlBuilder.Append($"&t={token}");
-                urlBuilder.Append($"&s={salt}");
-            }
-            else
-            {
-                urlBuilder.Append($"&p={Uri.EscapeDataString(_settings.Password)}");
-            }
         }
 
         private IndexerRequest CreateRequest(string url, string contentType)
