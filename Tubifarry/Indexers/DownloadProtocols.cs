@@ -4,4 +4,5 @@ namespace NzbDrone.Core.Indexers
     public class SoulseekDownloadProtocol : IDownloadProtocol { }
     public class LucidaDownloadProtocol : IDownloadProtocol { }
     public class QobuzDownloadProtocol : IDownloadProtocol { }
+    public class SubSonicDownloadProtocol : IDownloadProtocol { }
 }

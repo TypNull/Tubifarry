@@ -1,4 +1,4 @@
-﻿using NLog;
+using NLog;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Parser.Model;
 using System.Text;
@@ -14,26 +14,22 @@ namespace Tubifarry.Indexers.DABMusic
     {
         private readonly Logger _logger;
 
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
-        };
-
         public DABMusicParser(Logger logger) => _logger = logger;
 
         public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
         {
-            List<ReleaseInfo> releases = new();
+            List<ReleaseInfo> releases = [];
             try
             {
-                DABMusicSearchResponse? searchResponse = JsonSerializer.Deserialize<DABMusicSearchResponse>(indexerResponse.Content, JsonOptions);
+                DABMusicSearchResponse? searchResponse = JsonSerializer.Deserialize<DABMusicSearchResponse>(
+                    indexerResponse.Content,
+                    IndexerParserHelper.StandardJsonOptions);
+
                 if (searchResponse == null)
                     return releases;
 
-                ProcessItems(searchResponse.Albums, CreateAlbumData, releases);
-                ProcessItems(searchResponse.Tracks, CreateTrackData, releases);
+                IndexerParserHelper.ProcessItems(searchResponse.Albums, CreateAlbumData, releases);
+                IndexerParserHelper.ProcessItems(searchResponse.Tracks, CreateTrackData, releases);
             }
             catch (Exception ex)
             {
@@ -42,23 +38,10 @@ namespace Tubifarry.Indexers.DABMusic
             return releases;
         }
 
-        private static void ProcessItems<T>(IList<T>? items, Func<T, AlbumData> createData, List<ReleaseInfo> releases)
-        {
-            if ((items?.Count ?? 0) <= 0)
-                return;
-
-            foreach (T? item in items!)
-            {
-                AlbumData data = createData(item);
-                data.ParseReleaseDate();
-                releases.Add(data.ToReleaseInfo());
-            }
-        }
-
         private static AlbumData CreateAlbumData(DABMusicAlbum album)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQuality(album.AudioQuality);
-            long estimatedSize = album.TrackCount * 50 * 1024 * 1024; // ~50MB per track estimate
+            long estimatedSize = IndexerParserHelper.EstimateSize(0, 0, bitrate, album.TrackCount);
 
             return new("DABMusic", nameof(QobuzDownloadProtocol))
             {
@@ -80,8 +63,7 @@ namespace Tubifarry.Indexers.DABMusic
         private static AlbumData CreateTrackData(DABMusicTrack track)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQuality(track.AudioQuality);
-            long estimatedSize = track.Duration * bitrate * 1000 / 8; // bitrate to bytes per second
-            if (estimatedSize <= 0) estimatedSize = 50 * 1024 * 1024; // 50MB fallback
+            long estimatedSize = IndexerParserHelper.EstimateSize(0, track.Duration, bitrate);
 
             return new("DABMusic", nameof(QobuzDownloadProtocol))
             {

@@ -15,7 +15,6 @@ namespace Tubifarry.Indexers.Soulseek
 {
     public class SlskdIndexerParser : IParseIndexerResponse, IHandle<AlbumGrabbedEvent>, IHandle<ApplicationShutdownRequested>
     {
-        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
         private readonly Lazy<IIndexerFactory> _indexerFactory;
@@ -39,7 +38,7 @@ namespace Tubifarry.Indexers.Soulseek
             List<AlbumData> albumDatas = [];
             try
             {
-                SlskdSearchResponse? searchResponse = JsonSerializer.Deserialize<SlskdSearchResponse>(indexerResponse.Content, _jsonOptions);
+                SlskdSearchResponse? searchResponse = JsonSerializer.Deserialize<SlskdSearchResponse>(indexerResponse.Content, IndexerParserHelper.StandardJsonOptions);
 
                 if (searchResponse == null)
                 {

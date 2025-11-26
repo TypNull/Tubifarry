@@ -14,7 +14,6 @@ namespace Tubifarry.Indexers.Lucida
 
     public partial class LucidaParser(Logger logger) : ILucidaParser
     {
-        private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly Logger _logger = logger;
 
         private static readonly Regex[] SearchDataPatterns = [Data1Regex(), Data2Regex()];
@@ -61,7 +60,7 @@ namespace Tubifarry.Indexers.Lucida
                 try
                 {
                     string raw = NormalizeJsonData(match.Groups[1].Value);
-                    List<LucidaDataWrapper>? wrapperList = JsonSerializer.Deserialize<List<LucidaDataWrapper>>(raw, _jsonOptions);
+                    List<LucidaDataWrapper>? wrapperList = JsonSerializer.Deserialize<List<LucidaDataWrapper>>(raw, IndexerParserHelper.StandardJsonOptions);
                     if (wrapperList != null)
                     {
                         LucidaDataWrapper? dataWrapper = wrapperList
@@ -126,10 +125,10 @@ namespace Tubifarry.Indexers.Lucida
             NzbDroneLogger.GetLogger(nameof(LucidaParser)).Info(tracksJson);
 
             if (!string.IsNullOrEmpty(albumsJson) && albumsJson != "[]")
-                albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, _jsonOptions);
+                albums = JsonSerializer.Deserialize<List<LucidaAlbum>>(albumsJson, IndexerParserHelper.StandardJsonOptions);
 
             if (!string.IsNullOrEmpty(tracksJson) && tracksJson != "[]")
-                tracks = JsonSerializer.Deserialize<List<LucidaTrack>>(tracksJson, _jsonOptions);
+                tracks = JsonSerializer.Deserialize<List<LucidaTrack>>(tracksJson, IndexerParserHelper.StandardJsonOptions);
 
             return (albums, tracks);
         }
