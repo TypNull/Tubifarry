@@ -43,7 +43,6 @@ namespace Tubifarry.Metadata.Lyrics
     {
         private static readonly LyricsEnhancerSettingsValidator Validator = new();
 
-
         [FieldDefinition(0, Label = "Create LRC Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Create synchronized LRC files when available")]
         public bool CreateLrcFiles { get; set; }
 
@@ -75,6 +74,7 @@ namespace Tubifarry.Metadata.Lyrics
         public int UpdateInterval { get; set; } = 7;
 
         public LyricsEnhancerSettings() => Instance = this;
+
         public static LyricsEnhancerSettings? Instance { get; private set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
@@ -91,6 +91,7 @@ namespace Tubifarry.Metadata.Lyrics
 
         public override string CompletionMessage => _completionMessage ?? "Lyrics update completed";
         private string? _completionMessage;
+
         public void SetCompletionMessage(string message) => _completionMessage = message;
     }
 }

@@ -15,7 +15,9 @@ namespace Tubifarry.Indexers.Spotify
     public interface ISpotifyToYouTubeEnricher
     {
         void UpdateSettings(SpotifyIndexerSettings settings);
+
         List<AlbumData> EnrichWithYouTubeData(List<AlbumData> albums);
+
         Task<AlbumData?> EnrichSingleAlbumAsync(AlbumData albumData);
     }
 
@@ -91,7 +93,6 @@ namespace Tubifarry.Indexers.Spotify
         {
             try
             {
-
                 if (string.IsNullOrWhiteSpace(albumData.AlbumName) || string.IsNullOrWhiteSpace(albumData.ArtistName))
                 {
                     _logger.Trace($"Skipping enrichment due to missing album or artist name: '{albumData.AlbumName}' by '{albumData.ArtistName}'");
@@ -110,7 +111,6 @@ namespace Tubifarry.Indexers.Spotify
 
                 int processedCount = 0;
                 int maxSearchResults = _currentSettings?.MaxEnrichmentAttempts ?? 10;
-
 
                 await foreach (SearchResult searchResult in searchResults)
                 {

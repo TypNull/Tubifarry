@@ -5,9 +5,15 @@
     /// </summary>
     public class TrustedSessionException : Exception
     {
-        public TrustedSessionException(string message) : base(message) { }
-        public TrustedSessionException(string message, Exception innerException) : base(message, innerException) { }
-        public TrustedSessionException() { }
-    }
+        public TrustedSessionException(string message) : base(message)
+        {
+        }
 
+        public TrustedSessionException(string message, Exception innerException) : base(message, innerException)
+        {
+        }
+
+        public TrustedSessionException()
+        { }
+    }
 }

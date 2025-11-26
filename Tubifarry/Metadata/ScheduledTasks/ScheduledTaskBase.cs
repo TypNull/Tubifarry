@@ -33,6 +33,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
         public abstract int IntervalMinutes { get; }
 
         public virtual CommandPriority Priority => CommandPriority.Low;
+
         public virtual object RequestAction(string action, IDictionary<string, string> query) => default!;
 
         public virtual ValidationResult Test() => new();
@@ -42,6 +43,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
 
         public virtual string GetFilenameAfterMove(Artist artist, string albumPath, MetadataFile metadataFile) =>
             Path.Combine(artist.Path, albumPath, Path.GetFileName(metadataFile.RelativePath));
+
         public virtual MetadataFile FindMetadataFile(Artist artist, string path) => default!;
 
         public virtual MetadataFileResult ArtistMetadata(Artist artist) => default!;

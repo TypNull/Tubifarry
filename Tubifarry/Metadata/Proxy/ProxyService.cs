@@ -11,10 +11,15 @@ namespace Tubifarry.Metadata.Proxy
     {
         IEnumerable<IProxy> Proxies { get; }
         IEnumerable<IProxy> ActiveProxies { get; }
+
         void RegisterProxy(IProxy proxy);
+
         void UnregisterProxy(IProxy proxy);
+
         void InitializeProxies();
+
         IProxy? GetActiveProxyForInterface(Type originalInterfaceType);
+
         void SetActiveProxy(Type originalInterfaceType, IProxy proxy);
     }
 

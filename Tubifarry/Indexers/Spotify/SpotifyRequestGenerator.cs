@@ -13,8 +13,11 @@ namespace Tubifarry.Indexers.Spotify
     public interface ISpotifyRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
         void StartTokenRequest();
+
         bool TokenIsExpired();
+
         bool RequestNewToken();
+
         void UpdateSettings(SpotifyIndexerSettings settings);
     }
 
@@ -155,6 +158,7 @@ namespace Tubifarry.Indexers.Spotify
         }
 
         public bool TokenIsExpired() => DateTime.Now >= _tokenExpiry;
+
         public bool RequestNewToken() => DateTime.Now >= _tokenExpiry.AddMinutes(10);
 
         public void StartTokenRequest()

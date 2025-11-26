@@ -44,7 +44,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 .When(x => x.RequestCacheType == (int)CacheType.Memory)
                 .WithMessage("The system is not detected as stable. Please wait for the system to stabilize or use permanent cache.");
 
-            // Validate that Warn is checked 
+            // Validate that Warn is checked
             RuleFor(x => x.UseAtOwnRisk)
                 .Equal(true)
                 .WithMessage("You must acknowledge that this feature is in alpha state by checking the 'Warning' box.");
@@ -77,7 +77,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         public bool UseAtOwnRisk { get; set; }
 
         public LastfmMetadataProxySettings() => Instance = this;
+
         public static LastfmMetadataProxySettings? Instance { get; private set; }
+
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

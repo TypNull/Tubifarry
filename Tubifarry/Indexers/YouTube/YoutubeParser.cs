@@ -27,7 +27,6 @@ namespace Tubifarry.Indexers.YouTube
         private YouTubeMusicClient? _youTubeClient;
         private SessionTokens? _sessionToken;
 
-
         private static readonly Lazy<Func<JObject, Page<SearchResult>?>?> _getPageDelegate = new(() =>
         {
             try
@@ -183,6 +182,7 @@ namespace Tubifarry.Indexers.YouTube
                 albumData.Bitrate = DEFAULT_BITRATE;
             }
         }
+
         private void UpdateClient()
         {
             if (_sessionToken?.IsValid == true)

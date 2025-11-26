@@ -9,7 +9,8 @@ using Tubifarry.Indexers.DABMusic;
 
 namespace Tubifarry.Download.Clients.DABMusic
 {
-    public interface IDABMusicDownloadManager : IBaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient> { }
+    public interface IDABMusicDownloadManager : IBaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>
+    { }
 
     public class DABMusicDownloadManager : BaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>, IDABMusicDownloadManager
     {

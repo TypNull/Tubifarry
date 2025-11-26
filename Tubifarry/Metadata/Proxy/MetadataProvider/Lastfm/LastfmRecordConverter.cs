@@ -33,10 +33,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 case JsonTokenType.String:
                     string? stringValue = reader.GetString();
                     return string.IsNullOrEmpty(stringValue) ? 0 : int.TryParse(stringValue, out int result) ? result : 0;
+
                 case JsonTokenType.Number:
                     return reader.GetInt32();
+
                 case JsonTokenType.Null:
                     return 0;
+
                 default:
                     throw new JsonException($"Unexpected token type: {reader.TokenType}");
             }
@@ -129,7 +132,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 JsonSerializer.Serialize(writer, value.Tracks[0], options);
             else
                 JsonSerializer.Serialize(writer, value.Tracks, options);
-
 
             writer.WriteEndObject();
         }

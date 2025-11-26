@@ -15,7 +15,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         /// </summary>
         public static Album MapAlbumFromDeezerAlbum(DeezerAlbum dAlbum, Artist? artist = null)
         {
-
             Album album = new()
             {
                 ForeignAlbumId = dAlbum.Id + _identifier,
@@ -79,7 +78,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             }
             tracks = tracks.Select((x, index) => x with { TrackPosition = index + 1 }).ToList();
             albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist!)) ?? [];
-
 
             if (dAlbum.Contributors?.Count > 1)
                 album.SecondaryTypes.Add(SecondaryAlbumType.Compilation);

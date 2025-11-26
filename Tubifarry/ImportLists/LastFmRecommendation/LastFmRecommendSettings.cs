@@ -46,6 +46,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
         // Hidden API configuration
         public string BaseUrl { get; set; }
+
         public string ApiKey { get; set; }
 
         [FieldDefinition(0, Label = "Last.fm Username", HelpText = "Your Last.fm username to generate personalized recommendations", Placeholder = "EnterLastFMUsername")]
@@ -73,8 +74,10 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
     {
         [FieldOption(Label = "Top Artists")]
         TopArtists = 0,
+
         [FieldOption(Label = "Top Albums")]
         TopAlbums = 1,
+
         [FieldOption(Label = "Top Tracks")]
         TopTracks = 2
     }

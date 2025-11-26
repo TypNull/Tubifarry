@@ -10,7 +10,8 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.Lucida
 {
-    public interface ILucidaParser : IParseIndexerResponse { }
+    public interface ILucidaParser : IParseIndexerResponse
+    { }
 
     public partial class LucidaParser(Logger logger) : ILucidaParser
     {
@@ -94,7 +95,7 @@ namespace Tubifarry.Indexers.Lucida
             Engine engine = new();
             engine.Execute($@"
                     var data = {jsData};
-                    
+
                     // Find the search results in the data array
                     var searchResults = null;
                     for (var i = 0; i < data.length; i++) {{
@@ -106,9 +107,9 @@ namespace Tubifarry.Indexers.Lucida
                     }}
 
                     // Extract separate arrays for albums and tracks
-                    var albums = searchResults && searchResults.results && searchResults.results.albums 
+                    var albums = searchResults && searchResults.results && searchResults.results.albums
                         ? searchResults.results.albums : [];
-                    var tracks = searchResults && searchResults.results && searchResults.results.tracks 
+                    var tracks = searchResults && searchResults.results && searchResults.results.tracks
                         ? searchResults.results.tracks : [];
                 ");
 
@@ -246,11 +247,12 @@ namespace Tubifarry.Indexers.Lucida
 
         [GeneratedRegex("^\\d{4}-\\d{2}-\\d{2}$")]
         private static partial Regex ReleaseDateDayRegex();
+
         [GeneratedRegex("^\\d{4}$")]
         private static partial Regex ReleaseDateYearRegex();
+
         [GeneratedRegex("\\b(\\d{4})\\b")]
         private static partial Regex ReleaseDateYear2Regex();
-
 
         [GeneratedRegex(@"data\s*=\s*(\[(?:[^\[\]]|\[(?:[^\[\]]|\[(?:[^\[\]]|\[[^\[\]]*\])*\])*\])*\]);", RegexOptions.Compiled | RegexOptions.Singleline)]
         private static partial Regex Data1Regex();

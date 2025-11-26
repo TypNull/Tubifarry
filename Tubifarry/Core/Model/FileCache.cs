@@ -136,7 +136,6 @@ namespace Tubifarry.Core.Model
                 throw new InvalidOperationException($"Cache directory validation failed: {ex.Message}", ex);
             }
         }
-
     }
 
     public class CachedData<T>

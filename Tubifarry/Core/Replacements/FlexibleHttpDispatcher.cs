@@ -28,7 +28,7 @@ namespace Tubifarry.Core.Replacements
                 userAgentValidator.AddBlacklistPattern(pattern);
         }
 
-        readonly string[] blacklisted =
+        private readonly string[] blacklisted =
         [
             // Fuzzy matching for Lidarr (catches variations like Lidar, Lidaar, etc.)
             ".*[a]r+.*",

@@ -102,9 +102,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             return null;
         }
 
-
         [GeneratedRegex(@"deezer\.com\/(?:album|artist|track)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
         private static partial Regex DeezerRegex();
+
         [GeneratedRegex(@"^\s*\w+:\s*\w+", RegexOptions.Compiled)]
         private static partial Regex FormatRegex();
     }

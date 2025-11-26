@@ -21,8 +21,8 @@ namespace Tubifarry.Core.Records
             if (releaseGroup == null)
                 return null;
 
-            var secondaryTypes = new List<string>();
-            var secondaryTypeList = releaseGroup.Element(ns + "secondary-type-list");
+            List<string> secondaryTypes = new();
+            XElement? secondaryTypeList = releaseGroup.Element(ns + "secondary-type-list");
             if (secondaryTypeList != null)
             {
                 secondaryTypes = secondaryTypeList.Elements(ns + "secondary-type")

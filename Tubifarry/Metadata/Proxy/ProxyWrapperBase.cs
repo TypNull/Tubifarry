@@ -188,7 +188,5 @@ namespace Tubifarry.Metadata.Proxy
 
         private static string GenerateCacheKey(Type proxyType, string methodName, object[] args) =>
             $"{proxyType.FullName}.{methodName}({string.Join(",", args.Select(arg => arg?.GetType().FullName ?? "null"))})";
-
-
     }
 }

@@ -153,7 +153,6 @@ namespace Tubifarry.Download.Clients.DABMusic
             return await response.Content.ReadAsStringAsync(token);
         }
 
-
         private async Task<DABMusicTrack> GetTrackAsync(string trackId, CancellationToken token)
         {
             try
@@ -353,6 +352,5 @@ namespace Tubifarry.Download.Clients.DABMusic
                 Name = trackInfo.Artist ?? albumInfo?.Artist ?? ReleaseInfo.Artist ?? _remoteAlbum.Artist?.Name,
             })
         };
-
     }
 }

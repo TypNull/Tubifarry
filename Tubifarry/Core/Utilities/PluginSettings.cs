@@ -10,11 +10,17 @@ namespace Tubifarry.Core.Utilities
     public interface IPluginSettings
     {
         T GetValue<T>(string key, T? defaultValue = default);
+
         void SetValue<T>(string key, T value);
+
         bool HasKey(string key);
+
         void RemoveKey(string key);
+
         void Save();
+
         void Load();
+
         event EventHandler<SettingChangedEventArgs> SettingChanged;
     }
 
@@ -177,8 +183,11 @@ namespace Tubifarry.Core.Utilities
         }
 
         public int GetInt(string key, int defaultValue = 0) => GetValue(key, defaultValue);
+
         public bool GetBool(string key, bool defaultValue = false) => GetValue(key, defaultValue);
+
         public string GetString(string key, string defaultValue = "") => GetValue(key, defaultValue) ?? defaultValue;
+
         public double GetDouble(string key, double defaultValue = 0.0) => GetValue(key, defaultValue);
 
         public void SetValues<T>(Dictionary<string, T> values)

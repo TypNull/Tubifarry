@@ -6,8 +6,11 @@ namespace Tubifarry.Core.Model
     public interface ICircuitBreaker
     {
         bool IsOpen { get; }
+
         void RecordSuccess();
+
         void RecordFailure();
+
         void Reset();
     }
 

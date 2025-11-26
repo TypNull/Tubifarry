@@ -5,7 +5,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
     public interface IProvideAdaptiveThreshold
     {
         public void LoadConfig(string? configPath);
+
         public int GetDynamicThreshold(string proxyName, int aggregatedCount);
+
         public void UpdateMetrics(string proxyName, double responseTimeMs, int newCount, bool success);
     }
 
@@ -20,7 +22,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private readonly object _lock = new();
 
         public AdaptiveThresholdConfig Config { get; private set; } = new();
-
 
         public void LoadConfig(string? configPath)
         {
@@ -68,7 +69,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 metrics.LastUpdate = DateTime.UtcNow;
             }
         }
-
 
         /// <summary>
         /// Computes a dynamic threshold for a given proxy based on its historical metrics and the aggregated result count.
@@ -165,6 +165,5 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         }
 
         ~AdaptiveThresholdManager() => Dispose(false);
-
     }
 }

@@ -57,7 +57,7 @@ namespace Tubifarry.Core.Utilities
         {
             if (!string.IsNullOrEmpty(fileExtension))
             {
-                var format = AudioFormatHelper.GetAudioCodecFromExtension(fileExtension);
+                AudioFormat format = AudioFormatHelper.GetAudioCodecFromExtension(fileExtension);
                 if (format != AudioFormat.Unknown)
                     return format;
             }
@@ -68,7 +68,7 @@ namespace Tubifarry.Core.Utilities
                     ? contentType.Split('/').Last()
                     : contentType;
 
-                var format = AudioFormatHelper.GetAudioFormatFromCodec(codec);
+                AudioFormat format = AudioFormatHelper.GetAudioFormatFromCodec(codec);
                 if (format != AudioFormat.Unknown)
                     return format;
             }

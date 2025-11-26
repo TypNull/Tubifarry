@@ -14,7 +14,6 @@ using YouTubeMusicAPI.Models.Search;
 
 namespace Tubifarry.Indexers.YouTube
 {
-
     internal class YouTubeRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
         private const int MaxPages = 3;

@@ -17,6 +17,7 @@ namespace Tubifarry.Metadata.Converter
 
         // Track the type of category rule
         public bool IsGlobalRule { get; set; }
+
         public bool IsLossyRule { get; set; }
         public bool IsLosslessRule { get; set; }
 
@@ -349,6 +350,7 @@ namespace Tubifarry.Metadata.Converter
 
         [GeneratedRegex(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?$", RegexOptions.Compiled)]
         private static partial Regex TargetFormatRegex();
+
         [GeneratedRegex(@"^([a-zA-Z]+)(?:-(\d+)k?)?$", RegexOptions.Compiled)]
         private static partial Regex ArtistTagRegex();
     }

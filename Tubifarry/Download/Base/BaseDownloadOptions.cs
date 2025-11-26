@@ -35,7 +35,6 @@ namespace Tubifarry.Download.Base
         /// </summary>
         public int MaxDownloadSpeed { get; set; }
 
-
         /// <summary>
         /// Number of chunks for download
         /// </summary>

@@ -18,6 +18,7 @@ namespace Tubifarry.Metadata.Proxy
         protected TSettings? Settings => Definition?.Settings == null ? default : (TSettings)Definition!.Settings;
 
         public virtual object RequestAction(string action, IDictionary<string, string> query) => default!;
+
         public override string ToString() => GetType().Name;
 
         // IMetadata implementation
@@ -28,11 +29,17 @@ namespace Tubifarry.Metadata.Proxy
             Path.Combine(artist.Path, albumPath, Path.GetFileName(metadataFile.RelativePath));
 
         public virtual MetadataFile FindMetadataFile(Artist artist, string path) => default!;
+
         public virtual MetadataFileResult ArtistMetadata(Artist artist) => default!;
+
         public virtual MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
+
         public virtual MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile) => default!;
+
         public virtual List<ImageFileResult> ArtistImages(Artist artist) => [];
+
         public virtual List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumPath) => [];
+
         public virtual List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => [];
 
         public virtual ValidationResult Test() => new();

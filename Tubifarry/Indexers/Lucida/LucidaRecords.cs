@@ -53,7 +53,7 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("service")] string? Service = null,
         [property: JsonPropertyName("uses")] Dictionary<string, float>? Uses = null);
 
-    #endregion
+    #endregion Search & Parsing Models
 
     #region Core Data Models
 
@@ -160,7 +160,7 @@ namespace Tubifarry.Indexers.Lucida
         public CountryResponse() : this(false) { }
     }
 
-    #endregion
+    #endregion Core Data Models
 
     #region JavaScript Data Response Models
 
@@ -280,7 +280,7 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("service")] string Service = "",
         [property: JsonPropertyName("cache")] bool Cache = false);
 
-    #endregion
+    #endregion JavaScript Data Response Models
 
     #region Application Models
 
@@ -312,12 +312,14 @@ namespace Tubifarry.Indexers.Lucida
 
         // Service URLs
         public string? OriginalServiceUrl { get; set; }
+
         public string? DetailPageUrl { get; set; }
         public string? ServiceName { get; set; }
         public string? Url { get; set; }
 
         // Authentication tokens
         public string? PrimaryToken { get; set; }
+
         public string? FallbackToken { get; set; }
         public long TokenExpiry { get; set; }
 
@@ -364,11 +366,13 @@ namespace Tubifarry.Indexers.Lucida
 
         // Service URLs
         public string? OriginalServiceUrl { get; set; }
+
         public string? DetailPageUrl { get; set; }
         public string? ServiceName { get; set; }
 
         // Authentication tokens
         public string? PrimaryToken { get; set; }
+
         public string? FallbackToken { get; set; }
         public long TokenExpiry { get; set; }
 
@@ -414,7 +418,7 @@ namespace Tubifarry.Indexers.Lucida
             new(primary, fallback, expiry ?? DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds());
     }
 
-    #endregion
+    #endregion Application Models
 
     #region API Request/Response Models
 
@@ -495,5 +499,5 @@ namespace Tubifarry.Indexers.Lucida
         [property: JsonPropertyName("name")] string? Name = null,
         [property: JsonPropertyName("error")] string? Error = null);
 
-    #endregion
+    #endregion API Request/Response Models
 }

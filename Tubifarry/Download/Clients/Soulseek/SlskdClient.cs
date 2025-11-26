@@ -270,9 +270,13 @@ namespace Tubifarry.Download.Clients.Soulseek
         };
 
         private SlskdDownloadItem? GetDownloadItem(string downloadId) => _downloadMappings.TryGetValue(new DownloadKey<int, string>(Definition.Id, downloadId), out SlskdDownloadItem? item) ? item : null;
+
         private IEnumerable<SlskdDownloadItem> GetDownloadItems() => _downloadMappings.Where(kvp => kvp.Key.OuterKey == Definition.Id).Select(kvp => kvp.Value);
+
         private void AddDownloadItem(SlskdDownloadItem item) => _downloadMappings[new DownloadKey<int, string>(Definition.Id, item.ID)] = item;
+
         private bool RemoveDownloadItem(string downloadId) => _downloadMappings.Remove(new DownloadKey<int, string>(Definition.Id, downloadId));
+
         private OsPath GetRemoteToLocal() => _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath));
 
         protected override void Test(List<ValidationFailure> failures) => failures.AddIfNotNull(TestConnection().Result);

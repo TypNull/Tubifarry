@@ -18,10 +18,15 @@ namespace Tubifarry.Metadata.Converter
         public override string Name => "Codec Tinker";
 
         public override MetadataFile FindMetadataFile(Artist artist, string path) => default!;
+
         public override MetadataFileResult ArtistMetadata(Artist artist) => default!;
+
         public override MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
+
         public override List<ImageFileResult> ArtistImages(Artist artist) => default!;
+
         public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => default!;
+
         public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => default!;
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile)

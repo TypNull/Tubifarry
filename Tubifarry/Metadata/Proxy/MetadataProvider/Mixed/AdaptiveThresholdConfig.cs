@@ -47,5 +47,4 @@
         /// </summary>
         public Dictionary<string, ProxyMetrics> ProxyMetrics { get; set; } = [];
     }
-
 }

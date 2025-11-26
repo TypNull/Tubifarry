@@ -14,6 +14,7 @@ namespace Tubifarry.Indexers.Lucida
     public static class LucidaServiceHelper
     {
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+
         private static readonly ConcurrentDictionary<string, Task<Dictionary<string, List<ServiceCountry>>>> _cache
             = new(StringComparer.OrdinalIgnoreCase);
 
@@ -96,7 +97,6 @@ namespace Tubifarry.Indexers.Lucida
         public static (AudioFormat Format, int Bitrate, int BitDepth) GetServiceQuality(string serviceValue) =>
             ServiceQualityMap.TryGetValue(serviceValue, out (AudioFormat Format, int Bitrate, int BitDepth) quality)
                 ? quality : (AudioFormat.MP3, 320, 0);
-
 
         /// <summary>
         /// Clear the cached services for a specific instance

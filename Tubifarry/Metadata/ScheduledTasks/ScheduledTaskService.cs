@@ -12,9 +12,13 @@ namespace Tubifarry.Metadata.ScheduledTasks
     {
         IEnumerable<IProvideScheduledTask> TaskProviders { get; }
         IEnumerable<IProvideScheduledTask> ActiveTaskProviders { get; }
+
         void InitializeTasks();
+
         void UpdateTask<T>() where T : IProvideScheduledTask;
+
         void EnableTask(IProvideScheduledTask provider);
+
         void DisableTask(IProvideScheduledTask provider);
     }
 
@@ -69,7 +73,6 @@ namespace Tubifarry.Metadata.ScheduledTasks
                 EnableTask(taskProvider);
             else
                 DisableTask(taskProvider);
-
         }
 
         public void Handle(ProviderAddedEvent<IMetadata> message)

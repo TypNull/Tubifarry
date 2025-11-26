@@ -32,6 +32,7 @@ namespace Tubifarry.Download.Base
 
         // Progress tracking
         private DateTime _lastUpdateTime = DateTime.MinValue;
+
         private long _lastRemainingSize;
 
         protected ReleaseInfo ReleaseInfo => _remoteAlbum.Release;
@@ -177,7 +178,9 @@ namespace Tubifarry.Download.Base
         protected string BuildTrackFilename(Track track, Album album, string extension = ".flac") => _releaseFormatter.BuildTrackFilename(null, track, album) + extension;
 
         public override void Start() => throw new NotImplementedException();
+
         public override void Pause() => throw new NotImplementedException();
+
         protected override Task<RequestReturn> RunRequestAsync() => throw new NotImplementedException();
 
         [GeneratedRegex(@"[\\/:\*\?""<>\|]", RegexOptions.Compiled)]

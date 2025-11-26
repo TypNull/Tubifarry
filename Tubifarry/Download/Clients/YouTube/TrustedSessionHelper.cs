@@ -27,6 +27,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
         // Constants for retry logic
         private const int MaxRetries = 3;
+
         private const int RetryDelayMs = 2000;
 
         /// <summary>

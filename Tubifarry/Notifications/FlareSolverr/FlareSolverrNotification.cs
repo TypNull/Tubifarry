@@ -18,6 +18,7 @@ namespace Tubifarry.Notifications.FlareSolverr
 
         public override ValidationResult Test() => new();
 
-        public override void OnGrab(GrabMessage message) { }
+        public override void OnGrab(GrabMessage message)
+        { }
     }
 }

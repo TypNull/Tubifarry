@@ -80,6 +80,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
         public string BaseUrl { get; set; } = string.Empty;
 
         public SearchSniperTaskSettings() => Instance = this;
+
         public static SearchSniperTaskSettings? Instance { get; private set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
@@ -111,6 +112,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
         public override string CompletionMessage => _completionMessage ?? "Search Sniper completed";
         private string? _completionMessage;
+
         public void SetCompletionMessage(string message) => _completionMessage = message;
     }
 }

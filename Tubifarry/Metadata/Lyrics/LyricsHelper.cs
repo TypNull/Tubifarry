@@ -60,7 +60,6 @@ namespace Tubifarry.Metadata.Lyrics
             return bestMatch;
         }
 
-
         public static string? CreateLrcContent(Lyric lyric, string artistName, string trackTitle, string albumName, int duration, Logger logger)
         {
             if (lyric.SyncedLyrics == null || lyric.SyncedLyrics.Count == 0)
@@ -95,8 +94,6 @@ namespace Tubifarry.Metadata.Lyrics
                 return null;
             }
         }
-
-
 
         public static void EmbedLyricsInAudioFile(string filePath, string lyrics, Logger logger, IRootFolderWatchingService rootFolderWatchingService)
         {

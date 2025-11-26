@@ -33,6 +33,7 @@ namespace Tubifarry.Indexers.Lucida
     public class LucidaIndexerSettings : IIndexerSettings
     {
         private static readonly LucidaIndexerSettingsValidator _validator = new();
+
         private static readonly Dictionary<string, string> _defaultPriorities = new(StringComparer.OrdinalIgnoreCase)
         {
             ["Qobuz"] = "0",

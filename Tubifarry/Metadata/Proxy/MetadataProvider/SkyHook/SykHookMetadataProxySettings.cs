@@ -6,7 +6,8 @@ using NzbDrone.Core.Validation;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
 {
-    public class SykHookMetadataProxySettingsValidator : AbstractValidator<SykHookMetadataProxySettings> { }
+    public class SykHookMetadataProxySettingsValidator : AbstractValidator<SykHookMetadataProxySettings>
+    { }
 
     public class SykHookMetadataProxySettings : IProviderConfig
     {

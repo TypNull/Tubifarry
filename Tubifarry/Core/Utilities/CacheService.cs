@@ -16,6 +16,7 @@ namespace Tubifarry.Core.Utilities
         public TimeSpan CacheDuration { get; set; } = TimeSpan.FromDays(7);
 
         private string? _cacheDirectory;
+
         public string? CacheDirectory
         {
             get => _cacheDirectory;

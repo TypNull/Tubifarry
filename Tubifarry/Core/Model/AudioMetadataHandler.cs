@@ -100,11 +100,10 @@ namespace Tubifarry.Core.Model
             "-movflags +faststart"
         ];
 
-
         private static readonly string[] VideoFormats =
         [
             "matroska", "webm",           // Matroska/WebM containers
-            "mov", "mp4", "m4a",          // QuickTime/MP4 containers  
+            "mov", "mp4", "m4a",          // QuickTime/MP4 containers
             "avi",                        // AVI containers
             "asf", "wmv", "wma",          // Windows Media containers
             "flv", "f4v",                 // Flash containers
@@ -208,7 +207,6 @@ namespace Tubifarry.Core.Model
             bool isVideo = await IsVideoContainerAsync();
             if (!isVideo)
                 return await EnsureFileExtAsync();
-
 
             _logger?.Trace($"Extracting audio from video file: {Path.GetFileName(TrackPath)}");
 
@@ -415,7 +413,6 @@ namespace Tubifarry.Core.Model
         /// <param name="format">The audio format to check</param>
         /// <returns>True if the format can be used as a conversion target, false otherwise</returns>
         public static bool IsTargetFormatSupportedForEncoding(AudioFormat format) => BaseConversionParameters.ContainsKey(format);
-
 
         ///// <summary>
         ///// Checks if a given audio format supports embedded metadata tags.

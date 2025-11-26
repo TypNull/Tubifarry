@@ -8,7 +8,8 @@ using Tubifarry.Download.Base;
 
 namespace Tubifarry.Download.Clients.SubSonic
 {
-    public interface ISubSonicDownloadManager : IBaseDownloadManager<SubSonicDownloadRequest, SubSonicDownloadOptions, SubSonicClient> { }
+    public interface ISubSonicDownloadManager : IBaseDownloadManager<SubSonicDownloadRequest, SubSonicDownloadOptions, SubSonicClient>
+    { }
 
     /// <summary>
     /// Manager for SubSonic downloads, handles creating and managing download requests
@@ -76,7 +77,7 @@ namespace Tubifarry.Download.Clients.SubSonic
                 return url[(trackPos + "/track/".Length)..];
 
             // Fallback: try to extract from path
-            var parts = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            string[] parts = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length > 0)
                 return parts[^1];
 

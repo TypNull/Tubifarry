@@ -200,7 +200,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 return;
             try
             {
-
                 LastfmImageScraper scraper = new(_httpClient, settings.UserAgent, _cache);
                 List<string> imageUrls = await scraper.GetArtistImagesAsync(artist.Name);
                 if (imageUrls == null || imageUrls.Count == 0)

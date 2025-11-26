@@ -114,6 +114,7 @@ namespace Tubifarry.Indexers.Lucida
             _requestGenerator.SetSetting(Settings);
             return _requestGenerator;
         }
+
         public override IParseIndexerResponse GetParser() => _parser;
 
         [GeneratedRegex("<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase, "de-DE")]

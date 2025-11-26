@@ -81,6 +81,7 @@ namespace Tubifarry.Download.Clients.Lucida
 
         [GeneratedRegex(@"""token""\s*:\s*""([^""]+)""", RegexOptions.Compiled)]
         private static partial Regex TokenRegex();
+
         [GeneratedRegex(@"""tokenExpiry""\s*:\s*(\d+)", RegexOptions.Compiled)]
         private static partial Regex TokenExpiryRegex();
     }

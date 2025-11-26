@@ -94,15 +94,19 @@ namespace Tubifarry.Core.Utilities
                 case ColonReplacementFormat.Delete:
                     fileName = fileName.Replace(":", string.Empty);
                     break;
+
                 case ColonReplacementFormat.Dash:
                     fileName = fileName.Replace(":", "-");
                     break;
+
                 case ColonReplacementFormat.SpaceDash:
                     fileName = fileName.Replace(":", " -");
                     break;
+
                 case ColonReplacementFormat.SpaceDashSpace:
                     fileName = fileName.Replace(":", " - ");
                     break;
+
                 case ColonReplacementFormat.Smart:
                     fileName = ColonReplaceRegex().Replace(fileName, " - ");
                     break;
@@ -141,8 +145,10 @@ namespace Tubifarry.Core.Utilities
 
         [GeneratedRegex(@"\{([^}]+)\}")]
         private static partial Regex ReplaceTokensRegex();
+
         [GeneratedRegex(@"^(The|A|An)\s+(.+)$", RegexOptions.IgnoreCase, "de-DE")]
         private static partial Regex TitleTheRegex();
+
         [GeneratedRegex(@":\s*")]
         private static partial Regex ColonReplaceRegex();
     }

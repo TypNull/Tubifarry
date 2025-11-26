@@ -6,7 +6,9 @@ namespace Tubifarry.Notifications.FlareSolverr
         int MaxRetries { get; }
 
         ProtectionSolution? GetOrSolveChallenge(string host, string url, bool forceNew = false);
+
         void InvalidateSolution(string host);
+
         bool HasValidSolution(string host);
     }
 

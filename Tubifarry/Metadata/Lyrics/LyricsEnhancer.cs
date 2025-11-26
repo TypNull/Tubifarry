@@ -51,6 +51,7 @@ namespace Tubifarry.Metadata.Lyrics
 
         public override string Name => "Lyrics Enhancer";
         public override Type CommandType => typeof(LyricsUpdateCommand);
+
         public override int IntervalMinutes => ActiveSettings.EnableScheduledUpdates
             ? (int)TimeSpan.FromDays(ActiveSettings.UpdateInterval).TotalMinutes
             : 0;
@@ -82,7 +83,6 @@ namespace Tubifarry.Metadata.Lyrics
                 }
 
                 _logger.Debug($"Found {totalTracks} tracks without lyric entries in database");
-
 
                 ProcessingResult totalResult = new();
                 int processedCount = 0;

@@ -24,7 +24,6 @@ namespace Tubifarry.Download.Clients.Lucida
             new Regex(@"__INITIAL_DATA__\s*=\s*({.+?});", RegexOptions.Compiled | RegexOptions.Singleline)
         ];
 
-
         /// <summary>
         /// Extracts album metadata from Lucida page
         /// </summary>
@@ -101,7 +100,6 @@ namespace Tubifarry.Download.Clients.Lucida
                 Match match = regex.Match(html);
                 if (match.Success)
                     return match.Groups[1].Value;
-
             }
             return string.Empty;
         }

@@ -12,7 +12,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
 
         public CustomLidarrMetadataProxySettingsValidator()
         {
-            // Validate that Warning is checked 
+            // Validate that Warning is checked
             RuleFor(x => x.UseAtOwnRisk)
                 .Equal(true)
                 .WithMessage("You must acknowledge that this feature could void support by the servarr team by checking the 'Warning' box.");
@@ -29,7 +29,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
 
         private static bool NotBeRestrictedDomain(string url) => !_restrictedDomains.Any(domain =>
                 url.Contains(domain, StringComparison.InvariantCultureIgnoreCase));
-
     }
 
     public class CustomLidarrMetadataProxySettings : IProviderConfig
@@ -46,7 +45,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
         public bool UseAtOwnRisk { get; set; }
 
         public CustomLidarrMetadataProxySettings() => Instance = this;
+
         public static CustomLidarrMetadataProxySettings? Instance { get; private set; }
+
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

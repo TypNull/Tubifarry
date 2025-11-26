@@ -54,9 +54,9 @@ namespace Tubifarry.Indexers.SubSonic
 
             try
             {
-                var searchUrl = BuildSearch3Url(baseUrl, query, isSingle);
+                string searchUrl = BuildSearch3Url(baseUrl, query, isSingle);
                 _logger.Trace($"Searching SubSonic: {searchUrl}");
-                var searchRequest = CreateRequest(searchUrl, isSingle ? "search3_with_songs" : "search3");
+                IndexerRequest searchRequest = CreateRequest(searchUrl, isSingle ? "search3_with_songs" : "search3");
                 chain.Add([searchRequest]);
             }
             catch (Exception ex)
@@ -69,7 +69,7 @@ namespace Tubifarry.Indexers.SubSonic
 
         private string BuildSearch3Url(string baseUrl, string query, bool isSingle)
         {
-            var urlBuilder = new StringBuilder($"{baseUrl}/rest/search3.view");
+            StringBuilder urlBuilder = new($"{baseUrl}/rest/search3.view");
             urlBuilder.Append($"?query={Uri.EscapeDataString(query)}");
             SubSonicAuthHelper.AppendAuthParameters(urlBuilder, _settings!.Username, _settings.Password, _settings.UseTokenAuth);
             urlBuilder.Append($"&artistCount=0");

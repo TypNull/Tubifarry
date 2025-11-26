@@ -43,7 +43,7 @@ namespace Tubifarry.Indexers.DABMusic
     public record DABMusicStreamResponse(
         [property: JsonPropertyName("url")] string Url);
 
-    #endregion
+    #endregion Search & API Response Models
 
     #region Core Data Models
 
@@ -111,5 +111,5 @@ namespace Tubifarry.Indexers.DABMusic
         [property: JsonPropertyName("thumbnail")] string? Thumbnail = null,
         [property: JsonPropertyName("large")] string? Large = null);
 
-    #endregion
+    #endregion Core Data Models
 }

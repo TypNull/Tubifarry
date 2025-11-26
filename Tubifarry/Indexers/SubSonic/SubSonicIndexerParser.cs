@@ -30,16 +30,16 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     public IList<ReleaseInfo> ParseResponse(IndexerResponse indexerResponse)
     {
-        var releases = new List<ReleaseInfo>();
+        List<ReleaseInfo> releases = new();
 
         try
         {
-            var contentType = indexerResponse.Request.HttpRequest.ContentSummary;
-            var responseContent = indexerResponse.Content;
+            string contentType = indexerResponse.Request.HttpRequest.ContentSummary;
+            string responseContent = indexerResponse.Content;
 
             if (contentType == ContentTypeSearch3 || contentType == ContentTypeSearch3WithSongs)
             {
-                var includeSongs = contentType == ContentTypeSearch3WithSongs;
+                bool includeSongs = contentType == ContentTypeSearch3WithSongs;
                 ParseSearch3Response(responseContent, releases, includeSongs);
             }
         }
@@ -53,7 +53,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private void ParseSearch3Response(string responseContent, List<ReleaseInfo> releases, bool includeSongs)
     {
-        var searchWrapper = JsonSerializer.Deserialize<SubSonicResponseWrapper>(
+        SubSonicResponseWrapper? searchWrapper = JsonSerializer.Deserialize<SubSonicResponseWrapper>(
             responseContent,
             IndexerParserHelper.StandardJsonOptions);
 
@@ -66,7 +66,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
         if (!ValidateResponse(searchWrapper.SubsonicResponse))
             return;
 
-        var searchResult = searchWrapper.SubsonicResponse.SearchResult3;
+        SubSonicSearchResponse? searchResult = searchWrapper.SubsonicResponse.SearchResult3;
         if (searchResult == null)
         {
             _logger.Warn("No search results in response");
@@ -99,14 +99,14 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
         _logger.Trace("Processing {Count} albums from search3", albums.Count);
 
-        foreach (var albumFromSearch in albums)
+        foreach (SubSonicSearchAlbum albumFromSearch in albums)
         {
             try
             {
-                var fullAlbum = FetchFullAlbum(albumFromSearch.Id);
+                SubSonicAlbumFull? fullAlbum = FetchFullAlbum(albumFromSearch.Id);
                 if (fullAlbum != null)
                 {
-                    var albumData = CreateAlbumData(fullAlbum);
+                    AlbumData albumData = CreateAlbumData(fullAlbum);
                     albumData.ParseReleaseDate();
                     releases.Add(albumData.ToReleaseInfo());
                 }
@@ -138,12 +138,12 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
             return null;
         }
 
-        var url = BuildAlbumUrl(albumId);
-        var request = CreateHttpRequest(url);
+        string url = BuildAlbumUrl(albumId);
+        HttpRequest request = CreateHttpRequest(url);
 
         _logger.Trace("Fetching full album details: {AlbumId}", albumId);
 
-        var response = ExecuteRequest(request);
+        HttpResponse? response = ExecuteRequest(request);
         if (response == null)
         {
             return null;
@@ -154,8 +154,8 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private string BuildAlbumUrl(string albumId)
     {
-        var baseUrl = _settings!.BaseUrl.TrimEnd('/');
-        var urlBuilder = new StringBuilder($"{baseUrl}/rest/getAlbum.view");
+        string baseUrl = _settings!.BaseUrl.TrimEnd('/');
+        StringBuilder urlBuilder = new($"{baseUrl}/rest/getAlbum.view");
 
         urlBuilder.Append($"?id={Uri.EscapeDataString(albumId)}");
         SubSonicAuthHelper.AppendAuthParameters(urlBuilder, _settings!.Username, _settings.Password, _settings.UseTokenAuth);
@@ -166,7 +166,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private HttpRequest CreateHttpRequest(string url)
     {
-        var request = new HttpRequest(url)
+        HttpRequest request = new(url)
         {
             RequestTimeout = TimeSpan.FromSeconds(_settings!.RequestTimeout)
         };
@@ -176,7 +176,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private HttpResponse? ExecuteRequest(HttpRequest request)
     {
-        var response = _httpClient.ExecuteAsync(request).GetAwaiter().GetResult();
+        HttpResponse response = _httpClient.ExecuteAsync(request).GetAwaiter().GetResult();
 
         if (response.HasHttpError)
         {
@@ -189,7 +189,7 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private SubSonicAlbumFull? ParseAlbumResponse(string content, string albumId)
     {
-        var albumWrapper = JsonSerializer.Deserialize<SubSonicAlbumResponseWrapper>(
+        SubSonicAlbumResponseWrapper? albumWrapper = JsonSerializer.Deserialize<SubSonicAlbumResponseWrapper>(
             content,
             IndexerParserHelper.StandardJsonOptions);
 
@@ -216,13 +216,13 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
             throw new InvalidOperationException($"Album {album.Id} has no songs");
         }
 
-        var firstSong = album.Songs[0];
-        var (format, bitrate, bitDepth) = IndexerParserHelper.GetQualityInfo(
+        SubSonicSearchSong firstSong = album.Songs[0];
+        (AudioFormat format, int bitrate, int bitDepth) = IndexerParserHelper.GetQualityInfo(
             firstSong.Suffix,
             firstSong.ContentType,
             firstSong.BitRate);
 
-        var totalSize = CalculateTotalAlbumSize(album.Songs, bitrate);
+        long totalSize = CalculateTotalAlbumSize(album.Songs, bitrate);
 
         _logger.Trace("Parsed album '{Name}' with {TrackCount} tracks, total size: {Size} bytes, format: {Format} {BitDepth}bit",
             album.Name, album.Songs.Count, totalSize, format, bitDepth);
@@ -248,9 +248,9 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
     {
         long totalSize = 0;
 
-        foreach (var song in songs)
+        foreach (SubSonicSearchSong song in songs)
         {
-            var songSize = IndexerParserHelper.EstimateSize(
+            long songSize = IndexerParserHelper.EstimateSize(
                 song.Size,
                 song.Duration,
                 bitrate,
@@ -264,9 +264,9 @@ public class SubSonicIndexerParser(Logger logger, IHttpClient httpClient) : ISub
 
     private AlbumData CreateTrackData(SubSonicSearchSong song)
     {
-        var (format, bitrate, bitDepth) = IndexerParserHelper.GetQualityInfo(song.Suffix, song.ContentType, song.BitRate);
+        (AudioFormat format, int bitrate, int bitDepth) = IndexerParserHelper.GetQualityInfo(song.Suffix, song.ContentType, song.BitRate);
 
-        var actualSize = song.Size > 0
+        long actualSize = song.Size > 0
             ? song.Size
             : IndexerParserHelper.EstimateSize(0, song.Duration, bitrate, 1, DefaultMaxSongSize);
 

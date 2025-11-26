@@ -91,7 +91,6 @@ namespace Tubifarry.Notifications.QueueCleaner
             if (importCleaningOption != (int)requiredOption && importCleaningOption != (int)ImportCleaningOptions.Always)
                 return;
 
-
             if (Settings.RenameOption != (int)RenameOptions.DoNotRename && Rename(trackedDownload))
             {
                 Retry(trackedDownload);

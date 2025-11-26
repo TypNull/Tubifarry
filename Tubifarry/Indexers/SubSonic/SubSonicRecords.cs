@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Tubifarry.Core.Utilities;
 
@@ -107,7 +106,6 @@ namespace Tubifarry.Indexers.SubSonic
     /// </summary>
     internal record SubSonicSongResponseWrapper(
         [property: JsonPropertyName("subsonic-response")] SubSonicItemResponse? SubsonicResponse);
-
 
     /// <summary>
     /// getSong response data

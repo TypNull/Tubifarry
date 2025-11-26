@@ -134,9 +134,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
         }
 
         private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
+
         private static readonly Regex _musicBrainzRegex = new(
             @"musicbrainz\.org\/(?:artist|release|recording)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         private static readonly Regex _guidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }

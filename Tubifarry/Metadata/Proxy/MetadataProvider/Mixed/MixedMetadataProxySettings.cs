@@ -80,6 +80,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
         [FieldDefinition(6, Label = "Multi-Source Population", Section = MetadataSectionType.Metadata, Type = FieldType.Checkbox, HelpText = "Enable queries to multiple metadata providers when populating artist information. Uses fallback strategy when previous album data exists.")]
         public bool PopulateWithMultipleProxies { get; set; } = true;
+
         public bool TryFindArtist { get; internal set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

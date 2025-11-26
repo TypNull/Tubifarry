@@ -15,7 +15,9 @@ namespace Tubifarry.Download.Base
         where TOptions : BaseDownloadOptions, new()
     {
         Task<string> Download(RemoteAlbum remoteAlbum, IIndexer indexer, NamingConfig namingConfig, TClient provider);
+
         IEnumerable<DownloadClientItem> GetItems();
+
         void RemoveItem(DownloadClientItem item);
     }
 

@@ -270,8 +270,13 @@ namespace Tubifarry.Notifications.FlareSolverr
 
     public class FlareException : Exception
     {
-        public FlareException(string message) : base(message) { }
-        public FlareException(string message, Exception innerException) : base(message, innerException) { }
-        public FlareException() { }
+        public FlareException(string message) : base(message)
+        { }
+
+        public FlareException(string message, Exception innerException) : base(message, innerException)
+        { }
+
+        public FlareException()
+        { }
     }
 }

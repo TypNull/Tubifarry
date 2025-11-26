@@ -95,9 +95,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             return null;
         }
 
-
         [GeneratedRegex(@"^\s*\w+:\s*\w+", RegexOptions.Compiled)]
         private static partial Regex FormatRegex();
+
         [GeneratedRegex(@"discogs\.com\/(?:artist|release|master)\/(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
         private static partial Regex DiscogsRegex();
     }

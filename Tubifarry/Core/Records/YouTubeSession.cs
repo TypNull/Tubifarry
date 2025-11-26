@@ -76,5 +76,4 @@ namespace Tubifarry.Core.Records
                 pair.First.Value == pair.Second.Value);
         }
     }
-
 }

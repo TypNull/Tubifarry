@@ -26,6 +26,7 @@ namespace Tubifarry.ImportLists.ArrStack
 
         // MusicBrainz requires 1 request per second
         private static readonly SemaphoreSlim RateLimiter = new(1, 1);
+
         private const int RateLimitDelayMs = 1100;
         private const int SearchResultLimit = 10;
         private const double SimilarityThreshold = 0.80;
@@ -189,11 +190,11 @@ namespace Tubifarry.ImportLists.ArrStack
             if (Settings.UseStrongMusicBrainzSearch)
             {
                 string normalizedTitle = NormalizeTitle(title);
-                
-                var words = normalizedTitle.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+
+                IEnumerable<string> words = normalizedTitle.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
                     .Where(w => w.Length > 2)
                     .Select(w => EscapeLuceneQuery(w));
-                
+
                 string titleQuery = string.Join(" AND ", words.Select(w => $"release:{w}"));
                 string query = $"({titleQuery}) AND primarytype:(Album OR Single) AND secondarytype:Soundtrack";
                 return $"{baseUrl}?query={HttpUtility.UrlEncode(query)}&limit={SearchResultLimit}";
@@ -298,17 +299,17 @@ namespace Tubifarry.ImportLists.ArrStack
         {
             foreach (string term in SoundtrackTerms)
                 title = title.Replace(term, "", StringComparison.OrdinalIgnoreCase);
-            
-            var numberReplacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+
+            Dictionary<string, string> numberReplacements = new(StringComparer.OrdinalIgnoreCase)
             {
                 { "one", "1" }, { "two", "2" }, { "three", "3" }, { "four", "4" },
                 { "five", "5" }, { "six", "6" }, { "seven", "7" }, { "eight", "8" },
                 { "nine", "9" }, { "ten", "10" }
             };
-            
-            foreach (var replacement in numberReplacements)
+
+            foreach (KeyValuePair<string, string> replacement in numberReplacements)
                 title = Regex.Replace(title, $@"\b{replacement.Key}\b", replacement.Value, RegexOptions.IgnoreCase);
-            
+
             title = NormalizeTitleEmptyRegex().Replace(title, "").Trim();
             return NormalizeTitleSpaceRegex().Replace(title, " ");
         }
@@ -362,6 +363,7 @@ namespace Tubifarry.ImportLists.ArrStack
 
         [GeneratedRegex(@"[^a-zA-Z0-9\s]")]
         private static partial Regex NormalizeTitleEmptyRegex();
+
         [GeneratedRegex(@"\s+")]
         private static partial Regex NormalizeTitleSpaceRegex();
     }

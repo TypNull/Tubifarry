@@ -12,7 +12,6 @@ using NzbDrone.Core.Queue;
 using NzbDrone.Core.ThingiProvider;
 using Tubifarry.Core.Utilities;
 
-
 namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 {
     /// <summary>
@@ -401,6 +400,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             : AlbumRepository(database, eventAggregator)
         {
             public new SqlBuilder Builder() => base.Builder();
+
             public new List<Album> Query(SqlBuilder builder) => base.Query(builder);
         }
     }

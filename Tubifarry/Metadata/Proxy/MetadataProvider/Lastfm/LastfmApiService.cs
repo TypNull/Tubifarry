@@ -220,7 +220,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         public async Task<List<LastfmTrack>?> SearchTracksAsync(string query, int? maxPages = null, int? itemsPerPage = null) =>
             await FetchPaginatedResultsAsync<LastfmTrack>(BuildRequest("track.search", new() { { "track", query } }), maxPages ?? MaxPageLimit, itemsPerPage ?? PageSize);
 
-
         /// <summary>
         /// Generic method for fetching paginated results from Last.fm API.
         /// </summary>

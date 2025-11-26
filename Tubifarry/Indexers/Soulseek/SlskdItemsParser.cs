@@ -276,7 +276,6 @@ namespace Tubifarry.Indexers.Soulseek
             return ReduceWhitespaceRegex().Replace(normalized, " ").Trim();
         }
 
-
         private static string CleanComponent(string component)
         {
             if (string.IsNullOrEmpty(component))
@@ -401,7 +400,6 @@ namespace Tubifarry.Indexers.Soulseek
             return codec.ToString();
         }
 
-
         [GeneratedRegex(@"(?ix)
             \[(?:FLAC|MP3|320|WEB|CD)[^\]]*\]|           # Audio format tags
             \(\d{5,}\)|                                  # Long numbers in parentheses
@@ -420,7 +418,6 @@ namespace Tubifarry.Indexers.Soulseek
             (\d+(?:\.\d+)?|[IVXLCDM]+|\d+(?:[-to&]\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)(?!\w)|
             (\d+(?:\.\d+)?|[IVXLCDM]+)(?=\s*$)", RegexOptions.ExplicitCapture | RegexOptions.Compiled, "de-DE")]
         private static partial Regex VolumeRegex();
-
 
         [GeneratedRegex(@"^(?<album>[^(\[]+)(?:\s*[\(\[](?<year>19\d{2}|20\d{2})[\)\]])?", RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
         private static partial Regex AlbumYearRegex();

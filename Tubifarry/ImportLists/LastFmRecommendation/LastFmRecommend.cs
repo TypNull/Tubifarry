@@ -82,6 +82,5 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
         private static bool IsJsonContentType(string mediaType) => mediaType.Equals("application/json", StringComparison.OrdinalIgnoreCase) ||
                    mediaType.Equals("text/json", StringComparison.OrdinalIgnoreCase) ||
                    mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
-
     }
 }

@@ -32,6 +32,7 @@ namespace Tubifarry.Core.Replacements
         public abstract TimeSpan RateLimit { get; }
 
         public abstract IIndexerRequestGenerator<TIndexerPageableRequest> GetExtendedRequestGenerator();
+
         public abstract IParseIndexerResponse GetParser();
 
         protected ExtendedHttpIndexerBase(
@@ -223,27 +224,34 @@ namespace Tubifarry.Core.Replacements
                 case WebException webException:
                     HandleWebException(webException, url);
                     break;
+
                 case TooManyRequestsException tooManyRequestsEx:
                     HandleTooManyRequestsException(tooManyRequestsEx, minimumBackoff);
                     break;
+
                 case HttpException httpException:
                     HandleHttpException(httpException, url);
                     break;
+
                 case RequestLimitReachedException requestLimitEx:
                     HandleRequestLimitReachedException(requestLimitEx, minimumBackoff);
                     break;
+
                 case ApiKeyException:
                     _indexerStatusService.RecordFailure(Definition.Id);
                     _logger.Warn("Invalid API Key for {0} {1}", this, url);
                     break;
+
                 case IndexerException indexerEx:
                     _indexerStatusService.RecordFailure(Definition.Id);
                     _logger.Warn(indexerEx, "{0}", url);
                     break;
+
                 case TaskCanceledException taskCancelledEx:
                     _indexerStatusService.RecordFailure(Definition.Id);
                     _logger.Warn(taskCancelledEx, "Unable to connect to indexer, possibly due to a timeout. {0}", url);
                     break;
+
                 default:
                     _indexerStatusService.RecordFailure(Definition.Id);
                     ex.WithData("FeedUrl", url);
@@ -312,7 +320,6 @@ namespace Tubifarry.Core.Replacements
 
             if (request.HttpRequest.RateLimit < RateLimit)
                 request.HttpRequest.RateLimit = RateLimit;
-
 
             request.HttpRequest.RateLimitKey = Definition.Id.ToString();
 

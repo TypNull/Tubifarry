@@ -10,7 +10,6 @@ namespace Tubifarry.Notifications.QueueCleaner
 {
     public class ImportFailureNotificationService : IHandle<AlbumImportIncompleteEvent>
     {
-
         private readonly INotificationFactory _notificationFactory;
         private readonly INotificationStatusService _notificationStatusService;
         private readonly Logger _logger;

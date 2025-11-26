@@ -162,9 +162,9 @@ namespace Tubifarry.Indexers.Soulseek
                         false,
                         searchParams.TrackCount
                     )
-                ));   
+                ));
             }
-            
+
             // Artist aliases (limit to 2)
             for (int i = 0; i < Math.Min(2, searchParams.Aliases.Count); i++)
             {

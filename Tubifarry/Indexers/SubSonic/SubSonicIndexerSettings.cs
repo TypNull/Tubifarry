@@ -2,7 +2,6 @@ using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
-using NzbDrone.Core.Validation.Paths;
 
 namespace Tubifarry.Indexers.SubSonic;
 

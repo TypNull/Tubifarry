@@ -17,7 +17,9 @@ namespace Tubifarry.Indexers.DABMusic
     public interface IDABMusicSessionManager
     {
         DABMusicSession? GetOrCreateSession(string baseUrl, string email, string password, bool forceNew = false);
+
         void InvalidateSession(string email);
+
         bool HasValidSession(string email);
     }
 
@@ -51,7 +53,6 @@ namespace Tubifarry.Indexers.DABMusic
         {
             if (_sessions.Remove(email))
                 _logger.Info("Invalidated session for {email}");
-
         }
 
         public bool HasValidSession(string email) => _sessions.TryGetValue(email, out DABMusicSession? session) && session.IsValid;

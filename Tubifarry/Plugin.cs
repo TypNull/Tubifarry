@@ -4,9 +4,11 @@ using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Plugins;
+
 #if CI
 using NzbDrone.Core.Plugins.Commands;
 #endif
+
 using NzbDrone.Core.Profiles.Delay;
 using Tubifarry.Core.Utilities;
 
@@ -34,6 +36,7 @@ namespace Tubifarry
             typeof(LucidaDownloadProtocol),
             typeof(QobuzDownloadProtocol),
             typeof(SubSonicDownloadProtocol)];
+
         public static TimeSpan AverageRuntime { get; private set; } = TimeSpan.FromDays(4);
         public static DateTime LastStarted { get; private set; } = DateTime.UtcNow;
 
@@ -45,7 +48,6 @@ namespace Tubifarry
             _pluginSettings = pluginSettings;
             CheckDelayProfiles(repo, downloadProtocols);
         }
-
 
         private void CheckDelayProfiles(IDelayProfileRepository repo, IEnumerable<IDownloadProtocol> downloadProtocols)
         {

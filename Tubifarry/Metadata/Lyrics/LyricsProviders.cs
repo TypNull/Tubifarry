@@ -67,7 +67,7 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        #endregion
+        #endregion LRCLIB Provider
 
         #region Genius Provider
 
@@ -201,7 +201,6 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-
         [GeneratedRegex(@"<div[^>]*data-lyrics-container[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
         private static partial Regex DataLyricsContainerRegex();
 
@@ -226,6 +225,6 @@ namespace Tubifarry.Metadata.Lyrics
         [GeneratedRegex(@"<[^>]*>", RegexOptions.Compiled)]
         private static partial Regex AllHtmlTagsRegex();
 
-        #endregion
+        #endregion Genius Provider
     }
 }

@@ -93,6 +93,7 @@ namespace Tubifarry.Core.Utilities
 
         [GeneratedRegex(@"https://github\.com/(?<owner>[^/]+)/(?<name>[^/]+)(?:/tree/(?<branch>[^/\s]+))?", RegexOptions.Compiled)]
         private static partial Regex RepoRegex();
+
         [GeneratedRegex(@"Minimum Lidarr Version:?\s*(?:\*\*)?[\s]*(?<version>\d+\.\d+\.\d+\.\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
         private static partial Regex MinVersionRegex();
     }

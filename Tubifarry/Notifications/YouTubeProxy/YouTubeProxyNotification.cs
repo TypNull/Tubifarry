@@ -13,6 +13,8 @@ namespace Tubifarry.Notifications.YouTubeProxy
         public override ProviderMessage Message => new("YouTube Proxy configures SOCKS5 proxy settings for HTTP requests. Configure your shadowsocks proxy details to route traffic through the specified server.", ProviderMessageType.Info);
 
         public override ValidationResult Test() => new();
-        public override void OnGrab(GrabMessage message) { }
+
+        public override void OnGrab(GrabMessage message)
+        { }
     }
 }

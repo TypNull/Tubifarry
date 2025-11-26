@@ -47,10 +47,10 @@ namespace Tubifarry.Core.Utilities
     /// </summary>
     public partial class UserAgentValidator : IUserAgentValidator
     {
-        readonly HashSet<string> _allowedExact = new(StringComparer.OrdinalIgnoreCase);
-        readonly List<Regex> _allowedRegex = [];
-        readonly HashSet<string> _blackExact = new(StringComparer.OrdinalIgnoreCase);
-        readonly List<Regex> _blackRegex = [];
+        private readonly HashSet<string> _allowedExact = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<Regex> _allowedRegex = [];
+        private readonly HashSet<string> _blackExact = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<Regex> _blackRegex = [];
 
         public static UserAgentValidator Instance { get; private set; } = new();
 
@@ -89,7 +89,7 @@ namespace Tubifarry.Core.Utilities
         /// <inheritdoc/>
         public void AddBlacklistPattern(string pattern) => AddPattern(pattern, _blackExact, _blackRegex);
 
-        bool IsValidFormat(string ua)
+        private bool IsValidFormat(string ua)
         {
             try { return Parse(ua).All(p => TokenPattern().IsMatch(p.Name) && (p.Version == null || TokenPattern().IsMatch(p.Version))); }
             catch { return false; }
@@ -98,7 +98,7 @@ namespace Tubifarry.Core.Utilities
         /// <summary>
         /// Adds a pattern to either the exact matches or regex patterns collection
         /// </summary>
-        static void AddPattern(string p, HashSet<string> exact, List<Regex> regex)
+        private static void AddPattern(string p, HashSet<string> exact, List<Regex> regex)
         {
             if (string.IsNullOrWhiteSpace(p)) throw new ArgumentException("Pattern required", nameof(p));
             if (p.IndexOfAny(['*', '?', '+', '(', '[', '\\', '.']) >= 0)

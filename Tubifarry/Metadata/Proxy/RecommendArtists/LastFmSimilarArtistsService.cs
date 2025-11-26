@@ -276,7 +276,6 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
                 CoverType = MapImageSize(i.Size)
             }).ToList() ?? [];
 
-
         /// <summary>
         /// Maps Last.fm image size to MediaCoverTypes
         /// </summary>

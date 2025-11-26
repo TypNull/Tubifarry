@@ -73,7 +73,6 @@ namespace Tubifarry.Core.Utilities
                 return new ValidationFailure("DirectoryPath", $"Execute permission denied for directory: {ex.Message}");
             }
             return null;
-
         }
 
         public static List<ValidationFailure> TestAllPermissions(string directoryPath, ILogger logger)

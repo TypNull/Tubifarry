@@ -32,7 +32,6 @@ namespace Tubifarry.Indexers.Lucida
 
         public void SetSetting(LucidaIndexerSettings settings) => _settings = settings;
 
-
         private IndexerPageableRequestChain Generate(string query, bool isSingle)
         {
             IndexerPageableRequestChain chain = new();

@@ -64,8 +64,10 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
     {
         [FieldOption(Label = "Top Artists")]
         Artists = 0,
+
         [FieldOption(Label = "Top Releases")]
         Releases = 1,
+
         [FieldOption(Label = "Top Release Groups")]
         ReleaseGroups = 2
     }
@@ -74,10 +76,13 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzUserStats
     {
         [FieldOption(Label = "This Week")]
         ThisWeek = 0,
+
         [FieldOption(Label = "This Month")]
         ThisMonth = 1,
+
         [FieldOption(Label = "This Year")]
         ThisYear = 2,
+
         [FieldOption(Label = "All Time")]
         AllTime = 3
     }

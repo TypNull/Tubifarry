@@ -129,7 +129,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             return InvokeProxyMethod<IHttpRequestBuilderFactory>(candidates[0].Proxy, nameof(GetRequestBuilder));
         }
 
-        #endregion
+        #endregion Proxy Methods
 
         private void InitializeAdaptiveThreshold()
         {
@@ -405,6 +405,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             artist.Albums = artist.Albums.Value.Union(uniqueOldAlbums).ToList();
             return artist;
         }
-        #endregion
+
+        #endregion Utility Methods
     }
 }

@@ -23,7 +23,6 @@ namespace Tubifarry.Download.Clients.Soulseek
 
         public event EventHandler<SlskdFileState>? FileStateChanged;
 
-
         private SlskdDownloadDirectory? _slskdDownloadDirectory;
         private readonly Dictionary<string, SlskdFileState> _previousFileStates = [];
 

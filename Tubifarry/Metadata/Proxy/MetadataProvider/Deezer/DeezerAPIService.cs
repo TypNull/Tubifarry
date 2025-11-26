@@ -327,7 +327,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             return await GetPaginatedDataAsync<T>(endpoint, maxPages);
         }
 
-
         // --- Generic Album Sub-Endpoints using static type mappings ---
         private static readonly Dictionary<Type, string> AlbumSubEndpointMapping = new() { { typeof(DeezerTrack), "tracks" } };
 

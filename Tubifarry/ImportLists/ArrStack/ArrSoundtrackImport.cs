@@ -67,10 +67,13 @@ namespace Tubifarry.ImportLists.ArrStack
                 {
                     case HttpStatusCode.OK:
                         return null;
+
                     case HttpStatusCode.Unauthorized:
                         return new ValidationFailure("ApiKey", "Invalid API key");
+
                     case HttpStatusCode.NotFound:
                         return new ValidationFailure("BaseUrl", "Endpoint not found. Verify URL and API paths");
+
                     default:
                         _logger.Warn("Arr application returned unexpected status: {0}. Response: {1}",
                             response.StatusCode, response.Content[..200]);

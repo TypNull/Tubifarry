@@ -83,7 +83,7 @@ namespace Tubifarry.Download.Clients.SubSonic
             try
             {
                 string baseUrl = Settings.ServerUrl.TrimEnd('/');
-                var urlBuilder = new System.Text.StringBuilder($"{baseUrl}/rest/ping.view");
+                System.Text.StringBuilder urlBuilder = new($"{baseUrl}/rest/ping.view");
                 SubSonicAuthHelper.AppendAuthParameters(urlBuilder, Settings.Username, Settings.Password, Settings.UseTokenAuth);
                 urlBuilder.Append("&f=json");
                 string testUrl = urlBuilder.ToString();
@@ -93,17 +93,17 @@ namespace Tubifarry.Download.Clients.SubSonic
 
                 _logger.Trace("Testing SubSonic connection to: {BaseUrl}", Settings.ServerUrl);
 
-                var response = httpClient.SendAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+                HttpResponseMessage response = httpClient.SendAsync(request, CancellationToken.None).GetAwaiter().GetResult();
                 response.EnsureSuccessStatusCode();
 
                 string responseContent = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
 
-                var responseWrapper = JsonSerializer.Deserialize<SubSonicPingResponse>(
+                SubSonicPingResponse? responseWrapper = JsonSerializer.Deserialize<SubSonicPingResponse>(
                     responseContent, IndexerParserHelper.StandardJsonOptions);
 
                 if (responseWrapper?.SubsonicResponse != null)
                 {
-                    var pingResponse = responseWrapper.SubsonicResponse;
+                    SubSonicPingData pingResponse = responseWrapper.SubsonicResponse;
 
                     if (pingResponse.Status == "ok")
                     {

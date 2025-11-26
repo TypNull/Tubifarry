@@ -81,7 +81,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             return CachedSearchAsync(settings, title, DiscogsMappingHelper.MapArtistFromSearchItem, "artist", null).GetAwaiter().GetResult();
         }
 
-
         public List<object> SearchNewEntity(DiscogsMetadataProxySettings settings, string query)
         {
             _logger.Debug($"SearchNewEntity invoked: query '{query}'");
@@ -128,7 +127,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                     return results.Where(x => x != null).ToList()!;
                 }
             }
-
 
             return CachedSearchAsync(settings, query, item =>
             {

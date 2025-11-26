@@ -8,7 +8,8 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Indexers.DABMusic
 {
-    public interface IDABMusicParser : IParseIndexerResponse { }
+    public interface IDABMusicParser : IParseIndexerResponse
+    { }
 
     public class DABMusicParser : IDABMusicParser
     {

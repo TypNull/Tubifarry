@@ -226,7 +226,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         }
 
         public static bool IsDeezerIdQuery(string? query) => query?.StartsWith("deezer:", StringComparison.OrdinalIgnoreCase) == true || query?.StartsWith("deezerid:", StringComparison.OrdinalIgnoreCase) == true;
+
         private static string SanitizeToUnicode(string input) => string.IsNullOrEmpty(input) ? input : new string(input.Where(c => c <= 0xFFFF).ToArray());
+
         private static string RemoveIdentifier(string input) => input.EndsWith(_identifier, StringComparison.OrdinalIgnoreCase) ? input.Remove(input.Length - _identifier.Length) : input;
     }
 }

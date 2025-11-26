@@ -17,6 +17,7 @@ namespace Tubifarry.Core.Model
 
         // Properties from AlbumInfo
         public string AlbumName { get; set; } = string.Empty;
+
         public string ArtistName { get; set; } = string.Empty;
         public string InfoUrl { get; set; } = string.Empty;
         public string ReleaseDate { get; set; } = string.Empty;
@@ -29,11 +30,13 @@ namespace Tubifarry.Core.Model
 
         // Properties from YoutubeSearchResults
         public int Bitrate { get; set; }
+
         public int BitDepth { get; set; }
         public long Duration { get; set; }
 
         // Soulseek
         public long? Size { get; set; }
+
         public int Priotity { get; set; }
         public List<string>? ExtraInfo { get; set; }
 
@@ -126,6 +129,7 @@ namespace Tubifarry.Core.Model
 
         [GeneratedRegex(@"(?i)\b(feat\.|ft\.|featuring)\b", RegexOptions.IgnoreCase, "de-DE")]
         private static partial Regex FeatRegex();
+
         [GeneratedRegex(@"\((?!feat\.)[^)]*\)")]
         private static partial Regex FeatReplaceRegex();
     }

@@ -306,7 +306,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             return album;
         }
 
-
         /// <summary>
         /// Maps a DiscogsArtist to an Artist.
         /// </summary>

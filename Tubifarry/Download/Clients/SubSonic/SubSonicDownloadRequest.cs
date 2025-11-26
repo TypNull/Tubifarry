@@ -1,14 +1,11 @@
 using DownloadAssistant.Options;
 using DownloadAssistant.Requests;
 using NLog;
-using NLog.Fluent;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
-using System;
-using System.IO;
 using System.Text;
 using System.Text.Json;
 using Tubifarry.Core.Model;
@@ -116,7 +113,7 @@ namespace Tubifarry.Download.Clients.SubSonic
             try
             {
                 string response = await ExecuteApiRequestAsync("getSong.view", songId, token);
-                var responseWrapper = JsonSerializer.Deserialize<SubSonicSongResponseWrapper>(response, IndexerParserHelper.StandardJsonOptions);
+                SubSonicSongResponseWrapper? responseWrapper = JsonSerializer.Deserialize<SubSonicSongResponseWrapper>(response, IndexerParserHelper.StandardJsonOptions);
 
                 ValidateApiResponse(responseWrapper?.SubsonicResponse);
 
@@ -136,7 +133,7 @@ namespace Tubifarry.Download.Clients.SubSonic
             try
             {
                 string response = await ExecuteApiRequestAsync("getAlbum.view", albumId, token);
-                var responseWrapper = JsonSerializer.Deserialize<SubSonicAlbumResponseWrapper>(response, IndexerParserHelper.StandardJsonOptions);
+                SubSonicAlbumResponseWrapper? responseWrapper = JsonSerializer.Deserialize<SubSonicAlbumResponseWrapper>(response, IndexerParserHelper.StandardJsonOptions);
 
                 ValidateApiResponse(responseWrapper?.SubsonicResponse);
 
@@ -208,7 +205,7 @@ namespace Tubifarry.Download.Clients.SubSonic
 
         private string BuildApiUrl(string endpoint, string id)
         {
-            var urlBuilder = new StringBuilder();
+            StringBuilder urlBuilder = new();
             urlBuilder.Append($"{Options.BaseUrl.TrimEnd('/')}/rest/{endpoint}");
             urlBuilder.Append($"?id={Uri.EscapeDataString(id)}");
             AppendStandardApiParameters(urlBuilder);
@@ -217,7 +214,7 @@ namespace Tubifarry.Download.Clients.SubSonic
 
         private string BuildStreamUrl(string songId)
         {
-            var urlBuilder = new StringBuilder();
+            StringBuilder urlBuilder = new();
             urlBuilder.Append($"{Options.BaseUrl.TrimEnd('/')}/rest/stream.view");
             urlBuilder.Append($"?id={Uri.EscapeDataString(songId)}");
             AppendStandardApiParameters(urlBuilder);
@@ -233,7 +230,7 @@ namespace Tubifarry.Download.Clients.SubSonic
 
         private string BuildCoverArtUrl(string coverArtId)
         {
-            var urlBuilder = new StringBuilder();
+            StringBuilder urlBuilder = new();
             urlBuilder.Append($"{Options.BaseUrl.TrimEnd('/')}/rest/getCoverArt.view");
             urlBuilder.Append($"?id={Uri.EscapeDataString(coverArtId)}");
             AppendStandardApiParameters(urlBuilder);

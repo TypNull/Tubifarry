@@ -265,7 +265,6 @@ namespace Tubifarry.Download.Clients.Lucida
                 }
                 catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable)
                 {
-
                     if (attempt >= baseAttempts && serviceUnavailableExtensions < maxServiceUnavailableExtensions)
                     {
                         serviceUnavailableExtensions++;

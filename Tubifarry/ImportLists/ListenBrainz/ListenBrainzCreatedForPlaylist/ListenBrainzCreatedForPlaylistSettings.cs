@@ -51,12 +51,16 @@ namespace Tubifarry.ImportLists.ListenBrainz.ListenBrainzCreatedForPlaylist
     {
         [FieldOption(Label = "Daily Jams")]
         DailyJams = 0,
+
         [FieldOption(Label = "Weekly Jams")]
         WeeklyJams = 1,
+
         [FieldOption(Label = "Weekly Exploration")]
         WeeklyExploration = 2,
+
         [FieldOption(Label = "Weekly New")]
         WeeklyNew = 3,
+
         [FieldOption(Label = "Monthly Exploration")]
         MonthlyExploration = 4
     }
