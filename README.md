@@ -15,14 +15,15 @@ For further customization, Codec Tinker lets you convert audio files between for
 1. [Installation 🚀](#installation-)
 2. [Soulseek (Slskd) Setup 🎧](#soulseek-slskd-setup-)
 3. [YouTube Downloader Setup 🎥](#youtube-downloader-setup-)
-4. [Fetching Soundtracks 🎬🎵](#fetching-soundtracks-from-sonarr-and-radarr-)
-5. [Queue Cleaner 🧹](#queue-cleaner-)
-6. [Codec Tinker 🎛️](#codec-tinker-️)
-7. [Lyrics Fetcher 📜](#lyrics-fetcher-)
-8. [Search Sniper 🏹](#search-sniper-)
-9. [Custom Metadata Sources 🧩](#custom-metadata-sources-)
-10. [Similar Artists 🧷](#similar-artists-)
-11. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
+4. [WebClients 📻](#web-clients-)
+5. [Fetching Soundtracks 🎬🎵](#fetching-soundtracks-from-sonarr-and-radarr-)
+6. [Queue Cleaner 🧹](#queue-cleaner-)
+7. [Codec Tinker 🎛️](#codec-tinker-️)
+8. [Lyrics Fetcher 📜](#lyrics-fetcher-)
+9. [Search Sniper 🏹](#search-sniper-)
+10. [Custom Metadata Sources 🧩](#custom-metadata-sources-)
+11. [Similar Artists 🧷](#similar-artists-)
+12. [Troubleshooting 🛠️](#troubleshooting-%EF%B8%8F)
 
 ----
 
@@ -93,6 +94,21 @@ The YouTube downloader extracts audio from YouTube and converts them to audio fi
    - Standard quality: 128kbps AAC (free users)
    - High quality: 256kbps AAC (YouTube Premium required)
    - The plugin can convert to other formats (MP3, Opus) using FFmpeg
+
+---
+
+### Web Clients 📻
+
+Tubifarry supports multiple web clients. These are web services that provide music. Some work better than others and Tubifarry is not responsible for the uptime or stability of these services.
+
+##### Supported Clients
+- **Lucida** - A music downloading service that supports multiple sources.
+- **DABmusic** - A high-resolution audio streaming platform.
+- **Subsonic** - A music streaming API standard with broad compatibility
+
+All clients share the same base architecture, making it relatively straightforward to add new ones. The Subsonic Indexer and Client is a generic client, making it possible for any online service to connect with it. The Subsonic specifications are documented on the [API page](https://www.subsonic.org/pages/api.jsp).
+
+If you have a suggestion to add a web client and the service does not want to support Subsonic as a generic indexer, please open a feature request.
 
 ---
 
