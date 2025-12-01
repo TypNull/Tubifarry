@@ -140,7 +140,10 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
                     return [];
                 }
 
-                LastFmSimilarArtistsResponse? apiResponse = JsonSerializer.Deserialize<LastFmSimilarArtistsResponse>(response.Content);
+                LastFmSimilarArtistsResponse? apiResponse = JsonSerializer.Deserialize<LastFmSimilarArtistsResponse>(response.Content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
                 if (apiResponse?.SimilarArtists?.Artist?.Count > 0)
                 {
@@ -196,7 +199,7 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
                     overviewParts.Add($"Playcount: {lastfmArtist.Stats.PlayCount:N0}");
                 if (!string.IsNullOrEmpty(lastfmArtist.Stats.Listeners))
                     overviewParts.Add($"Listeners: {int.Parse(lastfmArtist.Stats.Listeners):N0}");
-                metadata.Overview = string.Join(" • ", overviewParts);
+                metadata.Overview = string.Join(" â€¢ ", overviewParts);
             }
             else
             {

@@ -156,23 +156,29 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private Artist? TryGetArtistFromProxy(IProxy proxy, ISupportMetadataMixing mixingProxy,
             string lidarrId, int metadataProfileId, Artist? baseArtist)
         {
-            if (mixingProxy.CanHandleId(lidarrId) == MetadataSupportLevel.Supported)
+            try
             {
-                _logger.Debug($"Proxy {proxy.Name} can handle ID {lidarrId} directly.");
-                return InvokeProxyMethod<Artist>(proxy, nameof(GetArtistInfo), lidarrId, metadataProfileId);
-            }
-
-            if (baseArtist?.Metadata?.Value?.Links != null)
-            {
-                _logger.Trace($"Checking if proxy {proxy.Name} supports links for base artist {baseArtist.Name}");
-                string? proxyID = mixingProxy.SupportsLink(baseArtist.Metadata.Value.Links);
-                if (proxyID != null)
+                if (mixingProxy.CanHandleId(lidarrId) == MetadataSupportLevel.Supported)
                 {
-                    _logger.Debug($"Proxy {proxy.Name} found matching link-based ID: {proxyID}");
-                    return InvokeProxyMethod<Artist>(proxy, nameof(GetArtistInfo), proxyID, metadataProfileId);
+                    _logger.Debug($"Proxy {proxy.Name} can handle ID {lidarrId} directly.");
+                    return InvokeProxyMethod<Artist>(proxy, nameof(GetArtistInfo), lidarrId, metadataProfileId);
+                }
+
+                if (baseArtist?.Metadata?.Value?.Links != null)
+                {
+                    _logger.Trace($"Checking if proxy {proxy.Name} supports links for base artist {baseArtist.Name}");
+                    string? proxyID = mixingProxy.SupportsLink(baseArtist.Metadata.Value.Links);
+                    if (proxyID != null)
+                    {
+                        _logger.Debug($"Proxy {proxy.Name} found matching link-based ID: {proxyID}");
+                        return InvokeProxyMethod<Artist>(proxy, nameof(GetArtistInfo), proxyID, metadataProfileId);
+                    }
                 }
             }
-
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, $"Proxy {proxy.Name} failed to get artist info for {lidarrId}.");
+            }
             return null;
         }
 

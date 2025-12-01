@@ -230,7 +230,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             DiscogsArtist? artist = await _cache.FetchAndCacheAsync<DiscogsArtist>(artistCacheKey, () =>
             {
                 DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
-                return apiService.GetArtistAsync(int.Parse(RemoveIdentifier(foreignArtistId)[1..]))!;
+                string cleanId = RemoveIdentifier(foreignArtistId);
+                if (cleanId.Length > 1 && !char.IsDigit(cleanId[0]))
+                    cleanId = cleanId[1..];
+                return apiService.GetArtistAsync(int.Parse(cleanId))!;
             });
 
             Artist? existingArtist = _artistService.FindById(foreignArtistId);
