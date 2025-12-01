@@ -32,6 +32,9 @@ on:
       is_latestrelease:
         description: "Whether this should be the newest stable release"
         value: ${{ jobs.git_info.outputs.is_latestrelease }}
+      plugin_input_format:
+        description: "Plugin input format: name@owner#branch"
+        value: ${{ jobs.git_info.outputs.plugin_input_format }}
 
 jobs:
   branch_detection:
@@ -50,6 +53,7 @@ jobs:
       repo_owner: ${{ steps.extract_git_info.outputs.repo_owner }}
       commit_messages: ${{ steps.get_commit_messages.outputs.commit_messages }}
       is_latestrelease: ${{ steps.check_latest_release.outputs.is_latestrelease }}
+      plugin_input_format: ${{ steps.extract_git_info.outputs.plugin_input_format }}
     
     steps:
       - name: Checkout repository
@@ -103,6 +107,16 @@ jobs:
           REPO_OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f1)
           echo "repo_owner=$REPO_OWNER" >> $GITHUB_OUTPUT
           echo "Repository owner: $REPO_OWNER"
+          
+          # Generate plugin input format: name@owner#branch (or name@owner if master)
+          REPO_NAME=$(basename $GITHUB_REPOSITORY)
+          if [ "$BRANCH_NAME" != "master" ]; then
+            PLUGIN_INPUT="$REPO_NAME@$REPO_OWNER#$BRANCH_NAME"
+          else
+            PLUGIN_INPUT="$REPO_NAME@$REPO_OWNER"
+          fi
+          echo "plugin_input_format=$PLUGIN_INPUT" >> $GITHUB_OUTPUT
+          echo "Plugin input format: $PLUGIN_INPUT"
 
       - name: Check if Latest Release
         id: check_latest_release

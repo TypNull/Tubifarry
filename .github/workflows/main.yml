@@ -85,7 +85,8 @@ jobs:
       commit_messages: ${{ needs.git-info.outputs.commit_messages }}       
       git_commit: ${{ needs.git-info.outputs.git_commit }}       
       branch_repo_url: ${{ needs.git-info.outputs.branch_repo_url }}
-      git_branch: ${{ needs.git-info.outputs.git_branch }}     
+      git_branch: ${{ needs.git-info.outputs.git_branch }}
+      plugin_input_format: ${{ needs.git-info.outputs.plugin_input_format }}     
     needs: [metadata, git-info]      
 
   # Publish the release   
@@ -99,6 +100,7 @@ jobs:
       is_latestrelease: ${{ needs.git-info.outputs.is_latestrelease }}       
       release_notes_id: ${{ needs.release-notes.outputs.release_notes_id }}       
       git_commit: ${{ needs.git-info.outputs.git_commit }}       
-      branch_repo_url: ${{ needs.git-info.outputs.branch_repo_url }}     
+      branch_repo_url: ${{ needs.git-info.outputs.branch_repo_url }}
+      git_branch: ${{ needs.git-info.outputs.git_branch }}     
     needs: [metadata, git-info, compilation, packaging, release-notes]     
     if: needs.compilation.outputs.build_status == 'success'
