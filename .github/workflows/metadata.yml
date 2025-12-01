@@ -134,21 +134,11 @@ jobs:
       - name: Determine build suffix
         id: build_info
         run: |
-          # Get the branch name from branch detection workflow
-          BRANCH_NAME="${{ needs.branch_detection.outputs.branch_name }}"
-          echo "Using branch name from detection: $BRANCH_NAME"
-          
           # Get the framework from the extract_framework step
           FRAMEWORK="${{ steps.extract_framework.outputs.framework }}"
           
-          # Format the build suffix based on branch
-          if [ "$BRANCH_NAME" = "master" ]; then
-            # On master, use only the framework
-            BUILD_SUFFIX="$FRAMEWORK"
-          else
-            # On other branches, use framework-branch format
-            BUILD_SUFFIX="$FRAMEWORK-$BRANCH_NAME"
-          fi
+          # Build suffix is just the framework
+          BUILD_SUFFIX="$FRAMEWORK"
           
           echo "Framework: $FRAMEWORK"
           echo "Build suffix: $BUILD_SUFFIX"

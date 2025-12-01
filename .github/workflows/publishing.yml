@@ -36,6 +36,10 @@ on:
         type: string
         description: "Repository URL with branch path"
         default: ""
+      git_branch:
+        required: true
+        type: string
+        description: "Git branch name for target_commitish"
     outputs:
       release_url:
         description: "URL of the created release"
@@ -96,6 +100,7 @@ jobs:
           body_path: ${{ steps.verify_artifacts.outputs.release_notes_path }}
           prerelease: ${{ inputs.is_prerelease == 'true' }}
           make_latest: ${{ inputs.is_latestrelease == 'true' }}
+          target_commitish: ${{ inputs.git_branch }}
           files: |
             ${{ steps.verify_artifacts.outputs.artifact_path }}
           fail_on_unmatched_files: true

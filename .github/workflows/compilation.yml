@@ -56,6 +56,9 @@ on:
       SPOTIFY_CLIENT_SECRET:
         required: false
         description: "Spotify API Client Secret"
+      YOUTUBE_SECRET:
+        required: false
+        description: "YouTube API Secret"
     outputs:
       build_status:
         description: "Status of the build"
@@ -131,12 +134,14 @@ jobs:
           echo "Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}"
           echo "Spotify Client ID is configured: ${{ secrets.SPOTIFY_CLIENT_ID != '' }}"
           echo "Spotify Client Secret is configured: ${{ secrets.SPOTIFY_CLIENT_SECRET != '' }}"
+          echo "YouTube Secret is configured: ${{ secrets.YOUTUBE_SECRET != '' }}"
 
       - name: Build with package version and metadata
         id: build_step
         env:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          YOUTUBE_SECRET: ${{ secrets.YOUTUBE_SECRET }}
         run: |
           # Restore NuGet packages first
           dotnet restore *.sln
@@ -155,6 +160,7 @@ jobs:
             -p:MinimumLidarrVersion="${{ inputs.minimum_lidarr_version }}" \
             -p:SpotifyClientId=$SPOTIFY_CLIENT_ID \
             -p:SpotifyClientSecret=$SPOTIFY_CLIENT_SECRET \
+            -p:YouTubrSecret=$YOUTUBE_SECRET \
             -p:CI="true" \
             -v:n
 
