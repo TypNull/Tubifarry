@@ -350,7 +350,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
             double ratingValue = Math.Log(Math.Max(10, listeners), 10) * 2;
             decimal rating = Math.Min(10m, Math.Max(0m, (decimal)ratingValue));
-            rating = Math.Round(rating, 1);
+            rating = Math.Truncate(rating);
             return new Ratings { Value = rating, Votes = playcount };
         }
     }

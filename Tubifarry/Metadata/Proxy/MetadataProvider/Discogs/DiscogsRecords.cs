@@ -242,8 +242,14 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         [property: JsonPropertyName("duration")] string? Duration,
         [property: JsonPropertyName("position")] string? Position,
         [property: JsonPropertyName("title")] string? Title,
-        [property: JsonPropertyName("type")] string? Type
+        [property: JsonPropertyName("type_")] string? Type
     );
+
+    public record DiscogsTrackPosition(
+        [property: JsonPropertyName("disc_number")] int DiscNumber,
+        [property: JsonPropertyName("track_number")] int TrackNumber
+        );
+
     public record DiscogsVideo(
        [property: JsonPropertyName("uri")] string? Uri,
        [property: JsonPropertyName("title")] string? Title,

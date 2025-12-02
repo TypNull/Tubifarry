@@ -3,11 +3,12 @@ using NzbDrone.Core.MediaCover;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser;
 using System.Text;
+using System.Text.RegularExpressions;
 using Tubifarry.Core.Replacements;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 {
-    public static class DiscogsMappingHelper
+    public static partial class DiscogsMappingHelper
     {
         private const string _identifier = "@discogs";
 
@@ -57,6 +58,92 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         /// Parses a release date from a Discogs artist release.
         /// </summary>
         public static DateTime? ParseReleaseDate(int? year) => year > 0 ? new DateTime(year ?? 0, 1, 1) : null;
+
+        /// <summary>
+        /// Analyzes a tracklist to determine the media/discs present.
+        /// </summary>
+        private static List<Medium> DetermineMedia(List<DiscogsTrack>? tracklist, string defaultFormat = "Digital Media")
+        {
+            if (tracklist == null || tracklist.Count == 0)
+                return [new() { Format = defaultFormat, Name = defaultFormat, Number = 1 }];
+
+            HashSet<int> discNumbers = FilterTracklist(tracklist)
+                .Select(t => ParseTrackPosition(t.Position, 1).DiscNumber)
+                .ToHashSet();
+
+            if (discNumbers.Count == 0)
+                return [new() { Format = defaultFormat, Name = defaultFormat, Number = 1 }];
+
+            return discNumbers.Order()
+                .Select(n => new Medium
+                {
+                    Format = defaultFormat,
+                    Name = $"{defaultFormat} {n}",
+                    Number = n
+                })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Parses a Discogs position string to extract disc and track numbers.
+        /// Handles: 1-1, CD1-1, A1, AA1, a/aa, 1.1, 3.a, etc.
+        /// </summary>
+        private static DiscogsTrackPosition ParseTrackPosition(string? position, int sequentialNumber)
+        {
+            if (string.IsNullOrWhiteSpace(position))
+                return new DiscogsTrackPosition(1, sequentialNumber);
+
+            Match match = PositionPattern().Match(position);
+            if (!match.Success)
+                return new DiscogsTrackPosition(1, sequentialNumber);
+
+            string letters = match.Groups["letters"].Value;
+            string first = match.Groups["first"].Value;
+            string sep = match.Groups["sep"].Value;
+            string second = match.Groups["second"].Value;
+
+            // Multi-value format: "1-1", "CD1-1", "1.1" → (disc, track)
+            if (!string.IsNullOrEmpty(sep) && int.TryParse(first, out int disc) && int.TryParse(second, out int track))
+            {
+                // Sub-track exception: "3.a" keeps track 3
+                if (sep == "." && !char.IsDigit(second[0]))
+                    return new DiscogsTrackPosition(1, disc);
+
+                return new DiscogsTrackPosition(disc, track);
+            }
+
+            // Letter-based formats: "A1", "AA1", "a", "aa"
+            if (!string.IsNullOrEmpty(letters))
+            {
+                bool hasTrack = int.TryParse(first, out int trackNum);
+
+                // Lowercase repetition: "a"=1, "aa"=2, "aaa"=3
+                if (char.IsLower(letters[0]) && !hasTrack)
+                    return new DiscogsTrackPosition(1, letters.Length);
+
+                // Vinyl with track: "A1", "AA1", "AB2"
+                if (hasTrack)
+                {
+                    // Box set continuation: "AA", "AB", "BA" = discs 14+
+                    if (letters.Length == 2 && char.IsUpper(letters[0]))
+                    {
+                        int boxDisc = 13 + ((letters[0] - 'A') * 13) + (letters[1] - 'A') / 2 + 1;
+                        return new DiscogsTrackPosition(boxDisc, trackNum);
+                    }
+
+                    // Standard vinyl: "A1", "B2"
+                    return new DiscogsTrackPosition(1, trackNum);
+                }
+
+                // Letters only: "A", "AA" → use sequential
+                return new DiscogsTrackPosition(1, sequentialNumber);
+            }
+
+            // Simple number: "1", "2", "3"
+            return int.TryParse(first, out int simple)
+                ? new DiscogsTrackPosition(1, simple)
+                : new DiscogsTrackPosition(1, sequentialNumber);
+        }
 
         /// <summary>
         /// Parses a duration string (e.g., "3:45") into seconds.
@@ -141,7 +228,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 ForeignReleaseId = "m" + masterRelease.Id + _identifier,
                 Title = masterRelease.Title,
                 Status = "Official",
-                Media = [new() { Format = "Digital Media", Name = "Digital Media", Number = 1 }],
+                Media = DetermineMedia(masterRelease.Tracklist),
                 ReleaseDate = ParseReleaseDate(masterRelease.Year),
             };
 
@@ -187,17 +274,15 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             album.SecondaryTypes.AddRange(titleTypes);
             album.SecondaryTypes = album.SecondaryTypes.DistinctBy(x => x.Id).ToList();
 
+            string formatName = release.Formats?.FirstOrDefault()?.Name ?? "Digital Media";
+            string mappedFormat = MapFormat(formatName);
+
             AlbumRelease albumRelease = new()
             {
                 ForeignReleaseId = "r" + release.Id + _identifier,
                 Title = release.Title ?? string.Empty,
                 Status = release.Status ?? "Official",
-                Media = release.Formats?.Select(f => new Medium
-                {
-                    Format = MapFormat(f.Name ?? string.Empty),
-                    Name = MapFormat(f.Name ?? string.Empty),
-                    Number = int.TryParse(f.Qty, out int number) ? number : 1,
-                }).ToList() ?? [new() { Format = "Digital Media", Name = "Digital Media", Number = 1 }],
+                Media = DetermineMedia(release.Tracklist, mappedFormat),
                 Label = release.Labels?.Select(l => l.Name).Where(l => !string.IsNullOrWhiteSpace(l)).ToList() ?? new List<string>()!,
                 ReleaseDate = ParseReleaseDate(release),
                 Country = !string.IsNullOrWhiteSpace(release.Country) ? [release.Country] : []
@@ -212,18 +297,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         /// <summary>
         /// Maps a DiscogsTrack to a Track object using data from a master release.
         /// </summary>
-        public static Track MapTrack(DiscogsTrack t, DiscogsMasterRelease masterRelease, Album album, AlbumRelease albumRelease)
+        public static Track MapTrack(DiscogsTrack t, DiscogsMasterRelease masterRelease, Album album, AlbumRelease albumRelease, int sequentialTrackNumber)
         {
-            string digits = new(t.Position?.Where(char.IsDigit).ToArray());
-            if (string.IsNullOrWhiteSpace(digits) || !int.TryParse(digits, out int absoluteNumber))
-                absoluteNumber = 1;
+            DiscogsTrackPosition position = ParseTrackPosition(t.Position, sequentialTrackNumber);
 
             return new Track
             {
                 ForeignTrackId = $"m{masterRelease.Id + _identifier}_{t.Position}",
                 Title = t.Title,
                 Duration = ParseDuration(t.Duration ?? "0") * 1000,
-                TrackNumber = absoluteNumber.ToString(),
+                TrackNumber = position.TrackNumber.ToString(),
                 Explicit = false,
                 AlbumReleaseId = album.Id,
                 ArtistMetadataId = album.ArtistMetadataId,
@@ -234,26 +317,24 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 Artist = album.Artist,
                 AlbumId = album.Id,
                 AlbumRelease = albumRelease,
-                MediumNumber = albumRelease.Media.FirstOrDefault()?.Number ?? 1,
-                AbsoluteTrackNumber = absoluteNumber
+                MediumNumber = position.DiscNumber,
+                AbsoluteTrackNumber = position.TrackNumber
             };
         }
 
         /// <summary>
         /// Maps a Discogs track to a Track object.
         /// </summary>
-        public static Track MapTrack(DiscogsTrack t, DiscogsRelease release, Album album, AlbumRelease albumRelease)
+        public static Track MapTrack(DiscogsTrack t, DiscogsRelease release, Album album, AlbumRelease albumRelease, int sequentialTrackNumber)
         {
-            string digits = new(t.Position?.Where(char.IsDigit).ToArray());
-            if (string.IsNullOrWhiteSpace(digits) || !int.TryParse(digits, out int absoluteNumber))
-                absoluteNumber = 1;
+            DiscogsTrackPosition position = ParseTrackPosition(t.Position, sequentialTrackNumber);
 
             return new Track
             {
                 ForeignTrackId = $"r{release.Id + _identifier}_{t.Position}",
                 Title = t.Title,
                 Duration = ParseDuration(t.Duration ?? "0") * 1000,
-                TrackNumber = absoluteNumber.ToString(),
+                TrackNumber = position.TrackNumber.ToString(),
                 Explicit = false,
                 AlbumReleaseId = album.Id,
                 ArtistMetadataId = album.ArtistMetadataId,
@@ -264,8 +345,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 Artist = album.Artist,
                 AlbumId = album.Id,
                 AlbumRelease = albumRelease,
-                MediumNumber = albumRelease.Media.FirstOrDefault()?.Number ?? 1,
-                AbsoluteTrackNumber = absoluteNumber
+                MediumNumber = position.DiscNumber,
+                AbsoluteTrackNumber = position.TrackNumber
             };
         }
 
@@ -341,12 +422,27 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             return existingAlbum;
         }
 
-        public static List<Track> MapTracks(object releaseForTracks, Album album, AlbumRelease albumRelease) => releaseForTracks switch
+        public static List<Track> MapTracks(object releaseForTracks, Album album, AlbumRelease albumRelease)
         {
-            DiscogsMasterRelease master => master.Tracklist?.Select(t => MapTrack(t, master, album, albumRelease)).ToList() ?? [],
-            DiscogsRelease release => release.Tracklist?.Select(t => MapTrack(t, release, album, albumRelease)).ToList() ?? [],
-            _ => []
-        };
+            List<DiscogsTrack>? tracklist = releaseForTracks switch
+            {
+                DiscogsMasterRelease master => master.Tracklist,
+                DiscogsRelease release => release.Tracklist,
+                _ => null
+            };
+
+            return FilterTracklist(tracklist).Select((track, index) => releaseForTracks switch
+            {
+                DiscogsMasterRelease master => MapTrack(track, master, album, albumRelease, index + 1),
+                DiscogsRelease release => MapTrack(track, release, album, albumRelease, index + 1),
+                _ => throw new InvalidOperationException("Invalid release type")
+            }).ToList();
+        }
+
+        private static List<DiscogsTrack> FilterTracklist(List<DiscogsTrack>? tracklist) => tracklist?
+            .Where(t => !string.Equals(t.Type, "heading", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(t.Type, "index", StringComparison.OrdinalIgnoreCase))
+            .ToList() ?? [];
 
         /// <summary>
         /// Creates a concise artist overview using DiscogsArtist data.
@@ -395,7 +491,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         public static Ratings ComputeCommunityRating(DiscogsCommunityInfo? communityInfo)
         {
             if (communityInfo?.Rating != null)
-                return new Ratings() { Value = communityInfo.Rating.Average, Votes = communityInfo.Rating.Count };
+                return new Ratings() { Value = Math.Truncate(communityInfo.Rating.Average), Votes = communityInfo.Rating.Count };
 
             int want = communityInfo?.Want ?? 0;
             int have = communityInfo?.Have ?? 0;
@@ -411,8 +507,13 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             decimal proportion = smoothWant / (smoothWant + smoothHave);
 
             decimal computedValue = (0.7m * normalizedRatio) + (0.3m * proportion);
-            decimal roundedValue = Math.Round(computedValue * 100m, 2);
+            decimal roundedValue = Math.Truncate(computedValue * 100m);
+
             return new Ratings { Value = roundedValue, Votes = want + have };
         }
+
+        // Regex: [format][letters][number][sep][number/letter]
+        [GeneratedRegex(@"^(?:[A-Za-z]+(?=\d))?(?<letters>[A-Za-z]+)?(?<first>\d+)?(?<sep>[-\.])?(?<second>\d+|[a-z]+)?$", RegexOptions.Compiled)]
+        private static partial Regex PositionPattern();
     }
 }
