@@ -132,30 +132,38 @@ namespace Tubifarry.Notifications.FlareSolverr
 
         private static bool IsProtectionChallengeDetected(HttpResponse response)
         {
-            HttpResponseMessage httpResponse = new(response.StatusCode)
+            try
             {
-                Content = new StringContent(response.Content ?? string.Empty)
-            };
-
-            if (response.Headers != null)
-            {
-                foreach (KeyValuePair<string, string> header in response.Headers)
+                string content = response.Content ?? string.Empty;
+                HttpResponseMessage httpResponse = new(response.StatusCode)
                 {
-                    try
+                    Content = new StringContent(content)
+                };
+
+                if (response.Headers != null)
+                {
+                    foreach (KeyValuePair<string, string> header in response.Headers)
                     {
-                        if (header.Key.Equals("Server", StringComparison.OrdinalIgnoreCase))
+                        try
                         {
-                            httpResponse.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                            if (header.Key.Equals("Server", StringComparison.OrdinalIgnoreCase))
+                            {
+                                httpResponse.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                            }
                         }
+                        catch { }
                     }
-                    catch { }
                 }
+
+                bool isChallenge = FlareDetector.IsChallengePresent(httpResponse);
+                httpResponse.Dispose();
+
+                return isChallenge;
             }
-
-            bool isChallenge = FlareDetector.IsChallengePresent(httpResponse);
-            httpResponse.Dispose();
-
-            return isChallenge;
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private static int GetRetryCount(HttpRequest request) =>
