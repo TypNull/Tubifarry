@@ -15,7 +15,6 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
             // Validate that the API key is not empty when enabled
             RuleFor(c => c.ApiKey)
                 .NotEmpty()
-                .When(c => c.Enabled)
                 .WithMessage("Last.fm API Key is required when Similar Artists feature is enabled");
 
             // Validate result limit
@@ -54,22 +53,19 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
             Instance = this;
         }
 
-        [FieldDefinition(0, Label = "Enable Similar Artists", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable similar artist recommendations using 'similar:<artist name or MBID>' search prefix")]
-        public bool Enabled { get; set; }
-
-        [FieldDefinition(1, Label = "Last.fm API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Your Last.fm API key for fetching similar artists", Privacy = PrivacyLevel.ApiKey)]
+        [FieldDefinition(0, Label = "Last.fm API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Your Last.fm API key for fetching similar artists", Privacy = PrivacyLevel.ApiKey)]
         public string ApiKey { get; set; }
 
-        [FieldDefinition(2, Label = "Result Limit", Type = FieldType.Number, Section = MetadataSectionType.Metadata, HelpText = "Maximum number of similar artists to return (1-50). Only artists with MusicBrainz IDs are returned.", Placeholder = "10")]
+        [FieldDefinition(1, Label = "Result Limit", Type = FieldType.Number, Section = MetadataSectionType.Metadata, HelpText = "Maximum number of similar artists to return (1-50). Only artists with MusicBrainz IDs are returned.", Placeholder = "10")]
         public int ResultLimit { get; set; }
 
-        [FieldDefinition(3, Label = "Fetch Images", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Scrape artist images from Last.fm web pages")]
+        [FieldDefinition(2, Label = "Fetch Images", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Scrape artist images from Last.fm web pages")]
         public bool FetchImages { get; set; }
 
-        [FieldDefinition(4, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "Select Memory (non-permanent) or Permanent caching")]
+        [FieldDefinition(3, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "Select Memory (non-permanent) or Permanent caching")]
         public int RequestCacheType { get; set; } = (int)CacheType.Permanent;
 
-        [FieldDefinition(5, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory to store cached data (only used for Permanent caching)")]
+        [FieldDefinition(4, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory to store cached data (only used for Permanent caching)")]
         public string CacheDirectory { get; set; } = string.Empty;
 
         public static SimilarArtistsProxySettings? Instance { get; private set; }
