@@ -97,16 +97,35 @@ namespace Tubifarry.Download.Base
                 Method = httpRequest.Method
             };
 
-            foreach (KeyValuePair<string, IEnumerable<string>> header in httpRequest.Headers)
+            List<string> requestHeaderKeys = new();
+            List<string> contentHeaderKeys = new();
+
+            string allRequestHeaders = httpRequest.Headers.ToString();
+            foreach (string line in allRequestHeaders.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
             {
-                nzbRequest.Headers[header.Key] = string.Join(", ", header.Value);
+                int colonIndex = line.IndexOf(':');
+                if (colonIndex > 0)
+                {
+                    string headerName = line.Substring(0, colonIndex).Trim();
+                    string headerValue = line.Substring(colonIndex + 1).Trim();
+                    requestHeaderKeys.Add(headerName);
+                    nzbRequest.Headers[headerName] = headerValue;
+                }
             }
 
             if (httpRequest.Content != null)
             {
-                foreach (KeyValuePair<string, IEnumerable<string>> header in httpRequest.Content.Headers)
+                string allContentHeaders = httpRequest.Content.Headers.ToString();
+                foreach (string line in allContentHeaders.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    nzbRequest.Headers[header.Key] = string.Join(", ", header.Value);
+                    int colonIndex = line.IndexOf(':');
+                    if (colonIndex > 0)
+                    {
+                        string headerName = line.Substring(0, colonIndex).Trim();
+                        string headerValue = line.Substring(colonIndex + 1).Trim();
+                        contentHeaderKeys.Add(headerName);
+                        nzbRequest.Headers[headerName] = headerValue;
+                    }
                 }
 
                 byte[] contentBytes = httpRequest.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
@@ -116,29 +135,51 @@ namespace Tubifarry.Download.Base
                 }
             }
 
+            nzbRequest.Cookies["__REQUEST_HEADERS__"] = string.Join("|", requestHeaderKeys);
+            nzbRequest.Cookies["__CONTENT_HEADERS__"] = string.Join("|", contentHeaderKeys);
+
             return nzbRequest;
         }
 
         private static void ApplyNzbRequestToHttpRequestMessage(HttpRequest nzbRequest, HttpRequestMessage httpRequest)
         {
-            // Apply modified headers back to HttpRequestMessage
-            foreach (KeyValuePair<string, string> header in nzbRequest.Headers)
+            HashSet<string> originalRequestHeaders = nzbRequest.Cookies.TryGetValue("__REQUEST_HEADERS__", out string? valueH)
+                ? new HashSet<string>(valueH.Split('|', StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> originalContentHeaders = nzbRequest.Cookies.TryGetValue("__CONTENT_HEADERS__", out string? valueC)
+                ? new HashSet<string>(valueC.Split('|', StringSplitOptions.RemoveEmptyEntries), StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach ((string key, string value) in nzbRequest.Headers)
             {
-                if (httpRequest.Headers.Contains(header.Key))
+                if (originalRequestHeaders.Contains(key))
                 {
-                    httpRequest.Headers.Remove(header.Key);
+                    httpRequest.Headers.Remove(key);
+                    httpRequest.Headers.TryAddWithoutValidation(key, value);
                 }
-                httpRequest.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                else if (originalContentHeaders.Contains(key))
+                {
+                    if (httpRequest.Content != null)
+                    {
+                        httpRequest.Content.Headers.Remove(key);
+                        httpRequest.Content.Headers.TryAddWithoutValidation(key, value);
+                    }
+                }
+                else
+                {
+                    httpRequest.Headers.TryAddWithoutValidation(key, value);
+                }
             }
 
-            // Apply cookies
-            if (nzbRequest.Cookies.Count > 0)
+            List<KeyValuePair<string, string>> actualCookies = nzbRequest.Cookies
+                .Where(c => !c.Key.StartsWith("__") || !c.Key.EndsWith("__"))
+                .ToList();
+
+            if (actualCookies.Count > 0)
             {
-                string cookieHeader = string.Join("; ", nzbRequest.Cookies.Select(c => $"{c.Key}={c.Value}"));
-                if (httpRequest.Headers.Contains("Cookie"))
-                {
-                    httpRequest.Headers.Remove("Cookie");
-                }
+                string cookieHeader = string.Join("; ", actualCookies.Select(c => $"{c.Key}={c.Value}"));
+                httpRequest.Headers.Remove("Cookie");
                 httpRequest.Headers.Add("Cookie", cookieHeader);
             }
         }
