@@ -44,7 +44,12 @@ namespace Tubifarry.Download.Base
         {
             get
             {
-                _clientItem.RemainingSize = GetRemainingSize();
+                long remainingSize = GetRemainingSize();
+                long totalDownloaded = _trackContainer.Sum(t => t.BytesDownloaded);
+                long estimatedTotalSize = totalDownloaded + remainingSize;
+
+                _clientItem.TotalSize = Math.Max(_clientItem.TotalSize, estimatedTotalSize);
+                _clientItem.RemainingSize = remainingSize;
                 _clientItem.Status = GetDownloadItemStatus();
                 _clientItem.RemainingTime = GetRemainingTime();
                 _clientItem.Message = GetDistinctMessages();
@@ -151,7 +156,7 @@ namespace Tubifarry.Download.Base
             {
                 (0, _) => ReleaseInfo.Size - totalDownloaded,
                 (var expected, var count) when count == expected => knownSizes.Sum(t => t.ContentLength) - totalDownloaded,
-                (var expected, var count) when count > 2 => (long)(knownSizes.Average(t => t.ContentLength) * expected) - totalDownloaded,
+                (var expected, var count) when count > 2 => Math.Max(0, Math.Max((long)(knownSizes.Average(t => t.ContentLength) * expected), ReleaseInfo.Size) - totalDownloaded),
                 (var expected, var count) when count > 0 => Math.Max((long)(knownSizes.Average(t => t.ContentLength) * expected), ReleaseInfo.Size) - totalDownloaded,
                 _ => ReleaseInfo.Size - totalDownloaded
             };

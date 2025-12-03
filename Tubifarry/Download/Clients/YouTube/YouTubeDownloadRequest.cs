@@ -173,7 +173,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
                 if (Options.UseSponsorBlock && !string.IsNullOrWhiteSpace(trackInfo.Id))
                     await new SponsorBlock(audioData.TrackPath, trackInfo.Id, Options.SponsorBlockApiEndpoint).LookupAndTrimAsync(token);
-
+                trackPath = audioData.TrackPath;
                 Album album = CreateAlbumFromYouTubeData(albumInfo);
                 Track track = CreateTrackFromYouTubeData(trackInfo, albumInfo);
 
