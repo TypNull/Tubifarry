@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 namespace Tubifarry.Metadata.Proxy
 {
@@ -12,16 +13,31 @@ namespace Tubifarry.Metadata.Proxy
         {
             IProxy activeProxy = GetActiveProxyOrThrow(interfaceType);
             MethodInfo method = GetOrCreateCachedMethod(_methodCache, activeProxy.GetType(), methodName, args);
-            object result = method.Invoke(activeProxy, args)!;
-            return (T)result;
+            return InvokeWithUnwrapping<T>(method, activeProxy, args);
         }
 
         protected void InvokeProxyMethodVoid(Type interfaceType, string methodName, params object[] args)
         {
             IProxy activeProxy = GetActiveProxyOrThrow(interfaceType);
             MethodInfo method = GetOrCreateCachedMethod(_methodCache, activeProxy.GetType(), methodName, args);
-            method.Invoke(activeProxy, args);
+            InvokeWithUnwrapping(method, activeProxy, args);
         }
+
+        protected static T InvokeWithUnwrapping<T>(MethodInfo method, object target, object[] args)
+        {
+            try
+            {
+                return (T)method.Invoke(target, args)!;
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException != null)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+        }
+
+        protected static void InvokeWithUnwrapping(MethodInfo method, object target, object[] args)
+           => InvokeWithUnwrapping<object>(method, target, args);
 
         private IProxy GetActiveProxyOrThrow(Type interfaceType) =>
             ProxyService.Value.GetActiveProxyForInterface(interfaceType) ??

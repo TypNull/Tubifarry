@@ -78,6 +78,7 @@ namespace Tubifarry.Metadata.Proxy
             if (Proxies.OfType<IProvider>().FirstOrDefault(x => x.Definition?.ImplementationName == message.Definition.ImplementationName) is not IProxy updatedProxy)
                 return;
 
+            ((IProvider)updatedProxy).Definition = message.Definition;
             if (message.Definition.Enable)
                 EnableProxy(updatedProxy);
             else
@@ -88,7 +89,7 @@ namespace Tubifarry.Metadata.Proxy
         {
             _logger.Trace("Initializing proxy system");
 
-            IEnumerable<IProxy> metadataProxies = _metadataFactory.GetAvailableProviders().OfType<IProxy>();
+            IEnumerable<IProxy> metadataProxies = _metadataFactory.All().Select(def => _metadataFactory.GetInstance(def)).OfType<IProxy>();
             Proxies = Proxies.Where(p => p is not IMetadata).Concat(metadataProxies).Where(ValidateProxy).DistinctBy(x => x.GetType()).ToArray();
             ActivateEnabledProxies();
             EnsureDefaultProxies();
@@ -264,6 +265,8 @@ namespace Tubifarry.Metadata.Proxy
             _activeProxies.Remove(proxy);
             _defaultProxies.Remove(proxy);
             UnregisterProxy(proxy);
+
+            _interfaceToProxyMap.Keys.ToList().ForEach(UpdateActiveProxyForInterface);
             _eventAggregator.PublishEvent(new ProxyStatusChangedEvent(proxy, ProxyStatusAction.Disabled));
             _logger.Info($"Disabled proxy: {proxy.Name}");
         }

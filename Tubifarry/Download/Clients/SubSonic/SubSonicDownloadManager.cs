@@ -27,7 +27,7 @@ namespace Tubifarry.Download.Clients.SubSonic
             string baseUrl = provider.Settings.ServerUrl.TrimEnd('/');
             string downloadUrl = remoteAlbum.Release.DownloadUrl;
 
-            if (downloadUrl.StartsWith(baseUrl))
+            if (!downloadUrl.StartsWith(baseUrl))
                 _logger.Warn("The expected URL does not match the configured API URL.");
 
             bool isTrack = downloadUrl.Contains("/track/");

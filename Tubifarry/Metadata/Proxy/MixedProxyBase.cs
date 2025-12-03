@@ -38,14 +38,13 @@ namespace Tubifarry.Metadata.Proxy
             public T InvokeProxyMethodDirect<T>(IProxy proxy, string methodName, params object[] args)
             {
                 MethodInfo method = GetOrCreateCachedMethod(_directMethodCache, proxy.GetType(), methodName, args);
-                object result = method.Invoke(proxy, args)!;
-                return (T)result;
+                return InvokeWithUnwrapping<T>(method, proxy, args);
             }
 
             public void InvokeProxyMethodVoidDirect(IProxy proxy, string methodName, params object[] args)
             {
                 MethodInfo method = GetOrCreateCachedMethod(_directMethodCache, proxy.GetType(), methodName, args);
-                method.Invoke(proxy, args);
+                InvokeWithUnwrapping(method, proxy, args);
             }
 
             public new T InvokeProxyMethod<T>(Type interfaceType, string methodName, params object[] args) =>
