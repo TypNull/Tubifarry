@@ -156,11 +156,12 @@ namespace Tubifarry.Indexers.Soulseek
                 // Artist with wildcard substitution
                 chain.AddTierFactory(SearchTierGenerator.CreateTier(() =>
                     ExecuteSearch(
-                        $"*{searchParams.Artist[1..]}",
+                        searchParams.Artist,
                         searchParams.Album,
                         searchParams.Interactive,
                         false,
-                        searchParams.TrackCount
+                        searchParams.TrackCount,
+                        $"*{searchParams.Artist[1..]}"
                     )
                 ));
             }
@@ -184,7 +185,7 @@ namespace Tubifarry.Indexers.Soulseek
                     string[] albumWords = searchParams.Album.Split([' '], StringSplitOptions.RemoveEmptyEntries);
                     int halfLength = (int)Math.Ceiling(albumWords.Length / 2.0);
                     string halfAlbumTitle = string.Join(" ", albumWords.Take(halfLength));
-                    return ExecuteSearch(searchParams.Artist, halfAlbumTitle, searchParams.Interactive, false, searchParams.TrackCount);
+                    return ExecuteSearch(searchParams.Artist, searchParams.Album, searchParams.Interactive, false, searchParams.TrackCount, halfAlbumTitle);
                 }));
             }
 
