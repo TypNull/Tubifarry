@@ -1,14 +1,16 @@
-﻿using DownloadAssistant.Base;
+using DownloadAssistant.Base;
 using NLog;
 using NzbDrone.Common.Instrumentation;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using YouTubeMusicAPI.Client;
 using YouTubeSessionGenerator;
+using YouTubeSessionGenerator.BotGuard;
 using YouTubeSessionGenerator.Js.Environments;
 
 namespace Tubifarry.Download.Clients.YouTube
@@ -21,17 +23,15 @@ namespace Tubifarry.Download.Clients.YouTube
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TrustedSessionHelper));
 
         private static SessionTokens? _cachedTokens;
+        private static string? _cachedVisitorData;
+        private static DateTime _visitorDataExpiry = DateTime.MinValue;
         private static bool? _nodeJsAvailable;
-        private static object _nodeJsCheckLock = new();
+        private static readonly object _nodeJsCheckLock = new();
         private static readonly SemaphoreSlim _semaphore = new(1, 1);
-
-        // Constants for retry logic
-        private const int MaxRetries = 3;
-
-        private const int RetryDelayMs = 2000;
+        private static readonly SemaphoreSlim _visitorDataSemaphore = new(1, 1);
 
         /// <summary>
-        /// Gets trusted session tokens, using cache if available and valid
+        /// Gets trusted session tokens (session-level), using cache if available and valid
         /// </summary>
         public static async Task<SessionTokens> GetTrustedSessionTokensAsync(string? serviceUrl = null, bool forceRefresh = false, CancellationToken token = default)
         {
@@ -50,12 +50,12 @@ namespace Tubifarry.Download.Clients.YouTube
                 if (!string.IsNullOrEmpty(serviceUrl))
                 {
                     _logger.Trace($"Using web service approach with URL: {serviceUrl}");
-                    newTokens = await GetTokensFromWebServiceAsync(serviceUrl, forceRefresh, token);
+                    newTokens = await GetTokensFromWebServiceAsync(serviceUrl, null, token);
                 }
                 else if (IsNodeJsAvailable())
                 {
                     _logger.Trace("Using local YouTubeSessionGenerator");
-                    newTokens = await GetTokensFromLocalGeneratorAsync(token);
+                    newTokens = await GetTokensFromLocalGeneratorAsync(null, token);
                 }
 
                 _cachedTokens = newTokens;
@@ -77,6 +77,36 @@ namespace Tubifarry.Download.Clients.YouTube
             finally
             {
                 _semaphore.Release();
+            }
+        }
+
+        /// <summary>
+        /// Gets video-bound tokens for a specific video ID (not cached)
+        /// </summary>
+        public static async Task<SessionTokens> GetVideoBoundTokensAsync(string videoId, string? serviceUrl = null, CancellationToken token = default)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(serviceUrl))
+                {
+                    _logger.Trace($"Generating video-bound token for {videoId} using bgutil service");
+                    return await GetTokensFromWebServiceAsync(serviceUrl, videoId, token);
+                }
+                else if (IsNodeJsAvailable())
+                {
+                    _logger.Trace($"Generating video-bound token for {videoId} using local generator");
+                    return await GetTokensFromLocalGeneratorAsync(videoId, token);
+                }
+                else
+                {
+                    _logger.Warn("No token generation method available. Returning empty tokens.");
+                    return new SessionTokens("", "", DateTime.UtcNow.AddMinutes(30));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to generate video-bound token for {videoId}");
+                throw new TrustedSessionException($"Failed to generate video-bound token for {videoId}: {ex.Message}", ex);
             }
         }
 
@@ -128,6 +158,19 @@ namespace Tubifarry.Download.Clients.YouTube
             return CreateAuthenticatedClient(sessionInfo);
         }
 
+        /// <summary>
+        /// Updates an existing YouTube Music client with video-bound tokens
+        /// </summary>
+        public static async Task UpdateClientWithVideoBoundTokensAsync(YouTubeMusicClient client, string videoId, string? serviceUrl = null, CancellationToken token = default)
+        {
+            SessionTokens videoBoundTokens = await GetVideoBoundTokensAsync(videoId, serviceUrl, token);
+
+            client.PoToken = videoBoundTokens.PoToken;
+            client.VisitorData = videoBoundTokens.VisitorData;
+
+            _logger.Trace($"Updated client with video-bound tokens for {videoId}");
+        }
+
         public static Cookie[]? LoadCookies(string cookiePath)
         {
             _logger?.Debug($"Trying to parse cookies from {cookiePath}");
@@ -154,29 +197,122 @@ namespace Tubifarry.Download.Clients.YouTube
             return null;
         }
 
-        private static async Task<SessionTokens> GetTokensFromWebServiceAsync(string serviceUrl, bool forceRefresh, CancellationToken token)
+        /// <summary>
+        /// Fetches tokens from a Web Service
+        /// </summary>
+        private static async Task<SessionTokens> GetTokensFromWebServiceAsync(string serviceUrl, string? videoId, CancellationToken token)
         {
             if (string.IsNullOrEmpty(serviceUrl))
                 throw new ArgumentNullException(nameof(serviceUrl), "Service URL cannot be null or empty");
 
             string baseUrl = serviceUrl.TrimEnd('/');
-            string endpoint = forceRefresh ? "/update" : "/token";
-            string url = baseUrl + endpoint;
+            string url = baseUrl + "/get_pot";
 
-            _logger.Trace($"Fetching trusted session tokens from {url}");
+            _logger.Trace($"Fetching token from bgutil service: {url}" + (videoId != null ? $" for video {videoId}" : " (session-level)"));
 
-            if (forceRefresh)
-                return await GetTokenWithRetryAsync(baseUrl, token);
-            else
-                return await FetchAndParseTokenAsync(url, token);
+            // Build request body
+            Dictionary<string, object> requestBody = new()
+            {
+                ["bypass_cache"] = false
+            };
+
+            if (!string.IsNullOrEmpty(videoId))
+            {
+                requestBody["content_binding"] = videoId;
+            }
+
+            string jsonBody = JsonSerializer.Serialize(requestBody);
+
+            HttpRequestMessage request = new(HttpMethod.Post, url)
+            {
+                Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+            };
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request, token);
+            response.EnsureSuccessStatusCode();
+
+            string responseContent = await response.Content.ReadAsStringAsync(token);
+            _logger.Trace($"Received response: {responseContent}");
+
+            return ParseResponse(responseContent, videoId != null ? "bgutil (Video-Bound)" : "bgutil (Session)");
         }
 
-        private static async Task<SessionTokens> GetTokensFromLocalGeneratorAsync(CancellationToken token)
+        private static SessionTokens ParseResponse(string responseJson, string source)
+        {
+            JsonDocument jsonDoc = JsonDocument.Parse(responseJson);
+            JsonElement root = jsonDoc.RootElement;
+
+            if (!root.TryGetProperty("poToken", out JsonElement poTokenElement) ||
+                !root.TryGetProperty("contentBinding", out JsonElement contentBindingElement) ||
+                !root.TryGetProperty("expiresAt", out JsonElement expiresAtElement))
+            {
+                throw new TrustedSessionException($"Invalid response format from bgutil service: {responseJson}");
+            }
+
+            string? poToken = poTokenElement.GetString();
+            string? contentBinding = contentBindingElement.GetString();
+            string? expiresAtStr = expiresAtElement.GetString();
+
+            if (string.IsNullOrEmpty(poToken) || string.IsNullOrEmpty(contentBinding))
+                throw new TrustedSessionException("Received empty token values from bgutil service");
+
+            DateTime expiryDateTime = DateTime.Parse(expiresAtStr!);
+
+            SessionTokens sessionTokens = new(poToken, contentBinding, expiryDateTime, source);
+            _logger.Trace($"Successfully fetched tokens from {source}. Expiry: {expiryDateTime}");
+
+            return sessionTokens;
+        }
+
+        /// <summary>
+        /// Gets or creates cached visitor data (prevents rate limiting from YouTube)
+        /// </summary>
+        private static async Task<string> GetOrCreateVisitorDataAsync(CancellationToken token)
+        {
+            await _visitorDataSemaphore.WaitAsync(token);
+            try
+            {
+                if (!string.IsNullOrEmpty(_cachedVisitorData) && DateTime.UtcNow < _visitorDataExpiry)
+                {
+                    _logger.Trace($"Using cached visitor data, expires in {(_visitorDataExpiry - DateTime.UtcNow):hh\\:mm\\:ss}");
+                    return _cachedVisitorData;
+                }
+
+                _logger.Trace("Generating fresh visitor data from YouTube (only once per session)...");
+
+                using NodeEnvironment tempEnv = new NodeEnvironment();
+
+                YouTubeSessionConfig config = new()
+                {
+                    JsEnvironment = tempEnv,
+                    HttpClient = HttpGet.HttpClient,
+                };
+                YouTubeSessionCreator tempCreator = new(config);
+
+                _cachedVisitorData = await tempCreator.VisitorDataAsync(token);
+                _visitorDataExpiry = DateTime.UtcNow.AddHours(4);
+
+                _logger.Debug($"Successfully generated visitor data, expires at {_visitorDataExpiry}");
+                return _cachedVisitorData;
+            }
+            finally
+            {
+                _visitorDataSemaphore.Release();
+            }
+        }
+
+        /// <summary>
+        /// Generates tokens using local YouTubeSessionGenerator
+        /// </summary>
+        private static async Task<SessionTokens> GetTokensFromLocalGeneratorAsync(string? videoId, CancellationToken token)
         {
             NodeEnvironment? nodeEnvironment = null;
             try
             {
-                _logger.Trace("Initializing Node.js environment for local token generation");
+
+                string visitorData = await GetOrCreateVisitorDataAsync(token);
+                _logger.Trace("Initializing Node.js environment for token generation");
                 nodeEnvironment = new NodeEnvironment();
 
                 YouTubeSessionConfig config = new()
@@ -187,13 +323,28 @@ namespace Tubifarry.Download.Clients.YouTube
 
                 YouTubeSessionCreator creator = new(config);
 
-                _logger.Trace("Generating visitor data and proof of origin token....");
-                string visitorData = await creator.VisitorDataAsync(token);
-                string poToken = await creator.ProofOfOriginTokenAsync(visitorData, cancellationToken: token);
-                DateTime expiryTime = DateTime.UtcNow.AddHours(4);
-                SessionTokens sessionTokens = new(poToken, visitorData, expiryTime, "Local Generator");
+                BotGuardContentBinding? contentBinding = null;
+                string tokenType = "Session";
 
-                _logger.Debug($"Successfully generated trusted session tokens locally. Expiry: {expiryTime}");
+                // If videoId is provided, create video-bound token
+                if (!string.IsNullOrEmpty(videoId))
+                {
+                    _logger.Trace($"Creating content binding for video: {videoId}");
+                    contentBinding = new BotGuardContentBinding
+                    {
+                        EncryptedVideoId = videoId
+                    };
+                    tokenType = "Video-Bound";
+                }
+
+                _logger.Trace($"Generating {tokenType} proof of origin token...");
+                string mintIdentifier = !string.IsNullOrEmpty(videoId) ? videoId : visitorData;
+                string poToken = await creator.ProofOfOriginTokenAsync(mintIdentifier, contentBinding, token);
+
+                DateTime expiryTime = DateTime.UtcNow.AddHours(4);
+                SessionTokens sessionTokens = new(poToken, visitorData, expiryTime, $"Local Generator ({tokenType})");
+
+                _logger.Debug($"Successfully generated {tokenType} tokens locally. Expiry: {expiryTime}");
                 return sessionTokens;
             }
             catch (Exception ex)
@@ -205,96 +356,6 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 nodeEnvironment?.Dispose();
             }
-        }
-
-        private static async Task<SessionTokens> GetTokenWithRetryAsync(string baseUrl, CancellationToken token)
-        {
-            string updateUrl = $"{baseUrl}/update";
-            HttpRequestMessage request = new(HttpMethod.Get, updateUrl);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request, token);
-            response.EnsureSuccessStatusCode();
-
-            string responseContent = await response.Content.ReadAsStringAsync(token);
-            _logger.Info(responseContent);
-
-            if (responseContent.Contains("Update request accepted") || responseContent.Contains("new token will be generated") || !responseContent.Contains("potoken"))
-            {
-                _logger.Trace("Token update initiated, waiting for completion...");
-
-                string tokenUrl = $"{baseUrl}/token";
-                for (int i = 0; i < MaxRetries; i++)
-                {
-                    try
-                    {
-                        await Task.Delay(RetryDelayMs * (i + 1), token);
-
-                        _logger.Trace($"Retry {i + 1}/{MaxRetries} to get updated token");
-                        return await FetchAndParseTokenAsync(tokenUrl, token);
-                    }
-                    catch (Exception ex)
-                    {
-                        if (i == MaxRetries - 1)
-                        {
-                            _logger.Error(ex, "Failed to retrieve token after maximum retry attempts");
-                            throw;
-                        }
-
-                        _logger.Warn(ex, $"Retry {i + 1}/{MaxRetries} failed. Will try again shortly.");
-                    }
-                }
-
-                throw new TrustedSessionException("Failed to get token after multiple retries");
-            }
-
-            try
-            {
-                return ParseTokenResponse(responseContent, "Web Service");
-            }
-            catch (JsonException)
-            {
-                throw new TrustedSessionException($"Received invalid JSON response: {responseContent}");
-            }
-        }
-
-        private static async Task<SessionTokens> FetchAndParseTokenAsync(string url, CancellationToken token)
-        {
-            HttpRequestMessage request = new(HttpMethod.Get, url);
-            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-            using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request, token);
-            response.EnsureSuccessStatusCode();
-            string responseJson = await response.Content.ReadAsStringAsync(token);
-            _logger.Trace(responseJson);
-            return ParseTokenResponse(responseJson, "Web Service");
-        }
-
-        private static SessionTokens ParseTokenResponse(string responseJson, string source)
-        {
-            JsonDocument jsonDoc = JsonDocument.Parse(responseJson);
-            JsonElement root = jsonDoc.RootElement;
-
-            if (!root.TryGetProperty("potoken", out JsonElement poTokenElement) ||
-                !root.TryGetProperty("visitor_data", out JsonElement visitorDataElement) ||
-                !root.TryGetProperty("updated", out JsonElement updatedElement))
-            {
-                throw new TrustedSessionException($"Invalid response format from trusted session generator: {responseJson}");
-            }
-
-            string? poToken = poTokenElement.GetString();
-            string? visitorData = visitorDataElement.GetString();
-
-            if (string.IsNullOrEmpty(poToken) || string.IsNullOrEmpty(visitorData))
-                throw new TrustedSessionException("Received empty token values from trusted session generator");
-
-            long updatedTimestamp = updatedElement.GetInt64();
-            DateTime updatedDateTime = DateTimeOffset.FromUnixTimeSeconds(updatedTimestamp).DateTime;
-            DateTime expiryDateTime = updatedDateTime.AddHours(4);
-
-            SessionTokens sessionTokens = new(poToken, visitorData, expiryDateTime, source);
-            _logger.Trace($"Successfully fetched trusted session tokens from {source}. Expiry: {expiryDateTime}");
-
-            return sessionTokens;
         }
 
         /// <summary>
@@ -312,7 +373,13 @@ namespace Tubifarry.Download.Clients.YouTube
 
                 try
                 {
-                    HttpRequestMessage request = new(HttpMethod.Get, $"{trustedSessionGeneratorUrl.TrimEnd('/')}/token");
+                    string testUrl = $"{trustedSessionGeneratorUrl.TrimEnd('/')}/get_pot";
+                    string jsonBody = JsonSerializer.Serialize(new { bypass_cache = false });
+
+                    HttpRequestMessage request = new(HttpMethod.Post, testUrl)
+                    {
+                        Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+                    };
                     request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
                     using HttpResponseMessage response = await HttpGet.HttpClient.SendAsync(request);
                     response.EnsureSuccessStatusCode();
@@ -377,7 +444,9 @@ namespace Tubifarry.Download.Clients.YouTube
         public static void ClearCache()
         {
             _cachedTokens = null;
-            _logger.Trace("Token cache cleared");
+            _cachedVisitorData = null;
+            _visitorDataExpiry = DateTime.MinValue;
+            _logger.Trace("Token and visitor data cache cleared");
         }
 
         public static SessionTokens? GetCachedTokens() => _cachedTokens;

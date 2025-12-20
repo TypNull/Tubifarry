@@ -79,6 +79,8 @@ namespace Tubifarry.Download.Clients.YouTube
 
                 try
                 {
+                    await TryUpdateVideoBoundTokensAsync(trackInfo.Id, token);
+
                     StreamingData streamingData = await Options.YouTubeMusicClient.GetStreamingDataAsync(trackInfo.Id, token).ConfigureAwait(false);
                     AudioStreamInfo? highestAudioStreamInfo = streamingData.StreamInfo.OfType<AudioStreamInfo>().OrderByDescending(info => info.Bitrate).FirstOrDefault();
 
@@ -89,6 +91,11 @@ namespace Tubifarry.Download.Clients.YouTube
                     }
 
                     AddTrackDownloadRequest(albumInfo, trackInfo, highestAudioStreamInfo, token);
+                    await _trackContainer.Task;
+                }
+                catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    _logger?.Warn(ex, $"403 Forbidden for track '{trackInfo.Name}' in album '{ReleaseInfo.Album}'.");
                 }
                 catch (Exception ex)
                 {
@@ -105,7 +112,6 @@ namespace Tubifarry.Download.Clients.YouTube
             _albumData.Title = albumInfo.Name;
 
             string fileName = BuildTrackFilename(CreateTrackFromYouTubeData(trackInfo, albumInfo), _albumData, ".m4a");
-
             LoadRequest downloadRequest = new(audioStreamInfo.Url, new LoadRequestOptions()
             {
                 CancellationToken = token,
@@ -255,6 +261,19 @@ namespace Tubifarry.Download.Clients.YouTube
             {
                 int delay = new Random().Next(Options.RandomDelayMin, Options.RandomDelayMax);
                 await Task.Delay(delay, token).ConfigureAwait(false);
+            }
+        }
+
+        private async Task TryUpdateVideoBoundTokensAsync(string videoId, CancellationToken token)
+        {
+            try
+            {
+                _logger?.Trace($"Updating client with video-bound tokens for: {videoId}");
+                await TrustedSessionHelper.UpdateClientWithVideoBoundTokensAsync(Options.YouTubeMusicClient!, videoId, serviceUrl: Options.TrustedSessionGeneratorUrl, token);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warn(ex, $"Failed to generate video-bound token for {videoId}, using existing session tokens");
             }
         }
     }

@@ -43,6 +43,11 @@ namespace Tubifarry.Download.Clients.YouTube
         /// </summary>
         public string SponsorBlockApiEndpoint { get; set; } = "https://sponsor.ajay.app";
 
+        /// <summary>
+        /// URL to the Trusted Session Generator service
+        /// </summary>
+        public string? TrustedSessionGeneratorUrl { get; set; }
+
         public YouTubeDownloadOptions() { }
 
         protected YouTubeDownloadOptions(YouTubeDownloadOptions options) : base(options)
@@ -54,6 +59,7 @@ namespace Tubifarry.Download.Clients.YouTube
             RandomDelayMax = options.RandomDelayMax;
             UseSponsorBlock = options.UseSponsorBlock;
             SponsorBlockApiEndpoint = options.SponsorBlockApiEndpoint;
+            TrustedSessionGeneratorUrl = options.TrustedSessionGeneratorUrl;
         }
     }
 }

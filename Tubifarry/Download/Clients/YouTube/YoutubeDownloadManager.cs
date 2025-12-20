@@ -55,6 +55,7 @@ namespace Tubifarry.Download.Clients.YouTube
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),
                 UseSponsorBlock = provider.Settings.UseSponsorBlock,
                 SponsorBlockApiEndpoint = provider.Settings.SponsorBlockApiEndpoint,
+                TrustedSessionGeneratorUrl = provider.Settings.TrustedSessionGeneratorUrl,
                 IsTrack = false,
                 ItemId = remoteAlbum.Release.DownloadUrl
             };

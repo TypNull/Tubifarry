@@ -288,6 +288,7 @@ be added to your library.
   3. In Lidarr, go to **Indexer and Downloader Settings** and provide the path to the `cookies.txt` file.
   4. **Trusted Session Generator**: Creates authentication tokens that mimic regular browser sessions to bypass YouTube's bot detection.
      - It generates tokens locally, which requires Node.js installed and available in your system's PATH
+	 - It can generate tokens using the (bgutil-ytdlp-pot-provider)[https://github.com/Brainicism/bgutil-ytdlp-pot-provider]
   
   The combination of cookies and trusted sessions significantly improves success rates when downloading from YouTube, and can help access higher quality audio streams.
 
