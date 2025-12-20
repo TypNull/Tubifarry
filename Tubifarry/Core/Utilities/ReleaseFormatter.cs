@@ -38,42 +38,42 @@ namespace Tubifarry.Core.Utilities
         private Dictionary<string, Func<string>> GetTokenHandlers(Track? track, Album? album) => new(StringComparer.OrdinalIgnoreCase)
         {
             // Album Tokens (only added if album is provided)
-            { "{Album Title}", () => album?.Title ?? string.Empty },
+            { "{Album Title}", () => CleanTitle(album?.Title) },
             { "{Album CleanTitle}", () => CleanTitle(album?.Title) },
-            { "{Album TitleThe}", () => TitleThe(album?.Title) },
-            { "{Album CleanTitleThe}", () => CleanTitleThe(album?.Title) },
-            { "{Album Type}", () => album?.AlbumType ?? string.Empty },
-            { "{Album Genre}", () => album?.Genres?.FirstOrDefault() ?? string.Empty },
+            { "{Album TitleThe}", () => CleanTitle(TitleThe(album?.Title)) },
+            { "{Album CleanTitleThe}", () => CleanTitle(album?.Title) },
+            { "{Album Type}", () => CleanTitle(album?.AlbumType) },
+            { "{Album Genre}", () => CleanTitle(album?.Genres?.FirstOrDefault()) },
             { "{Album MbId}", () => album?.ForeignAlbumId ?? string.Empty },
-            { "{Album Disambiguation}", () => album?.Disambiguation ?? string.Empty },
+            { "{Album Disambiguation}", () => CleanTitle(album?.Disambiguation) },
             { "{Release Year}", () => album?.ReleaseDate?.Year.ToString() ?? string.Empty },
 
             // Artist Tokens
-            { "{Artist Name}", () => _artist?.Name ?? string.Empty },
+            { "{Artist Name}", () => CleanTitle(_artist?.Name) },
             { "{Artist CleanName}", () => CleanTitle(_artist?.Name) },
-            { "{Artist NameThe}", () => TitleThe(_artist?.Name) },
+            { "{Artist NameThe}", () => CleanTitle(TitleThe(_artist?.Name))},
             { "{Artist CleanNameThe}", () => CleanTitleThe(_artist?.Name) },
-            { "{Artist Genre}", () => _artist?.Metadata?.Value?.Genres?.FirstOrDefault() ?? string.Empty },
+            { "{Artist Genre}", () => CleanTitle(_artist?.Metadata?.Value?.Genres?.FirstOrDefault()) },
             { "{Artist MbId}", () => _artist?.ForeignArtistId ?? string.Empty },
-            { "{Artist Disambiguation}", () => _artist?.Metadata?.Value?.Disambiguation ?? string.Empty },
+            { "{Artist Disambiguation}", () => CleanTitle(_artist?.Metadata?.Value?.Disambiguation) },
             { "{Artist NameFirstCharacter}", () => TitleFirstCharacter(_artist?.Name) },
 
             // Track Tokens (only added if track is provided)
-            { "{Track Title}", () => track?.Title ?? string.Empty },
+            { "{Track Title}", () => CleanTitle(track?.Title) },
             { "{Track CleanTitle}", () => CleanTitle(track?.Title) },
-            { "{Track ArtistName}", () => _artist?.Name ?? string.Empty },
-            { "{Track ArtistNameThe}", () => TitleThe(_artist?.Name) },
+            { "{Track ArtistName}", () => CleanTitle(_artist?.Name) },
+            { "{Track ArtistNameThe}", () => CleanTitle(TitleThe(_artist?.Name)) },
             { "{Track ArtistMbId}", () => _artist?.ForeignArtistId ?? string.Empty },
             { "{track:0}", () => FormatTrackNumber(track?.TrackNumber, "0") },
             { "{track:00}", () => FormatTrackNumber(track?.TrackNumber, "00") },
 
             // Medium Tokens (only added if track is provided)
-            { "{Medium Name}", () => track?.AlbumRelease?.Value?.Media?.FirstOrDefault(m => m.Number == track.MediumNumber)?.Name ?? string.Empty },
+            { "{Medium Name}", () => CleanTitle(track?.AlbumRelease?.Value?.Media?.FirstOrDefault(m => m.Number == track.MediumNumber)?.Name) },
             { "{medium:0}", () => track?.MediumNumber.ToString("0") ?? string.Empty },
             { "{medium:00}", () => track?.MediumNumber.ToString("00") ?? string.Empty },
 
             // Release Info Tokens
-            { "{Original Title}", () => _releaseInfo?.Title ?? string.Empty }
+            { "{Original Title}", () => CleanTitle(_releaseInfo?.Title) }
         };
 
         private static string ReplaceTokens(string pattern, Dictionary<string, Func<string>> tokenHandlers) => ReplaceTokensRegex().Replace(pattern, match =>
@@ -118,7 +118,7 @@ namespace Tubifarry.Core.Utilities
         private static string CleanTitle(string? title)
         {
             if (string.IsNullOrEmpty(title)) return string.Empty;
-            return title.Replace("&", "and").Replace("/", " ").Replace("\\", " ").Trim();
+            return title.Replace("&", "and").Replace("/", " - ").Replace("\\", " - ").Trim();
         }
 
         private static string TitleThe(string? title)
