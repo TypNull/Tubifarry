@@ -38,7 +38,7 @@ image: ghcr.io/hotio/lidarr:pr-plugins
 
 ### Non-Docker Installation
 To switch to the Plugins Branch:
-1. Open Lidarr and navigate to `System -> General`.
+1. Open Lidarr and navigate to `Settings -> General`.
 2. Scroll down to the **Branch** section.
 3. Replace "master" with "plugins".
 4. Force an update check to update Lidarr to the plugins branch.
