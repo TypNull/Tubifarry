@@ -11,6 +11,12 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
     {
         public LastfmMetadataProxySettingsValidator()
         {
+#if !DEV_BRANCH
+            RuleFor(x => x)
+                .Must(x => false)
+                .WithMessage("This version of Tubifarry does not support Last.fm for metadata. You would need to switch to develop!");
+#endif
+
             RuleFor(x => x.ApiKey)
                 .NotEmpty()
                 .WithMessage("A Last.fm API key is required.");
@@ -55,6 +61,31 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
     {
         private static readonly LastfmMetadataProxySettingsValidator Validator = new();
 
+#if !DEV_BRANCH
+
+        [FieldDefinition(1, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "Your Last.fm API key", Placeholder = "Enter your API key", Hidden = HiddenType.Hidden)]
+        public string ApiKey { get; set; } = string.Empty;
+
+        [FieldDefinition(2, Label = "User Agent", Section = MetadataSectionType.Metadata, Type = FieldType.Textbox, HelpText = "Specify a custom User-Agent to identify yourself. A User-Agent helps servers understand the software making the request. Use a unique identifier that includes a name and version. Avoid generic or suspicious-looking User-Agents to prevent blocking.", Placeholder = "Lidarr/1.0.0", Hidden = HiddenType.Hidden)]
+        public string UserAgent { get; set; } = string.Empty;
+
+        [FieldDefinition(3, Label = "Page Number", Type = FieldType.Number, HelpText = "Page number for pagination", Placeholder = "1", Hidden = HiddenType.Hidden)]
+        public int PageNumber { get; set; } = 1;
+
+        [FieldDefinition(4, Label = "Page Size", Type = FieldType.Number, HelpText = "Page size for pagination", Placeholder = "30", Hidden = HiddenType.Hidden)]
+        public int PageSize { get; set; } = 3;
+
+        [FieldDefinition(5, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "Select Memory (non-permanent) or Permanent caching", Hidden = HiddenType.Hidden)]
+        public int RequestCacheType { get; set; } = (int)CacheType.Permanent;
+
+        [FieldDefinition(6, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory to store cached data (only used for Permanent caching)", Hidden = HiddenType.Hidden)]
+        public string CacheDirectory { get; set; } = string.Empty;
+
+        [FieldDefinition(7, Label = "Warning", Type = FieldType.Checkbox, HelpText = "Use at your own risk this is not ready and is not in beta but in alpha state", Hidden = HiddenType.Hidden)]
+        public bool UseAtOwnRisk { get; set; }
+
+#else
+
         [FieldDefinition(1, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "Your Last.fm API key", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
@@ -75,6 +106,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
         [FieldDefinition(7, Label = "Warning", Type = FieldType.Checkbox, HelpText = "Use at your own risk this is not ready and is not in beta but in alpha state")]
         public bool UseAtOwnRisk { get; set; }
+
+#endif
+
 
         public LastfmMetadataProxySettings() => Instance = this;
 
