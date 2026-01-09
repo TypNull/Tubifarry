@@ -25,17 +25,17 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
         /// </summary>
         public static readonly Dictionary<SecondaryAlbumType, List<string>> SecondaryTypeKeywords = new()
         {
-            { SecondaryAlbumType.Live, new List<string> { "live", "concert", "performance", "stage", " at " } },
-            { SecondaryAlbumType.Remix, new List<string> { "remix", "remaster", "rework", "reimagined" } },
-            { SecondaryAlbumType.Compilation, new List<string> { "greatest hits", "best of", "collection", "anthology" } },
-            { SecondaryAlbumType.Soundtrack, new List<string> { "soundtrack", "ost", "original score" } },
-            { SecondaryAlbumType.Spokenword, new List<string> { "spoken", "poetry", "lecture", "speech" } },
-            { SecondaryAlbumType.Interview, new List<string> { "interview", "q&a", "conversation" } },
-            { SecondaryAlbumType.Audiobook, new List<string> { "audiobook", " unabridged", " narration" } },
-            { SecondaryAlbumType.Demo, new List<string> { "demo", "unreleased", "rough mix" } },
-            { SecondaryAlbumType.Mixtape, new List<string> { "mixtape", "street", "underground" } },
-            { SecondaryAlbumType.DJMix, new List<string> { "dj mix", " dj ", "set" } },
-            { SecondaryAlbumType.Audiodrama, new List<string> { "audio drama", "radio play", "theater" } }
+            { SecondaryAlbumType.Live, new List<string> { "live at", "live in", "live from", "in concert", "unplugged", "live performance", "live session", "recorded live", "live", "concert", "tour", "festival", "performance" } },
+            { SecondaryAlbumType.Remix, new List<string> { "remixed", "remixes", "remastered", "remix", "remaster", "rework", "reimagined", "revisited", "redux", "deluxe edition", "expanded edition" } },
+            { SecondaryAlbumType.Compilation, new List<string> { "greatest hits", "best of", "the best of", "very best", "ultimate", "essential", "essentials", "definitive", "collection", "anthology", "retrospective", "complete", "selected works", "treasures", "favorites", "favourites", " hits", "singles collection" } },
+            { SecondaryAlbumType.Soundtrack, new List<string> { "original soundtrack", "original motion picture soundtrack", "music from and inspired by", "music from the motion picture", "music from the film", "original score", "film score", "movie soundtrack", "soundtrack", "ost", "music from", "inspired by the" } },
+            { SecondaryAlbumType.Spokenword, new List<string> { "spoken word", "poetry reading", "lecture", "speech", "reading", "poetry" } },
+            { SecondaryAlbumType.Interview, new List<string> { "interview", "interviews", "in conversation", "q&a", "conversation with" } },
+            { SecondaryAlbumType.Audiobook, new List<string> { "audiobook", "audio book", "unabridged", "abridged", "narrated by", "narration" } },
+            { SecondaryAlbumType.Demo, new List<string> { "demo", "demos", "rough mix", "rough mixes", "early recordings", "sessions", "outtakes", "alternate takes", "rarities", "unreleased", "bootleg" } },
+            { SecondaryAlbumType.Mixtape, new List<string> { "mixtape", "mix tape", "the mixtape" } },
+            { SecondaryAlbumType.DJMix, new List<string> { "dj mix", "continuous mix", "mixed by", "mix session", "live mix", "club mix" } },
+            { SecondaryAlbumType.Audiodrama, new List<string> { "audio drama", "audio play", "radio play", "radio drama", "theater production", "theatre production" } }
         };
 
         /// <summary>
@@ -104,6 +104,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
             if (cleanTitle == null)
                 return [];
 
+            title = title.ToLowerInvariant();
+
             HashSet<SecondaryAlbumType> detectedTypes = [];
             HashSet<string> keywordMatcher = [];
 
@@ -117,7 +119,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
 
                 foreach (string keyword in keywordMatcher)
                 {
-                    if (cleanTitle.Contains(keyword))
+                    if (title.Contains(keyword) || cleanTitle.Contains(keyword))
                     {
                         detectedTypes.Add(kvp.Key);
                         break;
@@ -125,7 +127,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
                 }
             }
 
-            // In this example, if both Live and Remix are detected, remove Remix.
             if (detectedTypes.Contains(SecondaryAlbumType.Live) && detectedTypes.Contains(SecondaryAlbumType.Remix))
                 detectedTypes.Remove(SecondaryAlbumType.Remix);
 

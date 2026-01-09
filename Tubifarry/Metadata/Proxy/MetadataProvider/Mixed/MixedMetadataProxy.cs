@@ -268,7 +268,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 return candidates;
 
             BoostInternalProxyPriorities(candidates);
-            return [.. candidates.OrderBy(c => c.Priority).ThenByDescending(c => c.Support)];
+            return [.. candidates.OrderByDescending(c => c.Support).ThenBy(c => c.Priority)];
         }
 
         private static ProxyCandidate CreateProxyCandidate(IProxy proxy, Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector) => new()
