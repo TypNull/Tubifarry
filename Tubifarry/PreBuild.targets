@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	
+	<PropertyGroup>
+		<SubmoduleDir>$(MSBuildProjectDirectory)\..\Submodules\Lidarr</SubmoduleDir>
+		<!-- Check for a known file/folder that should exist if submodule is initialized -->
+		<SubmoduleMarker>$(SubmoduleDir)\src\NzbDrone.Core\Lidarr.Core.csproj</SubmoduleMarker>
+	</PropertyGroup>
+	
+	<!-- Initialize git submodules if not already done -->
+	<Target Name="InitializeSubmodules" BeforeTargets="LidarrFrontendBuild;BeforeBuild">
+		<Message Importance="High" Text="Checking git submodules..." Condition="!Exists('$(SubmoduleMarker)')" />
+		
+		<!-- Initialize and update submodules recursively -->
+		<Exec 
+			Command="git submodule update --init --recursive" 
+			WorkingDirectory="$(MSBuildProjectDirectory)\.."
+			Condition="!Exists('$(SubmoduleMarker)')"
+			ConsoleToMSBuild="true">
+			<Output TaskParameter="ConsoleOutput" PropertyName="GitSubmoduleOutput" />
+		</Exec>
+		
+		<Message Importance="High" Text="Submodules initialized successfully." Condition="!Exists('$(SubmoduleMarker)')" />
+		
+		<!-- Fail if submodule still doesn't exist after init -->
+		<Error 
+			Text="Failed to initialize git submodules. Please run 'git submodule update --init --recursive' manually from the repository root." 
+			Condition="!Exists('$(SubmoduleMarker)')" />
+	</Target>
+	
+	<!-- Build the Lidarr frontend if unavailable -->
+	<Target Name="LidarrFrontendBuild" BeforeTargets="BeforeBuild" DependsOnTargets="InitializeSubmodules">
+		<Message Importance="High" Text="Checking Lidarr frontend..." Condition="!Exists('$(SubmoduleDir)\_output\UI\')" />
+		
+		<Exec
+			Command="yarn install"
+			WorkingDirectory="$(SubmoduleDir)"
+			Condition="!Exists('$(SubmoduleDir)\_output\UI\')" />
+		<Exec
+			Command="yarn build"
+			WorkingDirectory="$(SubmoduleDir)"
+			Condition="!Exists('$(SubmoduleDir)\_output\UI\')" />
+		
+		<Message Importance="High" Text="Lidarr frontend built successfully." Condition="!Exists('$(SubmoduleDir)\_output\UI\')" />
+	</Target>
+	
+</Project>

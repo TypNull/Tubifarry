@@ -22,6 +22,7 @@
             Internalize="true"
             InputAssemblies="@(InputAssemblies)"
             TargetKind="Dll"
+            DebugInfo="true"
             LibraryPath="..\Submodules\Lidarr\_output\net8.0\;$(OutputPath)"
             OutputFile="$(OutputPath)$(AssemblyName).dll"
         />

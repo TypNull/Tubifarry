@@ -10,14 +10,14 @@ Tubifarry is a plugin for Lidarr that extends its functionality.
 
 - [Prerequisites](#prerequisites)
 - [Understanding the Architecture](#understanding-the-architecture)
-- [Initial Setup](#initial-setup)
-- [Building the Project](#building-the-project)
+- [Automatic Setup (Recommended)](#automatic-setup-recommended)
+- [Build Automation Explained](#build-automation-explained)
+- [Manual Setup (Fallback)](#manual-setup-fallback)
 - [Development Workflow](#development-workflow)
 - [Contributing Code](#contributing-code)
 - [Pull Request Guidelines](#pull-request-guidelines)
 - [Troubleshooting](#troubleshooting)
 - [Getting Help](#getting-help)
-
 
 
 ## Prerequisites
@@ -66,7 +66,116 @@ Tubifarry is built as a plugin that integrates with Lidarr's core functionality:
 3. **Build Order Matters**: You must build Lidarr completely before building Tubifarry
 4. **First Build Takes Time**: The initial setup can take 5-10 minutes, but subsequent builds are much faster
 
-## Initial Setup
+
+## Automatic Setup (Recommended)
+
+The project includes build automation that handles most of the setup process automatically. This is the fastest way to get started.
+
+### Step 1: Clone the Repository
+
+```bash
+git clone https://github.com/YOUR-USERNAME/Tubifarry.git
+```
+
+Or if you've forked the repository:
+```bash
+git clone https://github.com/YOUR-USERNAME/Tubifarry.git
+```
+
+### Step 2: Open and Build
+
+1. **Open** `Tubifarry.sln` in Visual Studio
+
+2. **Build the solution** by pressing `Ctrl + Shift + B` (or `Build` → `Build Solution`)
+   
+   ⏳ **Wait patiently** - This first build will take some time depending on your internet connection and PC performance. The build automation will:
+   - Initialize and clone all Git submodules (Lidarr source code)
+   - Install Node.js dependencies via Yarn
+   - Build the Lidarr frontend
+   
+   You can monitor progress in the **Output** window (`View` → `Output`).
+
+### Step 3: Restart Visual Studio
+
+After the first build completes:
+
+1. **Close** Visual Studio completely
+2. **Reopen** Visual Studio
+3. **Open** `Tubifarry.sln` again
+
+This ensures Visual Studio properly recognizes all the newly generated files and references.
+
+### Step 4: Build Again
+
+1. **Build the solution** again (`Ctrl + Shift + B`)
+   
+   ⚠️ You may see some errors on this build - **these can be ignored**.
+
+2. **Build once more** (`Ctrl + Shift + B`)
+   
+   The build should now complete successfully.
+
+### Step 5: Configure Startup Project
+
+1. In **Solution Explorer**, navigate to: `Submodules` → `Lidarr` → find `Lidarr.Console`
+2. **Right-click** on `Lidarr.Console`
+3. Select **"Set as Startup Project"**
+
+### Step 6: Run
+
+Press `F5` or click the **Start** button to run Lidarr.
+
+---
+
+**That's it!** If everything worked, you're ready to start developing. If you encountered errors, see the [Manual Setup](#manual-setup-fallback) or [Troubleshooting](#troubleshooting) sections below.
+
+
+## Build Automation Explained
+
+The project uses several MSBuild `.targets` files to automate the setup and build process. Understanding these can help with troubleshooting.
+
+### PreBuild.targets - Automatic Initialization
+
+This file handles automatic setup before the main build starts:
+
+**Submodule Initialization (`InitializeSubmodules` target)**
+- Checks if the Lidarr submodule exists by looking for `Submodules/Lidarr/src/NzbDrone.Core/Lidarr.Core.csproj`
+- If missing, automatically runs `git submodule update --init --recursive`
+
+**Frontend Build (`LidarrFrontendBuild` target)**
+- Checks if the Lidarr frontend has been built by looking for `Submodules/Lidarr/_output/UI/`
+- If missing, automatically runs:
+  - `yarn install` - Downloads all Node.js dependencies
+  - `yarn build` - Compiles the React frontend
+- This can take several minutes on first run
+
+### ILRepack.targets - Assembly Merging
+
+After the build completes, this file merges all plugin dependencies into a single DLL:
+
+### Debug.targets - Automatic Plugin Deployment
+
+In Debug configuration, this file automatically deploys your plugin:
+
+- After ILRepack finishes, copies the plugin files to Lidarr's plugin directory:
+  - `C:\ProgramData\Lidarr\plugins\AUTHOR\Tubifarry\`
+- Allows immediate testing without manual file copying
+
+### Build Order
+
+The targets execute in this order:
+1. `InitializeSubmodules` → Ensures Lidarr source exists
+2. `LidarrFrontendBuild` → Ensures frontend is compiled
+3. `BeforeBuild` → Standard .NET build preparation
+4. `Build` → Compiles Tubifarry code
+5. `CopySystemTextJson` → Copies required runtime DLL
+6. `ILRepacker` → Merges all assemblies
+7. `PostBuild` (Debug only) → Deploys to plugin folder
+
+
+## Manual Setup (Fallback)
+
+If the automatic setup fails or you prefer manual control, follow these steps.
 
 ### Step 1: Fork and Clone
 
@@ -102,13 +211,9 @@ git status
 
 You should see the Lidarr repository files.
 
-## Building the Project
+### Step 4: Build Lidarr Frontend
 
-Follow these steps in exact order. Each step depends on the previous one completing successfully.
-
-### Step 1: Build Lidarr Frontend
-
-The frontend must be built and running before proceeding to the backend.
+The frontend must be built before proceeding to the backend.
 
 1. **Navigate to the Lidarr submodule directory**
    ```bash
@@ -121,16 +226,18 @@ The frontend must be built and running before proceeding to the backend.
    ```
    This downloads all required JavaScript packages. First time takes 2-5 minutes.
 
-3. **Start the frontend build watcher**
+3. **Build the frontend** (or start the watcher for development)
+   ```bash
+   yarn build
+   ```
+   
+   Or for active development with hot-reload:
    ```bash
    yarn start
    ```
-   **Important**: Keep this terminal window open. The frontend watcher
-   must stay running. Till it finished building
-   
-   You should see output indicating webpack is watching for changes. The process will continue running until you stop it (Ctrl+C).
+   **Important**: If using `yarn start`, keep this terminal window open.
 
-### Step 2: Build Lidarr Backend
+### Step 5: Build Lidarr Backend
 
 1. **Open the Lidarr solution in Visual Studio**
    - Navigate to the Lidarr submodule directory
@@ -145,7 +252,7 @@ The frontend must be built and running before proceeding to the backend.
    - Wait for the build to complete (first build takes a bit time)
    - Watch the Output window for any errors
 
-### Step 3: Build Tubifarry Plugin
+### Step 6: Build Tubifarry Plugin
 
 Now that Lidarr is fully built, you can build the Tubifarry plugin.
 
@@ -163,18 +270,16 @@ Now that Lidarr is fully built, you can build the Tubifarry plugin.
 
 4. **Build the Tubifarry solution**
    - Click `Build` → `Build Solution`
-   - The plugin will automatically copy to the correct directory on
-     Windows if configured properly
+   - The plugin will automatically copy to the correct directory on Windows in Debug mode
 
-### Step 4: Initial Build Completion
+### Step 7: Manual Plugin Deployment (if needed)
 
-After the first successful build, you may need to trigger one final Lidarr rebuild:
+If the automatic deployment doesn't work, manually copy the plugin:
 
-1. **Return to the Lidarr solution in Visual Studio**
-2. **Rebuild Lidarr** one more time
-3. **Build Tubifarry again**
+1. Find the built plugin at: `Tubifarry/bin/Debug/net8.0/Lidarr.Plugin.Tubifarry.dll`
+2. Copy to: `C:\ProgramData\Lidarr\plugins\TypNull\Tubifarry\`
+3. Also copy the `.pdb` and `.deps.json` files if they exist
 
-This ensures all dependencies are properly linked.
 
 ## Development Workflow
 
@@ -184,13 +289,20 @@ Once you've completed the initial setup, your typical workflow will be:
 
 1. **Make your changes** to Tubifarry code in Visual Studio
 
-2. **Build Tubifarry** to test your changes
+2. **Build Tubifarry** to test your changes (`Ctrl + Shift + B`)
 
 3. **Run and test**
-   - Set `Lidarr.Console` as the startup project
-   - Press F5 to start debugging
+   - Ensure `Lidarr.Console` is set as the startup project
+   - Press `F5` to start debugging
    - Lidarr will start with your plugin loaded
    - Access the UI at http://localhost:8686
+
+### Hot Reload (Optional)
+
+For faster frontend iteration:
+1. Keep `yarn start` running in the Lidarr submodule directory
+2. Frontend changes will automatically refresh in the browser
+
 
 ## Contributing Code
 
@@ -299,10 +411,9 @@ Once you've completed the initial setup, your typical workflow will be:
 **Cause**: Lidarr backend wasn't fully built before building Tubifarry.
 
 **Solution**:
-1. Ensure Lidarr frontend is running (`yarn start`)
-2. Build Lidarr backend completely in Visual Studio
-3. Wait for build to finish successfully
-4. Then build Tubifarry
+1. Ensure Lidarr frontend is built (`Submodules/Lidarr/_output/UI/` exists)
+2. Open and build `Lidarr.sln` first
+3. Then build Tubifarry
 
 #### "Node version not supported" or "Yarn command not found"
 
@@ -322,13 +433,12 @@ yarn --version
 
 #### Frontend changes not appearing
 
-**Cause**: Frontend watcher not running.
+**Cause**: Frontend not rebuilt or browser cache.
 
 **Solution**:
 1. Navigate to Lidarr submodule directory
-2. Run `yarn start`
-3. Keep the terminal open
-4. Refresh your browser with Ctrl+F5 (hard refresh)
+2. Run `yarn build` (or `yarn start` for development)
+3. Refresh your browser with `Ctrl+F5` (hard refresh)
 
 #### "Submodule not initialized" or empty Lidarr directory
 
@@ -344,10 +454,20 @@ git submodule update --init --recursive
 **Cause**: Plugin DLL not copied to correct location.
 
 **Solution**:
-1. Check your build output directory
-2. Manually copy plugin files to Lidarr's plugin directory
-3. Restart Lidarr
-4. Check Lidarr logs for plugin loading errors
+1. Check if you're building in **Debug** configuration (automatic copy only works in Debug)
+2. Check your build output directory: `Tubifarry/bin/Debug/net8.0/`
+3. Manually copy plugin files to: `C:\ProgramData\Lidarr\plugins\AUTHOR\Tubifarry\`
+4. Restart Lidarr
+5. Check Lidarr logs for plugin loading errors
+
+#### ILRepack errors
+
+**Cause**: Missing or incompatible assemblies.
+
+**Solution**:
+1. Clean the solution (`Build` → `Clean Solution`)
+2. Delete the `bin` and `obj` folders in the Tubifarry project
+3. Rebuild
 
 ### Performance Issues
 
@@ -356,6 +476,7 @@ git submodule update --init --recursive
 This is normal! The first build includes:
 - Downloading all NuGet packages
 - Downloading all Node packages
+- Building the frontend (webpack compilation)
 - Building everything from scratch
 
 Subsequent builds will be much faster (usually under 1 minute).
@@ -413,11 +534,10 @@ When asking for help, please include:
 - [ ] Fork Tubifarry repository
 - [ ] Clone your fork
 - [ ] Initialize submodules (`git submodule update --init --recursive`)
-- [ ] Build Lidarr frontend (`yarn install` then `yarn start`)
-- [ ] Build Lidarr backend (Visual Studio or other IDE)
-- [ ] Build Tubifarry plugin
+- [ ] Build Lidarr frontend (`cd Submodules/Lidarr && yarn install && yarn build`)
+- [ ] Build Lidarr backend (open `Lidarr.sln`, build)
+- [ ] Build Tubifarry plugin (open `Tubifarry.sln`, build)
 - [ ] Test by running Lidarr.Console
-
 
 ### Before Submitting a PR
 

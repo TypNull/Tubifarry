@@ -1,27 +1,31 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.12.35527.113
+# Visual Studio Version 18
+VisualStudioVersion = 18.1.11312.151
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tubifarry", "Tubifarry\Tubifarry.csproj", "{003DFC9A-18D9-47DB-BFC3-5375AC29B469}"
-EndProject
-Project("{911E67C6-3D85-4FCE-B560-20A9C3E3FF48}") = "Lidarr.Console", "Submodules\Lidarr\_output\net6.0\Lidarr.Console.exe", "{6EC23C64-DEF7-4A6A-918B-1A86CCB2AF03}"
-	ProjectSection(DebuggerProjectSystem) = preProject
-		PortSupplier = 00000000-0000-0000-0000-000000000000
-		Executable = Submodules\Lidarr\_output\net8.0\Lidarr.Console.exe
-		RemoteMachine = 
-		StartingDirectory = Submodules\Lidarr\_output\net8.0
-		Environment = Standard
-		LaunchingEngine = 00000000-0000-0000-0000-000000000000
-		UseLegacyDebugEngines = No
-		LaunchSQLEngine = No
-		AttachLaunchAction = No
-		IORedirection = Auto
-	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Core", "Submodules\Lidarr\src\NzbDrone.Core\Lidarr.Core.csproj", "{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Common", "Submodules\Lidarr\src\NzbDrone.Common\Lidarr.Common.csproj", "{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Submodules", "Submodules", "{F8B21985-D2D8-4556-B436-E3B3E9859062}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Host", "Submodules\Lidarr\src\NzbDrone.Host\Lidarr.Host.csproj", "{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Api.V1", "Submodules\Lidarr\src\Lidarr.Api.V1\Lidarr.Api.V1.csproj", "{2043F410-D541-0B5C-1CC8-0133DB1D8B39}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Http", "Submodules\Lidarr\src\Lidarr.Http\Lidarr.Http.csproj", "{E3AEFFDA-ABE8-A47E-202E-BC445822FB89}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.SignalR", "Submodules\Lidarr\src\NzbDrone.SignalR\Lidarr.SignalR.csproj", "{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Console", "Submodules\Lidarr\src\NzbDrone.Console\Lidarr.Console.csproj", "{15129560-39D3-E118-4056-49656F5A637C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Lidarr", "Lidarr", "{11025488-4B11-4269-966E-4C2B04D1B5C3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Windows", "Submodules\Lidarr\src\NzbDrone.Windows\Lidarr.Windows.csproj", "{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lidarr.Mono", "Submodules\Lidarr\src\NzbDrone.Mono\Lidarr.Mono.csproj", "{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,8 +37,6 @@ Global
 		{003DFC9A-18D9-47DB-BFC3-5375AC29B469}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{003DFC9A-18D9-47DB-BFC3-5375AC29B469}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{003DFC9A-18D9-47DB-BFC3-5375AC29B469}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6EC23C64-DEF7-4A6A-918B-1A86CCB2AF03}.Debug|Any CPU.ActiveCfg = Release|x64
-		{6EC23C64-DEF7-4A6A-918B-1A86CCB2AF03}.Release|Any CPU.ActiveCfg = Release|x64
 		{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -43,8 +45,51 @@ Global
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2043F410-D541-0B5C-1CC8-0133DB1D8B39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2043F410-D541-0B5C-1CC8-0133DB1D8B39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2043F410-D541-0B5C-1CC8-0133DB1D8B39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2043F410-D541-0B5C-1CC8-0133DB1D8B39}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3AEFFDA-ABE8-A47E-202E-BC445822FB89}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3AEFFDA-ABE8-A47E-202E-BC445822FB89}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3AEFFDA-ABE8-A47E-202E-BC445822FB89}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3AEFFDA-ABE8-A47E-202E-BC445822FB89}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09}.Release|Any CPU.Build.0 = Release|Any CPU
+		{15129560-39D3-E118-4056-49656F5A637C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{15129560-39D3-E118-4056-49656F5A637C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{15129560-39D3-E118-4056-49656F5A637C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{15129560-39D3-E118-4056-49656F5A637C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{91CB11D7-4E7A-4B1A-AE6A-15E1F075C27A} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{E1E12DF8-D168-4259-96C9-B7A6EE58A4AF} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{97AAE5CB-DE41-35CC-994B-1E52C8FDFA60} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{2043F410-D541-0B5C-1CC8-0133DB1D8B39} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{E3AEFFDA-ABE8-A47E-202E-BC445822FB89} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{5F3AB49B-9442-4A4C-246E-FC3FAE8E8E09} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{15129560-39D3-E118-4056-49656F5A637C} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{11025488-4B11-4269-966E-4C2B04D1B5C3} = {F8B21985-D2D8-4556-B436-E3B3E9859062}
+		{B5D972C6-9EA6-6AEF-E20C-B8E85E05DDE8} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+		{0AC5781C-A310-AF9D-D097-4FF1F0FF8A68} = {11025488-4B11-4269-966E-4C2B04D1B5C3}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FE0E5C13-34E6-4D96-8912-D2574B06FA0D}
 	EndGlobalSection
 EndGlobal
