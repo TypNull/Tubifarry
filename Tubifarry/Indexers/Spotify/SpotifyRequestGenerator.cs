@@ -163,22 +163,36 @@ namespace Tubifarry.Indexers.Spotify
 
         public void StartTokenRequest()
         {
-            if (string.IsNullOrEmpty(PluginKeys.SpotifyClientId) || string.IsNullOrEmpty(PluginKeys.SpotifyClientSecret))
+            string clientId = !string.IsNullOrWhiteSpace(_settings?.CustomSpotifyClientId) ? _settings.CustomSpotifyClientId : PluginKeys.SpotifyClientId;
+            string clientSecret = !string.IsNullOrWhiteSpace(_settings?.CustomSpotifyClientSecret) ? _settings.CustomSpotifyClientSecret : PluginKeys.SpotifyClientSecret;
+
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+            {
+                _logger.Warn("Spotify Client ID or Secret is not configured. Cannot create token.");
                 return;
+            }
+
+            bool isCustomCredentials = !string.IsNullOrWhiteSpace(_settings?.CustomSpotifyClientId) && !string.IsNullOrWhiteSpace(_settings?.CustomSpotifyClientSecret);
+
+            if (isCustomCredentials)
+                _logger.Debug("Using custom Spotify credentials from indexer settings.");
+            else
+                _logger.Trace("Using default shared Spotify credentials.");
+
             _tokenRequest = new(async (token) =>
             {
                 try
                 {
                     _logger.Trace("Attempting to create a new Spotify token using official endpoint.");
                     HttpRequestMessage request = new(HttpMethod.Post, "https://accounts.spotify.com/api/token");
-                    string credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{PluginKeys.SpotifyClientId}:{PluginKeys.SpotifyClientSecret}"));
+                    string credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
                     request.Headers.Add("Authorization", $"Basic {credentials}");
                     request.Content = new FormUrlEncodedContent(new Dictionary<string, string> { { "grant_type", "client_credentials" } });
                     System.Net.Http.HttpClient httpClient = HttpGet.HttpClient;
                     HttpResponseMessage response = await httpClient.SendAsync(request, token);
                     response.EnsureSuccessStatusCode();
                     string responseContent = await response.Content.ReadAsStringAsync(token);
-                    _logger.Info($"Spotify token response: {responseContent}");
+                    _logger.Debug($"Spotify token created successfully");
                     JsonElement dynamicObject = JsonSerializer.Deserialize<JsonElement>(responseContent)!;
                     _token = dynamicObject.GetProperty("access_token").GetString() ?? "";
                     if (string.IsNullOrEmpty(_token))

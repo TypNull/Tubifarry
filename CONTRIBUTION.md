@@ -94,7 +94,9 @@ git clone https://github.com/YOUR-USERNAME/Tubifarry.git
    - Build the Lidarr frontend
    
    You can monitor progress in the **Output** window (`View` → `Output`).
-
+   
+   ⚠️ You will see errors on this build.
+   
 ### Step 3: Restart Visual Studio
 
 After the first build completes:

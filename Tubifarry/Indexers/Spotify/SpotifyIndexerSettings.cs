@@ -32,6 +32,16 @@ namespace Tubifarry.Indexers.Spotify
                 .GreaterThanOrEqualTo(0)
                 .LessThanOrEqualTo(50)
                 .WithMessage("Year tolerance must be between 0 and 50");
+
+            RuleFor(x => x.CustomSpotifyClientId)
+                .NotEmpty()
+                .When(x => !string.IsNullOrWhiteSpace(x.CustomSpotifyClientSecret))
+                .WithMessage("Custom Spotify Client ID must be provided when Custom Client Secret is set");
+
+            RuleFor(x => x.CustomSpotifyClientSecret)
+                .NotEmpty()
+                .When(x => !string.IsNullOrWhiteSpace(x.CustomSpotifyClientId))
+                .WithMessage("Custom Spotify Client Secret must be provided when Custom Client ID is set");
         }
     }
 
@@ -53,6 +63,12 @@ namespace Tubifarry.Indexers.Spotify
 
         [FieldDefinition(14, Label = "Year Tolerance", Type = FieldType.Number, HelpText = "Number of years tolerance for release date differences between Spotify and YouTube Music.", Advanced = true)]
         public int YearTolerance { get; set; } = 2;
+
+        [FieldDefinition(15, Label = "Spotify Client ID", Type = FieldType.Textbox, HelpText = "This allows you to use your own Spotify API rate limit quota instead of the shared one. Get your credentials from https://developer.spotify.com/dashboard", Advanced = true)]
+        public string CustomSpotifyClientId { get; set; } = string.Empty;
+
+        [FieldDefinition(16, Label = "Spotify Client Secret", Type = FieldType.Password, HelpText = "Client ID and Secret must be provided together to use your own credentials.", Advanced = true)]
+        public string CustomSpotifyClientSecret { get; set; } = string.Empty;
 
         public override NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
