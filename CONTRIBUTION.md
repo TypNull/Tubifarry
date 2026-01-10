@@ -74,7 +74,7 @@ The project includes build automation that handles most of the setup process aut
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/Tubifarry.git
+git clone https://github.com/TypNull/Tubifarry.git
 ```
 
 Or if you've forked the repository:
