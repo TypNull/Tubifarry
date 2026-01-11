@@ -8,7 +8,7 @@
 	</PropertyGroup>
 	
 	<!-- Initialize git submodules if not already done -->
-	<Target Name="InitializeSubmodules" BeforeTargets="LidarrFrontendBuild;BeforeBuild">
+	<Target Name="InitializeSubmodules" BeforeTargets="LidarrFrontendBuild;BeforeBuild" Condition="'$(CI)' != 'true'">
 		<Message Importance="High" Text="Checking git submodules..." Condition="!Exists('$(SubmoduleMarker)')" />
 		
 		<!-- Initialize and update submodules recursively -->
@@ -29,7 +29,7 @@
 	</Target>
 	
 	<!-- Build the Lidarr frontend if unavailable -->
-	<Target Name="LidarrFrontendBuild" BeforeTargets="BeforeBuild" DependsOnTargets="InitializeSubmodules">
+	<Target Name="LidarrFrontendBuild" BeforeTargets="BeforeBuild" DependsOnTargets="InitializeSubmodules" Condition="'$(CI)' != 'true'">
 		<Message Importance="High" Text="Checking Lidarr frontend..." Condition="!Exists('$(SubmoduleDir)\_output\UI\')" />
 		
 		<Exec

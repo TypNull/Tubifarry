@@ -17,7 +17,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider
             { "album", "Album" },
             { "broadcast", "Broadcast" },
             { "ep", "EP" },
-            { "single", "Single" }
+            { "single", "Single" },
+            // Discogs-specific format variations
+            { "maxi-single", "Single" },
+            { "mini-album", "EP" },
+            { "maxisingle", "Single" }
         };
 
         /// <summary>

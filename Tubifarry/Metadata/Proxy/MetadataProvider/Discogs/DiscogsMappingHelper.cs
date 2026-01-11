@@ -197,13 +197,94 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         /// <summary>
         /// Maps Discogs format descriptions to album types.
         /// </summary>
-        public static void MapAlbumTypes(DiscogsRelease release, Album album) => AlbumMapper.MapAlbumTypes(release.Formats?.SelectMany(f => f.Descriptions ?? Enumerable.Empty<string>()), album);
+        public static void MapAlbumTypes(DiscogsRelease release, Album album)
+        {
+            List<string>? formatDescriptions = release.Formats?.SelectMany(f => f.Descriptions ?? Enumerable.Empty<string>()).ToList();
+            List<string?>? physicalFormats = release.Formats?.Select(f => f.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+            List<DiscogsTrack> filteredTracks = FilterTracklist(release.Tracklist);
+            int trackCount = filteredTracks.Count;
+            int totalDuration = filteredTracks.Sum(t => ParseDuration(t.Duration ?? "0"));
 
-        public static void MapAlbumTypes(DiscogsArtistRelease release, Album album) => AlbumMapper.MapAlbumTypes((release.Format ?? string.Empty).Split(',').Append(release.Type!).Select(f => f.Trim()), album);
+            // Tier 1: Standard format description matching
+            AlbumMapper.MapAlbumTypes(formatDescriptions, album);
+            if (album.AlbumType != "Album" || formatDescriptions?.Any(d => d.Equals("album", StringComparison.OrdinalIgnoreCase)) == true)
+                return;
 
-        /// <summary>
-        /// Maps a DiscogsMasterRelease to an Album. Note that artist information is not set.
-        /// </summary>
+            // Tier 2: Physical format patterns
+            string? inferredType = InferTypeFromPhysicalFormat(physicalFormats!, formatDescriptions);
+            if (inferredType != null)
+            {
+                album.AlbumType = inferredType;
+                return;
+            }
+
+            // Tier 3: Track count/duration heuristics
+            album.AlbumType = InferTypeFromMetadata(trackCount, totalDuration, album.Title);
+        }
+
+        public static void MapAlbumTypes(DiscogsArtistRelease release, Album album)
+        {
+            List<string> formatDescriptions = (release.Format ?? string.Empty).Split(',').Append(release.Type!).Select(f => f.Trim()).ToList();
+
+            // Tier 1: Standard format description matching
+            AlbumMapper.MapAlbumTypes(formatDescriptions, album);
+            if (album.AlbumType != "Album" || formatDescriptions.Any(d => d.Equals("album", StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            // Tier 2: Physical format patterns
+            List<string> physicalFormats = (release.Format ?? string.Empty).Split(',').Select(f => f.Trim()).Where(f => !string.IsNullOrWhiteSpace(f)).ToList();
+            string? inferredType = InferTypeFromPhysicalFormat(physicalFormats!, formatDescriptions);
+            if (inferredType != null)
+                album.AlbumType = inferredType;
+        }
+
+        private static string? InferTypeFromPhysicalFormat(List<string?>? physicalFormats, List<string>? formatDescriptions)
+        {
+            if (physicalFormats == null || !physicalFormats.Any())
+                return null;
+
+            List<string> allFormats = physicalFormats.Concat(formatDescriptions ?? Enumerable.Empty<string>()).Select(f => f?.ToLowerInvariant() ?? string.Empty).ToList();
+
+            if (allFormats.Any(f => f.Contains("7\"") || f.Contains("7 inch")))
+                return "Single";
+
+            if (allFormats.Any(f => f.Contains("12\"") || f.Contains("12 inch")))
+            {
+                if (allFormats.Any(f => f.Contains("ep") || f.Contains("mini")))
+                    return "EP";
+                if (allFormats.Any(f => f.Contains("single sided") || f.Contains("promo")))
+                    return "Single";
+                return null;
+            }
+
+            if (allFormats.Any(f => f == "lp" || f.Contains("long play")))
+                return "Album";
+
+            return null;
+        }
+
+        private static string InferTypeFromMetadata(int trackCount, int totalDurationSeconds, string? title)
+        {
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                string lowerTitle = title.ToLowerInvariant();
+                if (lowerTitle.Contains(" ep") || lowerTitle.Contains("e.p.") || lowerTitle.EndsWith("ep"))
+                    return "EP";
+                if (lowerTitle.Contains("single") || (lowerTitle.Contains(" / ") && trackCount <= 3))
+                    return "Single";
+            }
+
+            int durationMinutes = totalDurationSeconds / 60;
+
+            if (trackCount <= 3)
+                return durationMinutes < 15 ? "Single" : "EP";
+
+            if (trackCount <= 7)
+                return durationMinutes < 30 ? "EP" : "Album";
+
+            return "Album";
+        }
+
         /// <summary>
         /// Maps a DiscogsMasterRelease to an Album. Note that artist information is not set.
         /// </summary>
