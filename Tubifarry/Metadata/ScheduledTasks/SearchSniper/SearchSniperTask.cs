@@ -276,12 +276,10 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
                     foreach (QualityProfileQualityItem? item in profile.Items.Take(cutoffIndex))
                     {
-                        if (!item.Allowed)
-                            continue;
                         if (item.Quality != null)
                             qualityIds.Add(item.Quality.Id);
                         else if (item.Items?.Any() == true)
-                            qualityIds.AddRange(item.Items.Where(i => i.Quality != null && i.Allowed).Select(i => i.Quality!.Id));
+                            qualityIds.AddRange(item.Items.Where(i => i.Quality != null).Select(i => i.Quality!.Id));
                     }
 
                     if (qualityIds.Count != 0)
