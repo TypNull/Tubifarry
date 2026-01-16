@@ -1,49 +1,45 @@
-﻿using FluentValidation.Results;
+using FluentValidation.Results;
 using NLog;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.IndexerSearch;
-using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Qualities;
-using NzbDrone.Core.Qualities;
 using NzbDrone.Core.Queue;
 using NzbDrone.Core.ThingiProvider;
 using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 {
-    /// <summary>
-    /// Search Sniper, Automated search trigger that randomly selects albums for periodic scanning.
-    /// </summary>
     public class SearchSniperTask : ScheduledTaskBase<SearchSniperTaskSettings>, IExecute<SearchSniperCommand>
     {
+        private const int BatchSize = 100;
         private static readonly CacheService _cacheService = new();
         private readonly IAlbumService _albumService;
+        private readonly IArtistService _artistService;
         private readonly IQueueService _queueService;
         private readonly IManageCommandQueue _commandQueueManager;
-        private readonly IAlbumRepository _albumRepository;
         private readonly IQualityProfileService _qualityProfileService;
-        private readonly AlbumRepositoryHelper _albumRepositoryHelper;
+        private readonly SearchSniperRepositoryHelper _repositoryHelper;
         private readonly Logger _logger;
 
         public SearchSniperTask(
             IAlbumService albumService,
+            IArtistService artistService,
             IQueueService queueService,
             IManageCommandQueue commandQueueManager,
-            IAlbumRepository albumRepository,
             IQualityProfileService qualityProfileService,
             IMainDatabase database,
             IEventAggregator eventAggregator,
             Logger logger)
         {
             _albumService = albumService;
+            _artistService = artistService;
             _queueService = queueService;
             _commandQueueManager = commandQueueManager;
-            _albumRepository = albumRepository;
             _qualityProfileService = qualityProfileService;
-            _albumRepositoryHelper = new AlbumRepositoryHelper(database, eventAggregator);
+            _repositoryHelper = new SearchSniperRepositoryHelper(database, eventAggregator, artistService);
             _logger = logger;
         }
 
@@ -82,9 +78,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             return test;
         }
 
-        /// <summary>
-        /// Command handler - called when SearchSniperCommand is executed by the task manager.
-        /// </summary>
         public void Execute(SearchSniperCommand message)
         {
             try
@@ -106,9 +99,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             _cacheService.CacheDirectory = ActiveSettings.CacheDirectory;
         }
 
-        /// <summary>
-        /// Main search logic - retrieves eligible albums and triggers searches.
-        /// </summary>
         private void RunSearch(SearchSniperCommand message)
         {
             if (!ActiveSettings.SearchMissing && !ActiveSettings.SearchMissingTracks && !ActiveSettings.SearchQualityCutoffNotMet)
@@ -123,196 +113,258 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 if (queueCount >= ActiveSettings.StopWhenQueued)
                 {
                     message.SetCompletionMessage($"Skipping Search Sniper, queue threshold reached ({queueCount} {(WaitOnType)ActiveSettings.WaitOn} items)");
-                    _logger.Info($"Skipping. Queue count ({queueCount}) of {(WaitOnType)ActiveSettings.WaitOn} items reached threshold ({ActiveSettings.StopWhenQueued})");
+                    _logger.Info("Skipping. Queue count ({0}) of {1} items reached threshold ({2})", queueCount, (WaitOnType)ActiveSettings.WaitOn, ActiveSettings.StopWhenQueued);
                     return;
                 }
             }
 
-            List<Album> targetAlbums = GetTargetAlbums();
-            if (targetAlbums.Count == 0)
-                return;
+            int targetCount = ActiveSettings.RandomPicksPerInterval;
+            HashSet<int> queuedAlbumIds = GetQueuedAlbumIds();
+            int candidateTarget = Math.Min(targetCount * 10, 500);
 
-            List<Album> eligibleAlbums = ExcludeQueuedAlbums(targetAlbums);
+            List<Album> eligibleAlbums = CollectEligibleAlbums(queuedAlbumIds, candidateTarget);
+
             if (eligibleAlbums.Count == 0)
+            {
+                message.SetCompletionMessage("Search Sniper completed. No eligible albums found.");
+                _logger.Info("No eligible albums found after filtering queued and cached albums");
                 return;
+            }
 
-            List<Album> nonCachedAlbums = ExcludeCachedAlbumsAsync(eligibleAlbums).GetAwaiter().GetResult();
-            _logger.Trace("{0} non-cached album(s) available", nonCachedAlbums.Count);
-
-            if (nonCachedAlbums.Count == 0)
-                return;
-
-            List<Album> selectedAlbums = SelectRandomAlbums(nonCachedAlbums);
+            List<Album> selectedAlbums = SelectRandomAlbums(eligibleAlbums, targetCount);
 
             foreach (Album album in selectedAlbums)
-                _logger.Debug("Selected: '{0}' by {1}", album.Title, album.Artist?.Value.Name ?? "Unknown Artist");
+                _logger.Trace("Selected: '{0}' by {1}", album.Title, album.Artist?.Value?.Name ?? "Unknown Artist");
 
             CacheSelectedAlbumsAsync(selectedAlbums).GetAwaiter().GetResult();
 
             if (selectedAlbums.Count > 0)
             {
                 _commandQueueManager.Push(new AlbumSearchCommand(selectedAlbums.ConvertAll(a => a.Id)));
-                message.SetCompletionMessage($"Search Sniper completed. Queued {selectedAlbums.Count} albums for search");
-                _logger.Info($"Queued {selectedAlbums.Count} albums for search");
+                message.SetCompletionMessage($"Search Sniper completed. Queued {selectedAlbums.Count} album(s) for search");
+                _logger.Info("Queued {0} album(s) for search", selectedAlbums.Count);
             }
         }
 
-        /// <summary>
-        /// Retrieves albums based on enabled search criteria from settings.
-        /// </summary>
-        private List<Album> GetTargetAlbums()
+        private List<Album> CollectEligibleAlbums(HashSet<int> queuedAlbumIds, int candidateTarget)
         {
-            HashSet<int> targetAlbums = [];
+            Dictionary<int, Album> eligibleAlbums = [];
+            Dictionary<int, List<int>>? profileCutoffs = null;
+
+            (int minId, int maxId) missingIdRange = (0, 0);
+            (int minId, int maxId) partialIdRange = (0, 0);
+            (int minId, int maxId) cutoffIdRange = (0, 0);
 
             if (ActiveSettings.SearchMissing)
-            {
-                List<Album> noFiles = GetAlbumsWithNoFiles();
-                foreach (Album album in noFiles)
-                    targetAlbums.Add(album.Id);
-                _logger.Debug("{0} album(s) with no files", noFiles.Count);
-            }
+                missingIdRange = GetMissingAlbumsIdRange();
 
             if (ActiveSettings.SearchMissingTracks)
-            {
-                List<Album> missingTracks = GetAlbumsWithMissingTracks();
-                foreach (Album album in missingTracks)
-                    targetAlbums.Add(album.Id);
-                _logger.Debug("{0} album(s) with missing tracks", missingTracks.Count);
-            }
+                partialIdRange = _repositoryHelper.GetPartialAlbumsIdRange();
 
             if (ActiveSettings.SearchQualityCutoffNotMet)
             {
-                List<Album> cutoffUnmet = GetAlbumsWhereCutoffUnmet();
-                foreach (Album album in cutoffUnmet)
-                    targetAlbums.Add(album.Id);
-                _logger.Debug("{0} album(s) below quality cutoff", cutoffUnmet.Count);
+                profileCutoffs = SearchSniperRepositoryHelper.BuildProfileCutoffs(_qualityProfileService.All());
+                if (profileCutoffs.Count > 0)
+                    cutoffIdRange = _repositoryHelper.GetCutoffUnmetAlbumsIdRange(profileCutoffs);
             }
 
-            return targetAlbums
-                .Join(_albumService.GetAllAlbums(), id => id, a => a.Id, (_, album) => album)
-                .ToList();
+            if (ActiveSettings.SearchMissing && missingIdRange.maxId > 0 && eligibleAlbums.Count < candidateTarget)
+            {
+                int startId = GetRandomStartId(missingIdRange.minId, missingIdRange.maxId);
+                _logger.Trace("Fetching missing albums (ID range: {0}-{1}, starting at ID: {2})...", missingIdRange.minId, missingIdRange.maxId, startId);
+
+                CollectFromSource(
+                    lastId => GetMissingAlbumsBatch(lastId),
+                    eligibleAlbums, queuedAlbumIds, candidateTarget, startId, missingIdRange.minId);
+            }
+
+            if (ActiveSettings.SearchMissingTracks && partialIdRange.maxId > 0 && eligibleAlbums.Count < candidateTarget)
+            {
+                int startId = GetRandomStartId(partialIdRange.minId, partialIdRange.maxId);
+                _logger.Trace("Fetching partial albums (ID range: {0}-{1}, starting at ID: {2})...", partialIdRange.minId, partialIdRange.maxId, startId);
+
+                CollectFromSource(
+                    lastId => _repositoryHelper.GetPartialAlbumsBatch(lastId, BatchSize),
+                    eligibleAlbums, queuedAlbumIds, candidateTarget, startId, partialIdRange.minId);
+            }
+
+            if (ActiveSettings.SearchQualityCutoffNotMet && cutoffIdRange.maxId > 0 && eligibleAlbums.Count < candidateTarget)
+            {
+                int startId = GetRandomStartId(cutoffIdRange.minId, cutoffIdRange.maxId);
+                _logger.Trace("Fetching cutoff unmet albums (ID range: {0}-{1}, starting at ID: {2})...", cutoffIdRange.minId, cutoffIdRange.maxId, startId);
+
+                CollectFromSource(
+                    lastId => _repositoryHelper.GetCutoffUnmetAlbumsBatch(profileCutoffs!, lastId, BatchSize),
+                    eligibleAlbums, queuedAlbumIds, candidateTarget, startId, cutoffIdRange.minId);
+            }
+
+            AssignArtistsToAlbums(eligibleAlbums.Values);
+
+            _logger.Info("Collected {0} eligible album(s) for random selection", eligibleAlbums.Count);
+            return [.. eligibleAlbums.Values];
         }
 
-        /// <summary>
-        /// Gets albums that have no track files (completely missing from library).
-        /// </summary>
-        private List<Album> GetAlbumsWithNoFiles()
+        private static int GetRandomStartId(int minId, int maxId)
         {
-            try
+            if (maxId <= minId)
+                return minId;
+            return Random.Shared.Next(minId, maxId + 1);
+        }
+
+        private void CollectFromSource(
+            Func<int, List<Album>> fetchBatch,
+            Dictionary<int, Album> eligibleAlbums,
+            HashSet<int> queuedAlbumIds,
+            int candidateTarget,
+            int startId,
+            int minId)
+        {
+            int lastId = startId - 1;
+            bool hasWrapped = false;
+            int maxIterations = 100;
+            int iterations = 0;
+
+            while (eligibleAlbums.Count < candidateTarget && iterations++ < maxIterations)
             {
-                PagingSpec<Album> pagingSpec = new()
+                List<Album> batch = fetchBatch(lastId);
+
+                if (batch.Count == 0)
                 {
-                    Page = 1,
-                    PageSize = 100000,
-                    SortDirection = SortDirection.Ascending,
-                    SortKey = "Id"
-                };
-
-                // Explicit == true comparison is required for proper SQL translation
-                pagingSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
-                return _albumService.AlbumsWithoutFiles(pagingSpec).Records;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error querying albums with no files");
-                return [];
-            }
-        }
-
-        /// <summary>
-        /// Gets albums that have some track files but are missing other tracks (partial completion).
-        /// </summary>
-        private List<Album> GetAlbumsWithMissingTracks()
-        {
-            try
-            {
-                // Explicit == true comparison is required for proper SQL translation
-                SqlBuilder builder = _albumRepositoryHelper.Builder()
-                    .Join<Album, Artist>((a, ar) => a.ArtistMetadataId == ar.ArtistMetadataId)
-                    .Join<Album, AlbumRelease>((a, r) => a.Id == r.AlbumId)
-                    .Join<AlbumRelease, Track>((r, t) => r.Id == t.AlbumReleaseId)
-                    .LeftJoin<Track, TrackFile>((t, f) => t.TrackFileId == f.Id)
-                    .Where<Album>(a => a.Monitored == true)
-                    .Where<Artist>(ar => ar.Monitored == true)
-                    .Where<AlbumRelease>(r => r.Monitored == true)
-                    .GroupBy<Album>(a => a.Id)
-                    .GroupBy<Artist>(ar => ar.SortName)
-                    .Having("COUNT(DISTINCT \"Tracks\".\"Id\") > 0")
-                    .Having("SUM(CASE WHEN \"Tracks\".\"TrackFileId\" > 0 THEN 1 ELSE 0 END) > 0")
-                    .Having("SUM(CASE WHEN \"Tracks\".\"TrackFileId\" > 0 THEN 1 ELSE 0 END) < COUNT(DISTINCT \"Tracks\".\"Id\")");
-
-                _logger.Trace("Executing missing tracks query");
-
-                List<Album>? result = _albumRepositoryHelper.Query(builder);
-                return result ?? [];
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error querying albums with missing tracks");
-                return [];
-            }
-        }
-
-        /// <summary>
-        /// Gets albums where the quality cutoff has not been met.
-        /// Files exist but are below the artist's quality profile cutoff.
-        /// </summary>
-        private List<Album> GetAlbumsWhereCutoffUnmet()
-        {
-            try
-            {
-                List<QualityProfile> qualityProfiles = _qualityProfileService.All();
-                List<QualitiesBelowCutoff> qualitiesBelowCutoff = [];
-
-                foreach (QualityProfile? profile in qualityProfiles)
-                {
-                    if (!profile.UpgradeAllowed)
-                        continue;
-
-                    int cutoffIndex = profile.Items.FindIndex(x => (x.Quality?.Id == profile.Cutoff) || (x.Id == profile.Cutoff));
-                    if (cutoffIndex <= 0)
-                        continue;
-                    List<int> qualityIds = [];
-
-                    foreach (QualityProfileQualityItem? item in profile.Items.Take(cutoffIndex))
+                    if (!hasWrapped && lastId >= startId)
                     {
-                        if (item.Quality != null)
-                            qualityIds.Add(item.Quality.Id);
-                        else if (item.Items?.Any() == true)
-                            qualityIds.AddRange(item.Items.Where(i => i.Quality != null).Select(i => i.Quality!.Id));
+                        hasWrapped = true;
+                        lastId = minId - 1;
+                        continue;
                     }
-
-                    if (qualityIds.Count != 0)
-                        qualitiesBelowCutoff.Add(new QualitiesBelowCutoff(profile.Id, qualityIds));
+                    break;
                 }
 
-                if (qualitiesBelowCutoff.Count == 0)
-                    return [];
-
-                PagingSpec<Album> pagingSpec = new()
+                foreach (Album album in batch)
                 {
-                    Page = 1,
-                    PageSize = 100000,
-                    SortDirection = SortDirection.Ascending,
-                    SortKey = "Id"
-                };
+                    if (hasWrapped && album.Id >= startId)
+                        return;
 
-                // Explicit == true comparison is required for proper SQL translation
-                pagingSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
+                    if (eligibleAlbums.Count >= candidateTarget)
+                        return;
 
-                PagingSpec<Album> result = _albumRepository.AlbumsWhereCutoffUnmet(pagingSpec, qualitiesBelowCutoff);
-                return [.. result.Records];
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error querying albums where cutoff is not met");
-                return [];
+                    if (queuedAlbumIds.Contains(album.Id))
+                        continue;
+
+                    if (eligibleAlbums.ContainsKey(album.Id))
+                        continue;
+
+                    if (IsAlbumCached(album))
+                        continue;
+
+                    eligibleAlbums[album.Id] = album;
+                }
+
+                lastId = batch[^1].Id;
+
+                if (!hasWrapped && batch.Count < BatchSize)
+                {
+                    hasWrapped = true;
+                    lastId = minId - 1;
+                }
             }
         }
 
-        /// <summary>
-        /// Gets the count of queue items based on the selected WaitOnType.
-        /// </summary>
+        private HashSet<int> GetQueuedAlbumIds() =>
+            _queueService.GetQueue()
+                .Where(q => q.Album is not null)
+                .Select(q => q.Album!.Id)
+                .ToHashSet();
+
+        private static bool IsAlbumCached(Album album)
+        {
+            string cacheKey = GenerateCacheKey(album);
+            return _cacheService.GetAsync<bool>(cacheKey).GetAwaiter().GetResult();
+        }
+
+        private void AssignArtistsToAlbums(IEnumerable<Album> albums)
+        {
+            List<Album> albumsNeedingArtist = albums.Where(a => a.Artist?.Value == null).ToList();
+            if (albumsNeedingArtist.Count == 0)
+                return;
+
+            HashSet<int> artistIds = albumsNeedingArtist
+                .Where(a => a.ArtistMetadataId > 0)
+                .Select(a => a.ArtistMetadataId)
+                .ToHashSet();
+
+            if (artistIds.Count == 0)
+                return;
+
+            Dictionary<int, Artist> artistsByMetadataId = [];
+            foreach (Artist artist in _artistService.GetAllArtists())
+            {
+                if (artistIds.Contains(artist.ArtistMetadataId))
+                {
+                    artistsByMetadataId[artist.ArtistMetadataId] = artist;
+                    if (artistsByMetadataId.Count == artistIds.Count)
+                        break;
+                }
+            }
+
+            foreach (Album album in albumsNeedingArtist)
+            {
+                if (artistsByMetadataId.TryGetValue(album.ArtistMetadataId, out Artist? artist))
+                    album.Artist = new LazyLoaded<Artist>(artist);
+            }
+        }
+
+        private List<Album> GetMissingAlbumsBatch(int lastId)
+        {
+            PagingSpec<Album> pagingSpec = new()
+            {
+                Page = 1,
+                PageSize = BatchSize,
+                SortDirection = SortDirection.Ascending,
+                SortKey = "Id"
+            };
+
+            pagingSpec.FilterExpressions.Add(v => v.Id > lastId);
+            pagingSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
+
+            return _albumService.AlbumsWithoutFiles(pagingSpec).Records;
+        }
+
+        private (int minId, int maxId) GetMissingAlbumsIdRange()
+        {
+            try
+            {
+                PagingSpec<Album> minSpec = new()
+                {
+                    Page = 1,
+                    PageSize = 1,
+                    SortDirection = SortDirection.Ascending,
+                    SortKey = "Id"
+                };
+                minSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
+                List<Album> minResult = _albumService.AlbumsWithoutFiles(minSpec).Records;
+
+                if (minResult.Count == 0)
+                    return (0, 0);
+
+                PagingSpec<Album> maxSpec = new()
+                {
+                    Page = 1,
+                    PageSize = 1,
+                    SortDirection = SortDirection.Descending,
+                    SortKey = "Id"
+                };
+                maxSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
+                List<Album> maxResult = _albumService.AlbumsWithoutFiles(maxSpec).Records;
+
+                return (minResult[0].Id, maxResult.Count > 0 ? maxResult[0].Id : minResult[0].Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error getting missing albums ID range");
+                return (0, 0);
+            }
+        }
+
         private int GetQueueCountByWaitOnType(WaitOnType waitOnType)
         {
             List<Queue> queue = _queueService.GetQueue();
@@ -328,41 +380,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             };
         }
 
-        /// <summary>
-        /// Filters out albums that are already in the download queue.
-        /// </summary>
-        private List<Album> ExcludeQueuedAlbums(List<Album> albums)
-        {
-            HashSet<int> queuedAlbumIds = _queueService.GetQueue()
-                .Where(q => q.Album is not null)
-                .Select(q => q.Album!.Id)
-                .ToHashSet();
-
-            return albums.Where(a => !queuedAlbumIds.Contains(a.Id)).ToList();
-        }
-
-        /// <summary>
-        /// Filters out albums that have been cached (already searched recently).
-        /// </summary>
-        private static async Task<List<Album>> ExcludeCachedAlbumsAsync(List<Album> albums)
-        {
-            HashSet<int> cachedAlbumIds = [];
-
-            foreach (Album album in albums)
-            {
-                string cacheKey = GenerateCacheKey(album);
-                bool cachedEntry = await _cacheService.GetAsync<bool>(cacheKey);
-
-                if (cachedEntry)
-                    cachedAlbumIds.Add(album.Id);
-            }
-
-            return albums.Where(a => !cachedAlbumIds.Contains(a.Id)).ToList();
-        }
-
-        /// <summary>
-        /// Caches the selected albums to prevent re-searching too soon.
-        /// </summary>
         private static async Task CacheSelectedAlbumsAsync(List<Album> albums)
         {
             foreach (Album album in albums)
@@ -372,34 +389,13 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             }
         }
 
-        /// <summary>
-        /// Randomly selects albums from the eligible list.
-        /// </summary>
-        private List<Album> SelectRandomAlbums(List<Album> albums)
+        private static List<Album> SelectRandomAlbums(List<Album> albums, int count)
         {
-            if (ActiveSettings == null) return [];
-
-            int pickCount = Math.Min(ActiveSettings.RandomPicksPerInterval, albums.Count);
-            Random random = new();
-
-            return albums.OrderBy(_ => random.Next()).Take(pickCount).ToList();
+            int pickCount = Math.Min(count, albums.Count);
+            return albums.OrderBy(_ => Random.Shared.Next()).Take(pickCount).ToList();
         }
 
-        /// <summary>
-        /// Generates a cache key for an album.
-        /// </summary>
         private static string GenerateCacheKey(Album album) =>
-            $"SearchSniper:{album.Artist?.Value.Name ?? "Unknown"}:{album.Id}";
-
-        /// <summary>
-        /// Helper class to access protected AlbumRepository methods.
-        /// </summary>
-        private sealed class AlbumRepositoryHelper(IMainDatabase database, IEventAggregator eventAggregator)
-            : AlbumRepository(database, eventAggregator)
-        {
-            public new SqlBuilder Builder() => base.Builder();
-
-            public new List<Album> Query(SqlBuilder builder) => base.Query(builder);
-        }
+            $"SearchSniper:{album.Artist?.Value?.Name ?? "Unknown"}:{album.Id}";
     }
 }
