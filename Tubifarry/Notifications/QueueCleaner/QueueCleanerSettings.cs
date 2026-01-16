@@ -20,10 +20,13 @@ namespace Tubifarry.Notifications.Queue
         [FieldDefinition(3, Label = "Import Cleaning Option", Type = FieldType.Select, SelectOptions = typeof(ImportCleaningOptions), HelpText = "Specify how to handle import cleaning during queue cleaning.")]
         public int ImportCleaningOption { get; set; } = (int)ImportCleaningOptions.Always;
 
-        [FieldDefinition(4, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
+        [FieldDefinition(4, Label = "Skip Release Sources", Type = FieldType.Select, SelectOptions = typeof(SkipReleaseSourceOptions), HelpText = "Skip processing downloads from these release sources and below, allowing manual import control.")]
+        public int SkipReleaseSources { get; set; } = (int)SkipReleaseSourceOptions.Disabled;
+
+        [FieldDefinition(5, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
         public bool RetryFindingRelease { get; set; } = true;
 
-        [FieldDefinition(5, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
+        [FieldDefinition(6, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
         public IEnumerable<string> Indexers { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
@@ -63,5 +66,23 @@ namespace Tubifarry.Notifications.Queue
 
         [FieldOption(Label = "Always", Hint = "Clean the album, regardless of metadata or track completeness.")]
         Always
+    }
+
+    public enum SkipReleaseSourceOptions
+    {
+        [FieldOption(Label = "Disabled", Hint = "Process all downloads regardless of source.")]
+        Disabled = 0,
+
+        [FieldOption(Label = "Automated", Hint = "Skip RSS and all search types.")]
+        Rss = 1,
+
+        [FieldOption(Label = "Search", Hint = "Skip search downloads (Search, User Search, Interactive).")]
+        Search = 2,
+
+        [FieldOption(Label = "User Invoked Search", Hint = "Skip user-invoked searches (User Search, Interactive).")]
+        UserInvokedSearch = 3,
+
+        [FieldOption(Label = "Interactive Search", Hint = "Skip interactive search downloads.")]
+        InteractiveSearch = 4
     }
 }

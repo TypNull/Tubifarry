@@ -65,6 +65,29 @@ namespace Tubifarry.Notifications.QueueCleaner
                 return;
             }
 
+            if (Settings.SkipReleaseSources != (int)SkipReleaseSourceOptions.Disabled)
+            {
+                ReleaseSourceType releaseSource = trackedDownload.RemoteAlbum?.ReleaseSource ?? ReleaseSourceType.Unknown;
+
+                if (releaseSource == ReleaseSourceType.Unknown)
+                {
+                    List<EntityHistory> grabbedItems = [.. _historyService.Find(trackedDownload.DownloadItem.DownloadId, EntityHistoryEventType.Grabbed)];
+                    if (grabbedItems.Count > 0)
+                    {
+                        EntityHistory historyItem = grabbedItems[^1];
+                        _ = Enum.TryParse(historyItem.Data.GetValueOrDefault(EntityHistory.RELEASE_SOURCE, nameof(ReleaseSourceType.Unknown)), out releaseSource);
+                    }
+                }
+
+                _logger.Trace($"Release source for download '{trackedDownload.DownloadItem.Title}': {releaseSource}, Skip threshold: {(SkipReleaseSourceOptions)Settings.SkipReleaseSources}");
+
+                if ((int)releaseSource >= Settings.SkipReleaseSources && releaseSource != ReleaseSourceType.Unknown)
+                {
+                    _logger.Info($"Skipping queue cleaning for download '{trackedDownload.DownloadItem.Title}'. Release source '{releaseSource}' is at or above skip threshold '{(SkipReleaseSourceOptions)Settings.SkipReleaseSources}'.");
+                    return;
+                }
+            }
+
             switch (CheckImport(trackedDownload))
             {
                 case ImportFailureReason.FailedBecauseOfMissingTracks:
