@@ -137,12 +137,19 @@ namespace Tubifarry.Download.Clients.YouTube
         /// </summary>
         public static YouTubeMusicClient CreateAuthenticatedClient(ClientSessionInfo sessionInfo)
         {
+            HttpClientHandler handler = new()
+            {
+                UseCookies = false
+            };
+            HttpClient httpClient = new(handler);
+
             YouTubeMusicClient client = new(
                 // logger: new YouTubeSessionGeneratorLogger(_logger),
                 geographicalLocation: sessionInfo.GeographicalLocation,
                 visitorData: sessionInfo.Tokens?.VisitorData,
                 poToken: sessionInfo.Tokens?.PoToken,
-                cookies: sessionInfo.Cookies
+                cookies: sessionInfo.Cookies,
+                httpClient: httpClient
                 );
 
             _logger.Debug($"Created YouTube client with: {sessionInfo.AuthenticationSummary}");
