@@ -77,16 +77,6 @@ jobs:
           ---
           
           ## 📥 Installation Notes:
-          
-          ### Docker Setup (Hotio Image) 🐳  
-          \`\`\`yml  
-          image: ghcr.io/hotio/lidarr:pr-plugins
-          \`\`\`  
-          
-          ### Non-Docker Setup  
-          Go to \`System -> General -> Branch\` and Replace "master" with "plugins"
-          
-          **Plugin Installation:**  
           - In Lidarr, navigate to **System -> Plugins**
           - Enter: \`${{ inputs.plugin_input_format }}\`
           

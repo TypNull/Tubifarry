@@ -28,24 +28,8 @@ For further customization, Codec Tinker lets you convert audio files between for
 ----
 
 ## Installation 🚀
-To use Tubifarry, ensure your Lidarr setup is on the `plugins` branch. Follow the steps below to get started.
+Follow the steps below to get started.
 
-### Docker Setup (Hotio Image) 🐳
-For Docker users using Hotio's image, use the following path:
-```yml
-image: ghcr.io/hotio/lidarr:pr-plugins
-```
-
-### Non-Docker Installation
-To switch to the Plugins Branch:
-1. Open Lidarr and navigate to `Settings -> General`.
-2. With Advanced Settings enabled scroll down to the **Updates** **->** **Branch** setting.
-3. Replace "master" with "plugins".
-4. Force an update check to update Lidarr to the plugins branch.
-
----
-
-### Plugin Installation 📥
 - In Lidarr, go to `System -> Plugins`.
 - Paste `https://github.com/TypNull/Tubifarry` into the GitHub URL box and click **Install**.
 
