@@ -135,16 +135,10 @@ namespace Tubifarry.Metadata.Lyrics
                         continue;
                     }
 
-                    bool lrcExists = LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider);
-
-                    if (lrcExists)
+                    if (LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider))
                     {
-                        string lrcPath = Path.ChangeExtension(trackFile.Path, ".lrc");
-                        string relativePath = artist.Path.GetRelativePath(lrcPath);
-
-                        _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, relativePath);
+                        SyncExistingLrcFile(artist, trackFile);
                         result.SyncedCount++;
-                        _logger.Trace($"Synced existing LRC file to database: {lrcPath}");
                         continue;
                     }
 
@@ -154,13 +148,8 @@ namespace Tubifarry.Metadata.Lyrics
 
                     if (metadataResult != null && !string.IsNullOrEmpty(metadataResult.Contents))
                     {
-                        string lrcPath = Path.Combine(artist.Path, metadataResult.RelativePath);
-                        _diskProvider.WriteAllText(lrcPath, metadataResult.Contents);
-
-                        _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, metadataResult.RelativePath);
-
+                        WriteLrcFile(artist, trackFile, metadataResult);
                         result.SuccessCount++;
-                        _logger.Trace($"Created LRC file for: {trackFile.Path}");
                     }
                     else
                     {
@@ -178,12 +167,39 @@ namespace Tubifarry.Metadata.Lyrics
             return result;
         }
 
+        private void SyncExistingLrcFile(Artist artist, TrackFile trackFile)
+        {
+            string lrcPath = Path.ChangeExtension(trackFile.Path, ".lrc");
+            string relativePath = artist.Path.GetRelativePath(lrcPath);
+            _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, relativePath);
+            _logger.Trace($"Synced existing LRC file to database: {lrcPath}");
+        }
+
+        private void WriteLrcFile(Artist artist, TrackFile trackFile, MetadataFileResult metadataResult)
+        {
+            string lrcPath = Path.Combine(artist.Path, metadataResult.RelativePath);
+            _diskProvider.WriteAllText(lrcPath, metadataResult.Contents);
+            _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, metadataResult.RelativePath);
+            _logger.Trace($"Created LRC file: {lrcPath}");
+        }
+
+        private void EmbedLyrics(Lyric lyric, string trackFilePath)
+        {
+            LyricOptions embeddingOption = (LyricOptions)ActiveSettings.LyricEmbeddingOption;
+            if (embeddingOption == LyricOptions.Disabled)
+                return;
+
+            string? lyricsToEmbed = LyricsHelper.GetLyricsForEmbedding(lyric, embeddingOption);
+            if (!string.IsNullOrWhiteSpace(lyricsToEmbed))
+            {
+                LyricsHelper.EmbedLyricsInAudioFile(trackFilePath, lyricsToEmbed, _logger, _rootFolderWatchingService);
+            }
+        }
+
         public override string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
         {
-            string trackFilePath = trackFile.Path;
-
             if (metadataFile.Type == MetadataType.TrackMetadata)
-                return Path.ChangeExtension(trackFilePath, ".lrc");
+                return Path.ChangeExtension(trackFile.Path, ".lrc");
 
             _logger.Trace("Unknown track file metadata: {0}", metadataFile.RelativePath);
             return Path.Combine(artist.Path, metadataFile.RelativePath);
@@ -191,14 +207,10 @@ namespace Tubifarry.Metadata.Lyrics
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile)
         {
-            if (!ActiveSettings.OverwriteExistingLrcFiles)
+            if (!ActiveSettings.OverwriteExistingLrcFiles && LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider))
             {
-                bool lrcExists = LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider);
-                if (lrcExists)
-                {
-                    _logger.Trace($"LRC file already exists and overwrite is disabled: {trackFile.Path}");
-                    return default!;
-                }
+                _logger.Trace($"LRC file already exists and overwrite is disabled: {trackFile.Path}");
+                return default!;
             }
 
             if (!_diskProvider.FileExists(trackFile.Path))
@@ -209,16 +221,7 @@ namespace Tubifarry.Metadata.Lyrics
 
             try
             {
-                string? lrcContent = ProcessTrackLyricsAsync(artist, trackFile).Result;
-
-                if (!string.IsNullOrEmpty(lrcContent))
-                {
-                    string relativePath = artist.Path.GetRelativePath(trackFile.Path);
-                    relativePath = Path.ChangeExtension(relativePath, ".lrc");
-                    return new MetadataFileResult(relativePath, lrcContent);
-                }
-
-                return default!;
+                return ProcessTrackLyricsAsync(artist, trackFile).Result;
             }
             catch (Exception ex)
             {
@@ -227,26 +230,35 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        private async Task<string?> ProcessTrackLyricsAsync(Artist artist, TrackFile trackFile)
+        private async Task<MetadataFileResult> ProcessTrackLyricsAsync(Artist artist, TrackFile trackFile)
         {
             _logger.Trace($"Processing lyrics for track: {trackFile.Path}");
 
             (string Artist, string Title, string Album, int Duration)? trackInfo = LyricsHelper.ExtractTrackInfo(trackFile, artist, _logger);
             if (trackInfo == null)
-                return null;
+                return default!;
 
-            Lyric? lyric = await FetchLyricsFromProvidersAsync(trackInfo.Value);
-
+            Lyric? lyric = await FetchLyricsAsync(trackInfo.Value);
             if (lyric == null)
             {
                 _logger.Trace($"No lyrics found for track: {trackInfo.Value.Title} by {trackInfo.Value.Artist}");
-                return null;
+                return default!;
             }
 
-            return ProcessFetchedLyrics(lyric, trackInfo.Value, trackFile.Path);
+            // Embed lyrics into audio file based on settings
+            EmbedLyrics(lyric, trackFile.Path);
+
+            // Create LRC file content based on settings
+            string? lrcContent = CreateLrcFileContent(lyric, trackInfo.Value);
+            if (string.IsNullOrEmpty(lrcContent))
+                return default!;
+
+            string relativePath = artist.Path.GetRelativePath(trackFile.Path);
+            relativePath = Path.ChangeExtension(relativePath, ".lrc");
+            return new MetadataFileResult(relativePath, lrcContent);
         }
 
-        private async Task<Lyric?> FetchLyricsFromProvidersAsync((string Artist, string Title, string Album, int Duration) trackInfo)
+        private async Task<Lyric?> FetchLyricsAsync((string Artist, string Title, string Album, int Duration) trackInfo)
         {
             Lyric? lyric = null;
 
@@ -267,27 +279,16 @@ namespace Tubifarry.Metadata.Lyrics
             return lyric;
         }
 
-        private string? ProcessFetchedLyrics(Lyric lyric, (string Artist, string Title, string Album, int Duration) trackInfo, string trackFilePath)
+        private string? CreateLrcFileContent(Lyric lyric, (string Artist, string Title, string Album, int Duration) trackInfo)
         {
-            string? lrcContent = null;
-
-            if (lyric.SyncedLyrics != null && ActiveSettings.CreateLrcFiles)
-            {
-                lrcContent = LyricsHelper.CreateLrcContent(
-                    lyric,
-                    trackInfo.Artist,
-                    trackInfo.Title,
-                    trackInfo.Album,
-                    trackInfo.Duration,
-                    _logger);
-            }
-
-            if (ActiveSettings.EmbedLyricsInAudioFiles && !string.IsNullOrWhiteSpace(lyric.PlainLyrics))
-            {
-                LyricsHelper.EmbedLyricsInAudioFile(trackFilePath, lyric.PlainLyrics, _logger, _rootFolderWatchingService);
-            }
-
-            return lrcContent;
+            LyricOptions lrcOption = (LyricOptions)ActiveSettings.LrcFileOptions;
+            return LyricsHelper.GetLyricsForLrcFile(
+                lyric,
+                lrcOption,
+                trackInfo.Artist,
+                trackInfo.Title,
+                trackInfo.Album,
+                trackInfo.Duration);
         }
 
         /// <summary>

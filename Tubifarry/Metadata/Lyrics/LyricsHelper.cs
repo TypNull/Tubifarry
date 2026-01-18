@@ -60,40 +60,61 @@ namespace Tubifarry.Metadata.Lyrics
             return bestMatch;
         }
 
-        public static string? CreateLrcContent(Lyric lyric, string artistName, string trackTitle, string albumName, int duration, Logger logger)
+        public static string? CreateRawLrcContent(List<SyncLine>? syncedLyrics)
         {
-            if (lyric.SyncedLyrics == null || lyric.SyncedLyrics.Count == 0)
+            if (syncedLyrics == null || syncedLyrics.Count == 0)
                 return null;
 
-            try
-            {
-                StringBuilder lrcContent = new();
+            IEnumerable<string> lines = syncedLyrics
+                .Where(l => l != null && !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line))
+                .OrderBy(l => double.TryParse(l.Milliseconds ?? "0", out double ms) ? ms : 0)
+                .Select(l => $"{l.LrcTimestamp} {l.Line}");
 
-                lrcContent.AppendLine($"[ar:{artistName}]");
-                if (!string.IsNullOrEmpty(albumName))
-                    lrcContent.AppendLine($"[al:{albumName}]");
-                lrcContent.AppendLine($"[ti:{trackTitle}]");
-
-                if (duration > 0)
-                {
-                    TimeSpan ts = TimeSpan.FromSeconds(duration);
-                    lrcContent.AppendLine($"[length:{ts.ToString(@"mm\:ss\.ff")}]");
-                }
-
-                lrcContent.AppendLine("[by:Tubifarry Lyrics Enhancer]");
-                lrcContent.AppendLine();
-
-                foreach (SyncLine syncLine in lyric.SyncedLyrics.Where(l => l != null && !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line)).OrderBy(l => double.TryParse(l.Milliseconds ?? "0", out double ms) ? ms : 0))
-                    lrcContent.AppendLine($"{syncLine.LrcTimestamp} {syncLine.Line}");
-
-                return lrcContent.ToString();
-            }
-            catch (Exception ex)
-            {
-                logger.Error(ex, "Failed to create LRC content");
-                return null;
-            }
+            return string.Join(Environment.NewLine, lines);
         }
+
+        public static string? CreateLrcFileContent(Lyric lyric, string artistName, string trackTitle, string albumName, int duration)
+        {
+            string? rawLrc = CreateRawLrcContent(lyric.SyncedLyrics);
+            if (rawLrc == null)
+                return null;
+
+            StringBuilder lrcContent = new();
+            lrcContent.AppendLine($"[ar:{artistName}]");
+            if (!string.IsNullOrEmpty(albumName))
+                lrcContent.AppendLine($"[al:{albumName}]");
+            lrcContent.AppendLine($"[ti:{trackTitle}]");
+
+            if (duration > 0)
+            {
+                TimeSpan ts = TimeSpan.FromSeconds(duration);
+                lrcContent.AppendLine($"[length:{ts:mm\\:ss\\.ff}]");
+            }
+
+            lrcContent.AppendLine("[by:Tubifarry Lyrics Enhancer]");
+            lrcContent.AppendLine();
+            lrcContent.Append(rawLrc);
+
+            return lrcContent.ToString();
+        }
+
+        public static string? GetLyricsForEmbedding(Lyric lyric, LyricOptions option) => option switch
+        {
+            LyricOptions.Disabled => null,
+            LyricOptions.OnlyPlain => lyric.PlainLyrics,
+            LyricOptions.OnlySynced => CreateRawLrcContent(lyric.SyncedLyrics),
+            LyricOptions.PrefferSynced => CreateRawLrcContent(lyric.SyncedLyrics) ?? lyric.PlainLyrics,
+            _ => null
+        };
+
+        public static string? GetLyricsForLrcFile(Lyric lyric, LyricOptions option, string artistName, string trackTitle, string albumName, int duration) => option switch
+        {
+            LyricOptions.Disabled => null,
+            LyricOptions.OnlyPlain => lyric.PlainLyrics,
+            LyricOptions.OnlySynced => CreateLrcFileContent(lyric, artistName, trackTitle, albumName, duration),
+            LyricOptions.PrefferSynced => CreateLrcFileContent(lyric, artistName, trackTitle, albumName, duration) ?? lyric.PlainLyrics,
+            _ => null
+        };
 
         public static void EmbedLyricsInAudioFile(string filePath, string lyrics, Logger logger, IRootFolderWatchingService rootFolderWatchingService)
         {

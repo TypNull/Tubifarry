@@ -43,11 +43,11 @@ namespace Tubifarry.Metadata.Lyrics
     {
         private static readonly LyricsEnhancerSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "Create LRC Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Create synchronized LRC files when available")]
-        public bool CreateLrcFiles { get; set; }
+        [FieldDefinition(0, Label = "Create LRC Files", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose what kind of LRC files to create")]
+        public int LrcFileOptions { get; set; } = (int)LyricOptions.OnlySynced;
 
-        [FieldDefinition(1, Label = "Embed Lyrics in Audio Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Embed plain lyrics in audio files metadata")]
-        public bool EmbedLyricsInAudioFiles { get; set; }
+        [FieldDefinition(1, Label = "Lyrics Embedding", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose how to embed lyrics in audio files metadata")]
+        public int LyricEmbeddingOption { get; set; } = (int)LyricOptions.Disabled;
 
         [FieldDefinition(2, Label = "Overwrite Existing LRC Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Overwrite existing LRC files")]
         public bool OverwriteExistingLrcFiles { get; set; }
@@ -93,5 +93,20 @@ namespace Tubifarry.Metadata.Lyrics
         private string? _completionMessage;
 
         public void SetCompletionMessage(string message) => _completionMessage = message;
+    }
+
+    public enum LyricOptions
+    {
+        [FieldOption(Label = "Disabled", Hint = "Disabled")]
+        Disabled,
+
+        [FieldOption(Label = "Only Plain", Hint = "Use plain text lyrics if available.")]
+        OnlyPlain,
+
+        [FieldOption(Label = "Only Synced", Hint = "Use synced lyrics if available.")]
+        OnlySynced,
+
+        [FieldOption(Label = "Prefer Synced", Hint = "Use synced lyrics if available, fall back to plain text.")]
+        PrefferSynced
     }
 }
