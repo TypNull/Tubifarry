@@ -101,7 +101,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
         {
             string whereClause = string.Join(" OR ", profileCutoffs.Select(kvp =>
                 $"(\"Artists\".\"QualityProfileId\" = {kvp.Key} AND " +
-                $"CAST(json_extract(\"TrackFiles\".\"Quality\", '$.quality.id') AS INTEGER) IN ({string.Join(",", kvp.Value)}))"
+                $"CAST(json_extract(\"TrackFiles\".\"Quality\", '$.quality') AS INTEGER) IN ({string.Join(",", kvp.Value)}))"
             ));
 
             return Builder()
@@ -139,6 +139,9 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
             foreach (QualityProfile profile in qualityProfiles)
             {
+                if (!profile.UpgradeAllowed)
+                    continue;
+
                 int cutoffIndex = profile.Items.FindIndex(x =>
                     (x.Quality?.Id == profile.Cutoff) || (x.Id == profile.Cutoff));
 
@@ -150,11 +153,17 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 foreach (QualityProfileQualityItem item in profile.Items.Take(cutoffIndex))
                 {
                     if (item.Quality != null)
+                    {
                         qualityIds.Add(item.Quality.Id);
-                    else if (item.Items?.Any() == true)
-                        qualityIds.AddRange(item.Items
-                            .Where(i => i.Quality != null)
-                            .Select(i => i.Quality!.Id));
+                    }
+                    else if (item.Items?.Count > 0)
+                    {
+                        foreach (QualityProfileQualityItem groupItem in item.Items)
+                        {
+                            if (groupItem.Quality != null)
+                                qualityIds.Add(groupItem.Quality.Id);
+                        }
+                    }
                 }
 
                 if (qualityIds.Count != 0)
