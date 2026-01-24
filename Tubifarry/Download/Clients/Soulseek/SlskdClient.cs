@@ -226,7 +226,7 @@ namespace Tubifarry.Download.Clients.Soulseek
         {
             SlskdFolderData folderData = dir.CreateFolderData(username);
 
-            SlskdSearchData searchData = new(null, null, false, false, 1);
+            SlskdSearchData searchData = new(null, null, false, false, 1, null);
 
             IGrouping<string, SlskdFileData> directory = dir.ToSlskdFileDataList().GroupBy(_ => dir.Directory).First();
 

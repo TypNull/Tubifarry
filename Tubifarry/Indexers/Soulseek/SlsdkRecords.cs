@@ -133,7 +133,8 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("album")] string? Album,
         [property: JsonPropertyName("interactive")] bool Interactive,
         [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
-        [property: JsonPropertyName("mimimumFiles")] int MinimumFiles)
+        [property: JsonPropertyName("mimimumFiles")] int MinimumFiles,
+        [property: JsonPropertyName("maximumFiles")] int? MaximumFiles)
     {
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, _jsonOptions)!;

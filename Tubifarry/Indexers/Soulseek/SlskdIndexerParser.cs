@@ -61,19 +61,6 @@ namespace Tubifarry.Indexers.Soulseek
                         if (string.IsNullOrEmpty(directoryGroup.Key))
                             continue;
 
-                        if (searchTextData.MinimumFiles > 0)
-                        {
-                            int fileCount = Settings.FilterLessFilesThanAlbum
-                                ? directoryGroup.Count(f => AudioFormatHelper.GetAudioCodecFromExtension(f.Extension ?? Path.GetExtension(f.Filename) ?? "") != AudioFormat.Unknown)
-                                : directoryGroup.Count();
-
-                            if (fileCount < searchTextData.MinimumFiles)
-                            {
-                                _logger.Trace($"Filtered: {directoryGroup.Key} ({fileCount}/{searchTextData.MinimumFiles} {(Settings.FilterLessFilesThanAlbum ? "audio tracks" : "files")})");
-                                continue;
-                            }
-                        }
-
                         SlskdFolderData folderData = SlskdItemsParser.ParseFolderName(directoryGroup.Key) with
                         {
                             Username = response.Username,
@@ -86,11 +73,35 @@ namespace Tubifarry.Indexers.Soulseek
                             FileCount = response.FileCount
                         };
 
-                        if (searchTextData.ExpandDirectory && ShouldExpandDirectory(albumDatas, searchResponse, searchTextData, directoryGroup, folderData))
-                            continue;
+                        IGrouping<string, SlskdFileData> finalGroup = directoryGroup;
+                        if (searchTextData.ExpandDirectory)
+                        {
+                            IGrouping<string, SlskdFileData>? expandedGroup = TryExpandDirectory(searchTextData, directoryGroup, folderData);
+                            if (expandedGroup != null)
+                                finalGroup = expandedGroup;
+                        }
 
-                        AlbumData originalAlbumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, directoryGroup, searchTextData, folderData, Settings, searchTextData.MinimumFiles);
-                        albumDatas.Add(originalAlbumData);
+                        if (searchTextData.MinimumFiles > 0 || searchTextData.MaximumFiles.HasValue)
+                        {
+                            int fileCount = Settings.FilterUnfittingAlbums
+                                ? finalGroup.Count(f => AudioFormatHelper.GetAudioCodecFromExtension(f.Extension ?? Path.GetExtension(f.Filename) ?? "") != AudioFormat.Unknown)
+                                : finalGroup.Count();
+
+                            if (fileCount < searchTextData.MinimumFiles)
+                            {
+                                _logger.Trace($"Filtered (too few): {directoryGroup.Key} ({fileCount}/{searchTextData.MinimumFiles} {(Settings.FilterUnfittingAlbums ? "audio tracks" : "files")})");
+                                continue;
+                            }
+
+                            if (searchTextData.MaximumFiles.HasValue && fileCount > searchTextData.MaximumFiles.Value)
+                            {
+                                _logger.Trace($"Filtered (too many): {directoryGroup.Key} ({fileCount}/{searchTextData.MaximumFiles} {(Settings.FilterUnfittingAlbums ? "audio tracks" : "files")})");
+                                continue;
+                            }
+                        }
+
+                        AlbumData albumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, finalGroup, searchTextData, folderData, Settings, searchTextData.MinimumFiles);
+                        albumDatas.Add(albumData);
                     }
                 }
 
@@ -104,21 +115,21 @@ namespace Tubifarry.Indexers.Soulseek
             return albumDatas.OrderByDescending(x => x.Priotity).Select(a => a.ToReleaseInfo()).ToList();
         }
 
-        private bool ShouldExpandDirectory(List<AlbumData> albumDatas, SlskdSearchResponse searchResponse, SlskdSearchData searchTextData, IGrouping<string, SlskdFileData> directoryGroup, SlskdFolderData folderData)
+        private IGrouping<string, SlskdFileData>? TryExpandDirectory(SlskdSearchData searchTextData, IGrouping<string, SlskdFileData> directoryGroup, SlskdFolderData folderData)
         {
             if (string.IsNullOrEmpty(searchTextData.Artist) || string.IsNullOrEmpty(searchTextData.Album))
-                return false;
+                return null;
 
             bool artistMatch = Fuzz.PartialRatio(folderData.Artist, searchTextData.Artist) > 85;
             bool albumMatch = Fuzz.PartialRatio(folderData.Album, searchTextData.Album) > 85;
 
             if (!artistMatch || !albumMatch)
-                return false;
+                return null;
 
             SlskdFileData? originalTrack = directoryGroup.FirstOrDefault(x => AudioFormatHelper.GetAudioCodecFromExtension(x.Extension?.ToLowerInvariant() ?? Path.GetExtension(x.Filename) ?? "") != AudioFormat.Unknown);
 
             if (originalTrack == null)
-                return false;
+                return null;
 
             _logger.Trace($"Expanding directory for: {folderData.Username}:{directoryGroup.Key}");
 
@@ -128,15 +139,13 @@ namespace Tubifarry.Indexers.Soulseek
             if (expandedGroup != null)
             {
                 _logger.Debug($"Successfully expanded directory to {expandedGroup.Count()} files");
-                AlbumData albumData = SlskdItemsParser.CreateAlbumData(searchResponse.Id, expandedGroup, searchTextData, folderData, Settings, searchTextData.MinimumFiles);
-                albumDatas.Add(albumData);
-                return true;
+                return expandedGroup;
             }
             else
             {
                 _logger.Warn($"Failed to expand directory for {folderData.Username}:{directoryGroup.Key}");
             }
-            return false;
+            return null;
         }
 
         public void RemoveSearch(string searchId, bool delay = false)

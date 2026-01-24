@@ -87,7 +87,7 @@ namespace Tubifarry.Core.Model
             string title = $"{ArtistName} - {normalizedAlbumName}";
 
             if (ReleaseDateTime != DateTime.MinValue)
-                title += $" - {ReleaseDateTime.Year}";
+                title += $" ({ReleaseDateTime.Year})";
 
             if (ExplicitContent)
                 title += " [Explicit]";

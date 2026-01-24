@@ -1,8 +1,9 @@
-﻿using FluentValidation;
+using FluentValidation;
 using NzbDrone.Core.Annotations;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Validation;
 using NzbDrone.Core.Validation.Paths;
+using Tubifarry.Indexers.Soulseek.Search.Templates;
 
 namespace Tubifarry.Indexers.Soulseek
 {
@@ -72,6 +73,11 @@ namespace Tubifarry.Indexers.Soulseek
                 .Must(extensions => extensions?.All(ext => !ext.Contains('.')) != false)
                 .WithMessage("File extensions must not contain a dot ('.').");
 
+            // Search Templates validation
+            RuleFor(c => c.SearchTemplates)
+                .Must(t => string.IsNullOrWhiteSpace(t) || TemplateEngine.ValidateTemplates(t).Count == 0)
+                .WithMessage((_, t) => string.Join("; ", TemplateEngine.ValidateTemplates(t)));
+
             // Ignore List File Path validation
             RuleFor(c => c.IgnoreListPath)
                 .IsValidPath()
@@ -84,74 +90,74 @@ namespace Tubifarry.Indexers.Soulseek
     {
         private static readonly SlskdSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "URL", Type = FieldType.Url, Placeholder = "http://localhost:5030", HelpText = "The URL of your Slskd instance.")]
+        [FieldDefinition(0, Label = "URL", Type = FieldType.Url, Placeholder = "http://localhost:5030", HelpText = "Slskd instance URL")]
         public string BaseUrl { get; set; } = "http://localhost:5030";
 
-        [FieldDefinition(1, Label = "External URL", Type = FieldType.Url, Placeholder = "https://slskd.example.com", HelpText = "URL for interactive search redirect", Advanced = true)]
+        [FieldDefinition(1, Label = "External URL", Type = FieldType.Url, Placeholder = "https://slskd.example.com", HelpText = "Public URL for interactive search links", Advanced = true)]
         public string? ExternalUrl { get; set; } = string.Empty;
 
         [FieldDefinition(2, Label = "API Key", Type = FieldType.Textbox, Privacy = PrivacyLevel.ApiKey, HelpText = "The API key for your Slskd instance. You can find or set this in the Slskd's settings under 'Options'.", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
-        [FieldDefinition(3, Type = FieldType.Checkbox, Label = "Include Only Audio Files", HelpText = "When enabled, only files with audio extensions will be included in search results. Disabling this option allows all file types.", Advanced = false)]
+        [FieldDefinition(3, Type = FieldType.Checkbox, Label = "Audio Files Only", HelpText = "Return only audio file types")]
         public bool OnlyAudioFiles { get; set; } = true;
 
-        [FieldDefinition(4, Type = FieldType.Tag, Label = "Include File Extensions", HelpText = "Specify file extensions to include when 'Include Only Audio Files' is enabled. This setting has no effect if 'Include Only Audio Files' is disabled.", Advanced = true)]
+        [FieldDefinition(4, Type = FieldType.Tag, Label = "File Extensions", HelpText = "Additional extensions when Audio Files Only is enabled (without dots)", Advanced = true)]
         public IEnumerable<string> IncludeFileExtensions { get; set; } = [];
 
-        [FieldDefinition(6, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Time before release date Lidarr will download from this indexer, empty is no limit", Advanced = true)]
+        [FieldDefinition(6, Type = FieldType.Number, Label = "Early Download Limit", Unit = "days", HelpText = "Days before release to allow downloads", Advanced = true)]
         public int? EarlyReleaseLimit { get; set; } = null;
 
-        [FieldDefinition(7, Type = FieldType.Number, Label = "File Limit", HelpText = "Maximum number of files to return in a search response.", Advanced = true)]
+        [FieldDefinition(7, Type = FieldType.Number, Label = "File Limit", HelpText = "Max files per search", Advanced = true)]
         public int FileLimit { get; set; } = 10000;
 
-        [FieldDefinition(8, Type = FieldType.Number, Label = "Maximum Peer Queue Length", HelpText = "Maximum number of queued requests allowed per peer.", Advanced = true)]
+        [FieldDefinition(8, Type = FieldType.Number, Label = "Max Peer Queue", HelpText = "Max queued requests per peer", Advanced = true)]
         public int MaximumPeerQueueLength { get; set; } = 1000000;
 
         private int _minimumPeerUploadSpeedBytes;
 
-        [FieldDefinition(9, Type = FieldType.Number, Label = "Minimum Peer Upload Speed", Unit = "KB/s", HelpText = "Minimum upload speed required for peers (in KB/s).", Advanced = true)]
+        [FieldDefinition(9, Type = FieldType.Number, Label = "Min Peer Speed", Unit = "KB/s", HelpText = "Minimum peer upload speed", Advanced = true)]
         public int MinimumPeerUploadSpeed
         {
             get => _minimumPeerUploadSpeedBytes / 1024;
             set => _minimumPeerUploadSpeedBytes = value * 1024;
         }
 
-        [FieldDefinition(10, Type = FieldType.Number, Label = "Minimum Response File Count", HelpText = "Minimum number of files required in a search response.", Advanced = true)]
+        [FieldDefinition(10, Type = FieldType.Number, Label = "Min File Count", HelpText = "Minimum files per response", Advanced = true)]
         public int MinimumResponseFileCount { get; set; } = 1;
 
-        [FieldDefinition(11, Type = FieldType.Checkbox, Label = "Filter Less Tracks than Album", HelpText = "Enable to filter out releases that have fewer tracks than the expected album count.", Advanced = true)]
-        public bool FilterLessFilesThanAlbum { get; set; }
+        [FieldDefinition(11, Type = FieldType.Checkbox, Label = "Filter Unfitting Albums", HelpText = "Exclude releases with wrong track count", Advanced = true)]
+        public bool FilterUnfittingAlbums { get; set; }
 
-        [FieldDefinition(12, Type = FieldType.Number, Label = "Response Limit", HelpText = "Maximum number of search responses to return.", Advanced = true)]
+        [FieldDefinition(12, Type = FieldType.Number, Label = "Response Limit", HelpText = "Max search responses", Advanced = true)]
         public int ResponseLimit { get; set; } = 100;
 
-        [FieldDefinition(13, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Timeout for search requests in seconds.", Advanced = true)]
+        [FieldDefinition(13, Type = FieldType.Number, Label = "Timeout", Unit = "seconds", HelpText = "Search timeout", Advanced = true)]
         public double TimeoutInSeconds { get; set; } = 5;
 
-        [FieldDefinition(14, Type = FieldType.Checkbox, Label = "Strip Punctuation", HelpText = "Remove punctuation from search terms to improve matching", Advanced = true)]
-        public bool StripPunctuation { get; set; }
+        [FieldDefinition(14, Type = FieldType.Checkbox, Label = "Append Year", HelpText = "Append the release year to the first search (ignored when templates are set)", Advanced = true)]
+        public bool AppendYear { get; set; }
 
-        [FieldDefinition(15, Type = FieldType.Checkbox, Label = "Various Artists", HelpText = "Improve searches for compilation albums by trying without 'Various Artists'", Advanced = true)]
-        public bool HandleVariousArtists { get; set; }
+        [FieldDefinition(15, Type = FieldType.Checkbox, Label = "Normalize Search", HelpText = "Remove accents and special characters (é→e, ü→u)", Advanced = true)]
+        public bool NormalizedSeach { get; set; }
 
-        [FieldDefinition(16, Type = FieldType.Checkbox, Label = "Volume Variations", HelpText = "Account for different volume formats (Vol., Volume, etc.)", Advanced = true)]
+        [FieldDefinition(16, Type = FieldType.Checkbox, Label = "Volume Variations", HelpText = "Try alternate volume formats (Vol.1 <-> Volume I)", Advanced = true)]
         public bool HandleVolumeVariations { get; set; }
 
-        [FieldDefinition(17, Type = FieldType.Checkbox, Label = "Special Characters", HelpText = "Convert special characters to standard (ä→a, é→e, etc.). Does not decompose ligatures (æ, ß etc.)", Advanced = true)]
-        public bool NormalizeSpecialCharacters { get; set; }
-
-        [FieldDefinition(18, Label = "Enable Fallback Search", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a secondary search using additional metadata.", Advanced = true)]
+        [FieldDefinition(17, Label = "Enable Fallback Search", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a secondary search using additional metadata.", Advanced = true)]
         public bool UseFallbackSearch { get; set; }
 
-        [FieldDefinition(19, Label = "Track Fallback", Type = FieldType.Checkbox, HelpText = "If no results are found, perform a tertiary search using track names.", Advanced = true)]
+        [FieldDefinition(18, Label = "Track Fallback", Type = FieldType.Checkbox, HelpText = "Search by track names as last resort (requires Fallback Search)", Advanced = true)]
         public bool UseTrackFallback { get; set; }
 
-        [FieldDefinition(20, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Minimum number of results required before stopping the search. If a Slskd finds fewer results than this, additional search strategies will be tried.", Advanced = true)]
+        [FieldDefinition(19, Type = FieldType.Number, Label = "Minimum Results", HelpText = "Keep searching until this many results found", Advanced = true)]
         public int MinimumResults { get; set; }
 
-        [FieldDefinition(21, Type = FieldType.FilePath, Label = "Ignore List Path", HelpText = "Path to a file containing usernames to ignore (separated by new lines)", Advanced = true)]
+        [FieldDefinition(20, Type = FieldType.FilePath, Label = "Ignore List", HelpText = "File with usernames to ignore (one per line)", Advanced = true)]
         public string? IgnoreListPath { get; set; } = string.Empty;
+
+        [FieldDefinition(21, Type = FieldType.Textbox, Label = "Search Templates", HelpText = "Custom search pattern (empty=disabled). Use {{Property}} syntax. Valid: AlbumTitle, AlbumYear, Disambiguation, AlbumQuery, CleanAlbumQuery, Artist.*", Advanced = true)]
+        public string? SearchTemplates { get; set; } = string.Empty;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

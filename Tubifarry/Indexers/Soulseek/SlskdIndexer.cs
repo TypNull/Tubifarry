@@ -9,6 +9,7 @@ using NzbDrone.Core.Parser;
 using System.Net;
 using Tubifarry.Core.Replacements;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Indexers.Soulseek.Search.Core;
 
 namespace Tubifarry.Indexers.Soulseek
 {
@@ -26,11 +27,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         internal new SlskdSettings Settings => base.Settings;
 
-        public SlskdIndexer(IHttpClient httpClient, Lazy<IIndexerFactory> indexerFactory, IIndexerStatusService indexerStatusService, IConfigService configService, IParsingService parsingService, Logger logger)
+        public SlskdIndexer(IHttpClient httpClient, Lazy<IIndexerFactory> indexerFactory, IIndexerStatusService indexerStatusService, ISlskdSearchChain slskdSearchChain, IConfigService configService, IParsingService parsingService, Logger logger)
           : base(httpClient, indexerStatusService, configService, parsingService, logger)
         {
             _parseIndexerResponse = new SlskdIndexerParser(this, indexerFactory, httpClient);
-            _indexerRequestGenerator = new SlskdRequestGenerator(this, httpClient);
+            _indexerRequestGenerator = new SlskdRequestGenerator(this, slskdSearchChain, httpClient);
         }
 
         protected override async Task Test(List<ValidationFailure> failures) => failures.AddIfNotNull(await TestConnection());
