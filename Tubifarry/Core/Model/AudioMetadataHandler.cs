@@ -31,7 +31,7 @@ namespace Tubifarry.Core.Model
         {
             { AudioFormat.AAC,    new[] { "-codec:a aac", "-movflags +faststart", "-aac_coder twoloop" } },
             { AudioFormat.MP3,    new[] { "-codec:a libmp3lame" } },
-            { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-application audio" } },
+            { AudioFormat.Opus,   new[] { "-codec:a libopus", "-vbr on", "-application audio", "-vn" } },
             { AudioFormat.Vorbis, new[] { "-codec:a libvorbis" } },
             { AudioFormat.FLAC,   new[] { "-codec:a flac", "-compression_level 8" } },
             { AudioFormat.ALAC,   new[] { "-codec:a alac" } },
@@ -208,6 +208,22 @@ namespace Tubifarry.Core.Model
                 if (File.Exists(tempOutputPath))
                     File.Delete(tempOutputPath);
 
+                byte[]? preservedCoverArt = AlbumCover?.Length > 0 ? AlbumCover : null;
+                if (preservedCoverArt == null)
+                {
+                    try
+                    {
+                        using TagLib.File sourceFile = TagLib.File.Create(TrackPath);
+                        byte[]? data = sourceFile.Tag.Pictures?.FirstOrDefault()?.Data?.Data;
+                        if (data?.Length > 0)
+                            preservedCoverArt = data;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warn(ex, "Failed to read cover art from source before conversion");
+                    }
+                }
+
                 IConversion conversion = await FFmpeg.Conversions.FromSnippet.Convert(TrackPath, tempOutputPath);
 
                 foreach (string parameter in BaseConversionParameters[audioFormat])
@@ -262,6 +278,26 @@ namespace Tubifarry.Core.Model
 
                 File.Move(tempOutputPath, finalOutputPath, true);
                 TrackPath = finalOutputPath;
+
+                if (preservedCoverArt?.Length > 0)
+                {
+                    try
+                    {
+                        using TagLib.File destFile = TagLib.File.Create(TrackPath);
+                        destFile.Tag.Pictures = [new TagLib.Picture(new TagLib.ByteVector(preservedCoverArt))
+                        {
+                            Type = TagLib.PictureType.FrontCover,
+                            Description = "Album Cover"
+                        }];
+                        destFile.Save();
+                        _logger?.Trace("Re-embedded cover art into converted file");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warn(ex, "Failed to re-embed cover art after conversion, cover art may be missing");
+                    }
+                }
+
                 return true;
             }
             catch (Exception ex)
