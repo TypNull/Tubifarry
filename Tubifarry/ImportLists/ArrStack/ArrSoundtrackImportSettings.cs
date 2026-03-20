@@ -77,25 +77,28 @@ namespace Tubifarry.ImportLists.ArrStack
         [FieldDefinition(1, Label = "API Key", Type = FieldType.Textbox, HelpText = "API key from your Arr application settings (General tab)", Placeholder = "Enter your API key")]
         public string ApiKey { get; set; } = string.Empty;
 
-        [FieldDefinition(2, Label = "API Item Endpoint", Type = FieldType.Textbox, HelpText = "API endpoint for fetching media items", Advanced = true, Placeholder = "/api/v3/movie")]
+        [FieldDefinition(2, Label = "Tag Filter", Type = FieldType.Tag, HelpText = "Only import soundtracks for media items that have at least one of these tags. Leave empty to import all.", Advanced = true)]
+        public IEnumerable<string> TagFilter { get; set; } = [];
+
+        [FieldDefinition(3, Label = "API Item Endpoint", Type = FieldType.Textbox, HelpText = "API endpoint for fetching media items", Advanced = true, Placeholder = "/api/v3/movie")]
         public string APIItemEndpoint { get; set; } = string.Empty;
 
-        [FieldDefinition(3, Label = "API Status Endpoint", Type = FieldType.Textbox, HelpText = "API endpoint for system status", Advanced = true, Placeholder = "/api/v3/system/status")]
+        [FieldDefinition(4, Label = "API Status Endpoint", Type = FieldType.Textbox, HelpText = "API endpoint for system status", Advanced = true, Placeholder = "/api/v3/system/status")]
         public string APIStatusEndpoint { get; set; } = string.Empty;
 
-        [FieldDefinition(4, Label = "Use Strict Search", Type = FieldType.Checkbox, HelpText = "Use strict MusicBrainz search. When disabled, may return more results but lower accuracy", Advanced = true)]
+        [FieldDefinition(5, Label = "Use Strict Search", Type = FieldType.Checkbox, HelpText = "Use strict MusicBrainz search. When disabled, may return more results but lower accuracy", Advanced = true)]
         public bool UseStrongMusicBrainzSearch { get; set; } = true;
 
-        [FieldDefinition(5, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "Select Memory (non-permanent) or Permanent caching")]
+        [FieldDefinition(6, Label = "Cache Type", Type = FieldType.Select, SelectOptions = typeof(CacheType), HelpText = "Select Memory (non-permanent) or Permanent caching")]
         public int RequestCacheType { get; set; } = (int)CacheType.Permanent;
 
-        [FieldDefinition(6, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory for caching MusicBrainz results", Placeholder = "/config/soundtrack-cache")]
+        [FieldDefinition(7, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory for caching MusicBrainz results", Placeholder = "/config/soundtrack-cache")]
         public string CacheDirectory { get; set; } = string.Empty;
 
-        [FieldDefinition(7, Label = "Cache Retention", Type = FieldType.Number, HelpText = "How many days to keep cached MusicBrainz results", Unit = "Days", Advanced = true, Placeholder = "7")]
+        [FieldDefinition(8, Label = "Cache Retention", Type = FieldType.Number, HelpText = "How many days to keep cached MusicBrainz results", Unit = "Days", Advanced = true, Placeholder = "7")]
         public int CacheRetentionDays { get; set; } = 7;
 
-        [FieldDefinition(8, Label = "Refresh Interval", Type = FieldType.Textbox, HelpText = "The interval to refresh the import list. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes).", Unit = "hours", Advanced = true, Placeholder = "12")]
+        [FieldDefinition(9, Label = "Refresh Interval", Type = FieldType.Textbox, HelpText = "The interval to refresh the import list. Fractional values are allowed (e.g., 1.5 for 1 hour and 30 minutes).", Unit = "hours", Advanced = true, Placeholder = "12")]
         public double RefreshInterval { get; set; } = 12.0;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

@@ -68,11 +68,16 @@ namespace Tubifarry.ImportLists.ArrStack
                 return results;
             }
 
+            HashSet<int>? requiredTagIds = await ResolveTagIdsAsync();
+
             try
             {
                 await foreach (ArrMedia? media in DeserializeMediaItemsAsync(importListResponse.Content))
                 {
                     if (media == null || string.IsNullOrWhiteSpace(media.Title))
+                        continue;
+
+                    if (requiredTagIds != null && !media.Tags.Any(requiredTagIds.Contains))
                         continue;
 
                     List<ImportListItemInfo> mediaResults = await ProcessMediaItem(media);
@@ -87,6 +92,45 @@ namespace Tubifarry.ImportLists.ArrStack
 
             _logger.Debug($"Soundtrack discovery completed. Found {results.Count} albums from {results.GroupBy(r => r.Artist).Count()} media items");
             return results;
+        }
+
+        private async Task<HashSet<int>?> ResolveTagIdsAsync()
+        {
+            if (!Settings.TagFilter.Any())
+                return null;
+
+            HashSet<string> requestedLabels = Settings.TagFilter
+                .Select(l => l.ToLowerInvariant())
+                .ToHashSet();
+
+            try
+            {
+                string[] parts = Settings.APIItemEndpoint.TrimEnd('/').Split('/');
+                parts[^1] = "tag";
+                string tagEndpoint = string.Join('/', parts);
+
+                string url = $"{Settings.BaseUrl.TrimEnd('/')}{tagEndpoint}?apikey={Settings.ApiKey}";
+                HttpResponse response = await _httpClient.GetAsync(new HttpRequest(url));
+
+                List<ArrTag>? tags = JsonSerializer.Deserialize<List<ArrTag>>(response.Content, JsonOptions);
+                if (tags == null)
+                    return [];
+
+                HashSet<int> matchedIds = tags
+                    .Where(t => requestedLabels.Contains(t.Label.ToLowerInvariant()))
+                    .Select(t => t.Id)
+                    .ToHashSet();
+
+                if (matchedIds.Count == 0)
+                    _logger.Warn("Tag filter is set but none of the specified tags were found in the Arr application: {0}", Settings.TagFilter);
+
+                return matchedIds;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Failed to fetch tags from Arr application — proceeding without tag filtering");
+                return null;
+            }
         }
 
         private static async IAsyncEnumerable<ArrMedia?> DeserializeMediaItemsAsync(string content)
