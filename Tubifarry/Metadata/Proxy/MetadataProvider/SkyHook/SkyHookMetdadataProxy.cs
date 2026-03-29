@@ -90,7 +90,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
         /// </summary>
         public MetadataSupportLevel CanHandleSearch(string? albumTitle = null, string? artistName = null)
         {
-            if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true || albumTitle?.StartsWith("mbid:") == true)
+            if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true || albumTitle?.StartsWith("mbid:") == true
+                || artistName?.StartsWith("lidarr:") == true || artistName?.StartsWith("lidarrid:") == true || artistName?.StartsWith("mbid:") == true)
                 return MetadataSupportLevel.Supported;
 
             if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || (artistName != null && _formatRegex.IsMatch(artistName)))

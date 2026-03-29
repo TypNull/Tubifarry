@@ -75,7 +75,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
 
         public MetadataSupportLevel CanHandleSearch(string? albumTitle, string? artistName)
         {
-            if (albumTitle?.StartsWith("cl:") == true || albumTitle?.StartsWith("clid:") == true || albumTitle?.StartsWith("customlidarrid:") == true || albumTitle?.StartsWith("mbid:") == true)
+            if (albumTitle?.StartsWith("cl:") == true || albumTitle?.StartsWith("clid:") == true || albumTitle?.StartsWith("customlidarrid:") == true || albumTitle?.StartsWith("mbid:") == true
+                || artistName?.StartsWith("mbid:") == true)
                 return MetadataSupportLevel.Supported;
 
             if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || (artistName != null && _formatRegex.IsMatch(artistName)))
