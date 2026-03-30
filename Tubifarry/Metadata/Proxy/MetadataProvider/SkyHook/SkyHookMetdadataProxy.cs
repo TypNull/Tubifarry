@@ -20,7 +20,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
     [ProxyFor(typeof(ISearchForNewAlbum), 100)]
     [ProxyFor(typeof(ISearchForNewEntity), 100)]
     [ProxyFor(typeof(IMetadataRequestBuilder), 100)]
-    public class SkyHookMetadataProxy : ProxyBase<SykHookMetadataProxySettings>, ISupportMetadataMixing
+    public partial class SkyHookMetadataProxy : ProxyBase<SykHookMetadataProxySettings>, ISupportMetadataMixing
     {
         private readonly SkyHookProxy _skyHookProxy;
         private readonly IConfigService _configService;
@@ -71,7 +71,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
         private static string ExtractLidarrId(string title)
         {
             if (string.IsNullOrWhiteSpace(title)) return title;
-            Match m = _musicBrainzRegex.Match(title);
+            Match m = MusicBrainzRegex().Match(title);
             return m.Success ? $"lidarr:{m.Groups[1].Value}" : title;
         }
 
@@ -90,8 +90,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
         /// </summary>
         public MetadataSupportLevel CanHandleSearch(string? albumTitle = null, string? artistName = null)
         {
-            if (albumTitle?.StartsWith("lidarr:") == true || albumTitle?.StartsWith("lidarrid:") == true || albumTitle?.StartsWith("mbid:") == true
-                || artistName?.StartsWith("lidarr:") == true || artistName?.StartsWith("lidarrid:") == true || artistName?.StartsWith("mbid:") == true)
+            if (MusicBrainzRegex().Match(albumTitle ?? string.Empty).Success || MusicBrainzRegex().Match(artistName ?? string.Empty).Success)
                 return MetadataSupportLevel.Supported;
 
             if (albumTitle != null && _formatRegex.IsMatch(albumTitle) || (artistName != null && _formatRegex.IsMatch(artistName)))
@@ -134,7 +133,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
                 if (string.IsNullOrWhiteSpace(link.Url))
                     continue;
 
-                Match match = _musicBrainzRegex.Match(link.Url);
+                Match match = MusicBrainzRegex().Match(link.Url);
                 if (match.Success && match.Groups.Count > 1)
                     return match.Groups[1].Value;
             }
@@ -143,9 +142,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.SkyHook
 
         private static readonly Regex _formatRegex = new(@"^\s*\w+:\s*\w+", RegexOptions.Compiled);
 
-        private static readonly Regex _musicBrainzRegex = new(
-            @"musicbrainz\.org\/(?:artist|release|recording)\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        [GeneratedRegex(@"\b(?:lidarr:|lidarrid:|mbid:|musicbrainz\.org/(?:artist|release|recording|release-group)/)([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+        private static partial Regex MusicBrainzRegex();
 
         private static readonly Regex _guidRegex = new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);

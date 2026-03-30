@@ -377,8 +377,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
             }
         }
 
-        public bool IsMbidQuery(string? query) => MusicBrainzUrlRegex().IsMatch(query ?? string.Empty);
-
         public string? ExtractMbid(string? query)
         {
             if (query.IsNullOrWhiteSpace())
@@ -386,7 +384,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
                 return null;
             }
 
-            Match match = MusicBrainzUrlRegex().Match(query);
+            Match match = MusicBrainzRegex().Match(query);
             return match.Success ? match.Groups[1].Value : null;
         }
 
@@ -633,8 +631,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
             _ => SecondaryAlbumType.Studio,
         };
 
+        public static bool IsMbidQuery(string? query) => MusicBrainzRegex().IsMatch(query ?? string.Empty);
+
         private static IHttpRequestBuilderFactory GetRequestBuilder(CustomLidarrMetadataProxySettings settings) => new HttpRequestBuilder(settings.MetadataSource.TrimEnd("/") + "/{route}").KeepAlive().CreateFactory();
-        [GeneratedRegex(@"\b(?:lidarr:|lidarrid:|mbid:|musicbrainz\.org/(?:artist|release-group)/)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-        private static partial Regex MusicBrainzUrlRegex();
+        [GeneratedRegex(@"\b(?:lidarr:|lidarrid:|mbid:|cl:|clid:|customlidarrid:|musicbrainz\.org/(?:artist|release|recording|release-group)/)([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+        private static partial Regex MusicBrainzRegex();
     }
 }

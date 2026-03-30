@@ -20,8 +20,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
 
         HashSet<string> GetChangedArtists(CustomLidarrMetadataProxySettings settings, DateTime startTime);
 
-        bool IsMbidQuery(string? query);
-
         string? ExtractMbid(string? query);
     }
 }
