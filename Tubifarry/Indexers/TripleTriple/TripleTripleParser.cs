@@ -17,12 +17,15 @@ namespace Tubifarry.Indexers.TripleTriple
             try
             {
                 bool isSingle = false;
+                TripleTripleCodec codec = TripleTripleCodec.FLAC;
                 if (!string.IsNullOrEmpty(indexerResponse.Request.HttpRequest.ContentSummary))
                 {
                     TripleTripleRequestData? requestData = JsonSerializer.Deserialize<TripleTripleRequestData>(
                         indexerResponse.Request.HttpRequest.ContentSummary,
                         IndexerParserHelper.StandardJsonOptions);
                     isSingle = requestData?.IsSingle ?? false;
+                    if (requestData?.Codec != null && Enum.TryParse(requestData.Codec, true, out TripleTripleCodec parsed))
+                        codec = parsed;
                 }
 
                 TripleTripleSearchResponse? response = JsonSerializer.Deserialize<TripleTripleSearchResponse>(
@@ -48,13 +51,13 @@ namespace Tubifarry.Indexers.TripleTriple
 
                         if (document.IsAlbum)
                         {
-                            AlbumData albumData = CreateAlbumRelease(document);
+                            AlbumData albumData = CreateAlbumRelease(document, codec);
                             albumData.ParseReleaseDate();
                             releases.Add(albumData.ToReleaseInfo());
                         }
                         else if (document.IsTrack && isSingle)
                         {
-                            AlbumData trackData = CreateTrackRelease(document);
+                            AlbumData trackData = CreateTrackRelease(document, codec);
                             trackData.ParseReleaseDate();
                             releases.Add(trackData.ToReleaseInfo());
                         }
@@ -69,9 +72,9 @@ namespace Tubifarry.Indexers.TripleTriple
             return releases;
         }
 
-        private AlbumData CreateAlbumRelease(TripleTripleDocument album)
+        private AlbumData CreateAlbumRelease(TripleTripleDocument album, TripleTripleCodec codec)
         {
-            (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(TripleTripleCodec.FLAC);
+            (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(codec);
             int trackCount = album.TrackNum > 0 ? album.TrackNum : 10;
             long estimatedSize = IndexerParserHelper.EstimateSize(0, 0, bitrate, trackCount);
 
@@ -94,9 +97,9 @@ namespace Tubifarry.Indexers.TripleTriple
             };
         }
 
-        private AlbumData CreateTrackRelease(TripleTripleDocument track)
+        private AlbumData CreateTrackRelease(TripleTripleDocument track, TripleTripleCodec codec)
         {
-            (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(TripleTripleCodec.FLAC);
+            (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(codec);
             long estimatedSize = IndexerParserHelper.EstimateSize(0, track.Duration, bitrate);
 
             return new("TripleTriple", nameof(AmazonMusicDownloadProtocol))

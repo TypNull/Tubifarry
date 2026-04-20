@@ -64,8 +64,24 @@ namespace Tubifarry.Download.Clients.TripleTriple
             _logger.Trace($"Processing single track with ASIN: {asin}");
 
             TripleTripleMediaResponse? media = await GetMediaAsync(asin, token);
+
+            if (media != null && media.Streamable && media.StreamInfo == null)
+            {
+                string? fallback = GetFallbackCodec(Options.Codec.ToString().ToLowerInvariant());
+                if (fallback != null)
+                {
+                    _logger.Warn($"Codec '{Options.Codec}' unavailable for track '{asin}', trying '{fallback}'");
+                    List<TripleTripleMediaResponse>? fallbackList = await GetAlbumMediaWithCodecAsync(asin, fallback, token);
+                    media = fallbackList?.FirstOrDefault() ?? media;
+                }
+            }
+
             if (media == null || !media.Streamable || media.StreamInfo == null)
-                throw new Exception("Failed to get stream info for track");
+            {
+                _logger.Warn($"No streams available for track '{asin}'. Requested codec not available.");
+                _requestContainer.Cancel();
+                return;
+            }
 
             _mediaResponses = [media];
 
@@ -78,7 +94,6 @@ namespace Tubifarry.Download.Clients.TripleTriple
             string extension = AudioFormatHelper.GetFileExtensionForFormat(AudioFormatHelper.GetAudioFormatFromCodec(media.StreamInfo.Codec));
             string fileName = BuildTrackFilename(trackMetadata, albumMetadata, extension);
             InitiateDownload(media, fileName, token);
-            _requestContainer.Add(_trackContainer);
         }
 
         private async Task ProcessAlbumAsync(string asin, CancellationToken token)
@@ -98,6 +113,16 @@ namespace Tubifarry.Download.Clients.TripleTriple
             _mediaResponses = await GetAlbumMediaAsync(asin, token);
             if (_mediaResponses == null || _mediaResponses.Count == 0)
                 throw new Exception("Failed to get media info for album");
+
+            if (!_mediaResponses.Any(m => m.Streamable && m.StreamInfo != null))
+            {
+                string? fallback = GetFallbackCodec(Options.Codec.ToString().ToLowerInvariant());
+                if (fallback != null)
+                {
+                    _logger.Warn($"Codec '{Options.Codec}' unavailable for '{_currentAlbum.Title}', trying '{fallback}'");
+                    _mediaResponses = await GetAlbumMediaWithCodecAsync(asin, fallback, token) ?? _mediaResponses;
+                }
+            }
 
             foreach (TripleTripleTrackInfo track in _currentAlbum.Tracks)
             {
@@ -126,7 +151,12 @@ namespace Tubifarry.Download.Clients.TripleTriple
                     LogAndAppendMessage($"Track failed: {track.Title} - {ex.Message}", LogLevel.Error);
                 }
             }
-            _requestContainer.Add(_trackContainer);
+
+            if (_trackContainer.Count == 0)
+            {
+                _logger.Warn($"No downloadable tracks for album '{_currentAlbum.Title}'. Requested codec not available.");
+                _requestContainer.Cancel();
+            }
         }
 
         private async Task<TripleTripleMediaResponse?> GetMediaAsync(string asin, CancellationToken token)
@@ -177,6 +207,20 @@ namespace Tubifarry.Download.Clients.TripleTriple
                 throw new Exception($"Failed to get album media: {ex.Message}", ex);
             }
         }
+
+        private async Task<List<TripleTripleMediaResponse>?> GetAlbumMediaWithCodecAsync(string asin, string codec, CancellationToken token)
+        {
+            string url = $"/api/amazon-music/media-from-asin?asin={asin}&country={Options.CountryCode}&codec={codec}";
+            string response = await RequestAsync(url, token);
+            return JsonSerializer.Deserialize<List<TripleTripleMediaResponse>>(response, IndexerParserHelper.StandardJsonOptions);
+        }
+
+        private static string? GetFallbackCodec(string codec) => codec switch
+        {
+            "flac" => "opus",
+            "eac3" => "opus",
+            _ => null
+        };
 
         private async Task<string> RequestAsync(string url, CancellationToken token)
         {
