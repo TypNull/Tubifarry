@@ -248,7 +248,8 @@ namespace Tubifarry.Download.Clients.SubSonic
             string streamUrl = BuildStreamUrl(track.Id);
             Track trackMetadata = CreateTrackFromSubSonicData(track);
             Album albumMetadata = CreateAlbumFromSubSonicData(track, _currentAlbum);
-            string fileName = BuildTrackFilename(trackMetadata, albumMetadata);
+            string fileExtension = DetermineTrackExtension(track);
+            string fileName = BuildTrackFilename(trackMetadata, albumMetadata, fileExtension);
 
             LoadRequest downloadRequest = CreateDownloadRequest(streamUrl, fileName, token);
             OwnRequest postProcessRequest = CreatePostProcessRequest(track, downloadRequest, fileName, token);
@@ -259,6 +260,32 @@ namespace Tubifarry.Download.Clients.SubSonic
             _trackContainer.Add(downloadRequest);
             _requestContainer.Add(postProcessRequest);
         }
+
+        private string DetermineTrackExtension(SubSonicSearchSong track)
+        {
+            if (Options.PreferredFormat != PreferredFormatEnum.Raw)
+                return GetPreferredFormatExtension(Options.PreferredFormat);
+
+            string? pathExtension = Path.GetExtension(track.Path);
+            AudioFormat detectedFormat = IndexerParserHelper.DetermineFormat(
+                track.Suffix ?? pathExtension,
+                track.ContentType,
+                AudioFormatHelper.GetAudioFormatFromCodec(ReleaseInfo.Codec));
+
+            return AudioFormatHelper.GetFileExtensionForFormat(detectedFormat);
+        }
+
+        private static AudioFormat GetPreferredFormatAudioFormat(PreferredFormatEnum preferredFormat) => preferredFormat switch
+        {
+            PreferredFormatEnum.Mp3 => AudioFormat.MP3,
+            PreferredFormatEnum.Opus => AudioFormat.Opus,
+            PreferredFormatEnum.Aac => AudioFormat.AAC,
+            PreferredFormatEnum.Flac => AudioFormat.FLAC,
+            _ => AudioFormat.Unknown
+        };
+
+        private static string GetPreferredFormatExtension(PreferredFormatEnum preferredFormat)
+            => AudioFormatHelper.GetFileExtensionForFormat(GetPreferredFormatAudioFormat(preferredFormat));
 
         private LoadRequest CreateDownloadRequest(string streamUrl, string fileName, CancellationToken token) => new(streamUrl, new LoadRequestOptions()
         {
