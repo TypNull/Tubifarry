@@ -33,6 +33,12 @@ namespace Tubifarry.ImportLists.ArrStack
         public List<int> Tags { get; set; } = [];
 
         /// <summary>
+        /// Whether this media item is monitored in the Arr application.
+        /// </summary>
+        [JsonPropertyName("monitored")]
+        public bool? Monitored { get; set; }
+
+        /// <summary>
         /// Returns a string representation for debugging
         /// </summary>
         public override string ToString() => $"{Title} (ID: {Id})";
