@@ -15,7 +15,7 @@ namespace Tubifarry.ImportLists.LastFmRecommendation
 
     public record LastFmTrack(
         [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("duration")] int Duration,
+        [property: JsonPropertyName("duration"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] int Duration,
         [property: JsonPropertyName("url")] string Url,
         [property: JsonPropertyName("artist")] LastFmArtist Artist
     );
