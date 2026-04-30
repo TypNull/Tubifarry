@@ -166,7 +166,7 @@ The **Queue Cleaner** automatically handles downloads that fail to import into y
 #### How to Enable Lyrics Fetcher
 
 1. Go to `Settings > Metadata` in Lidarr.
-2. Open the **Lyrics Fetcher** MetadataConsumer.
+2. Open the **Lyrics Enhancer** MetadataConsumer.
 3. Toggle the switch to enable the feature.
 
 #### How to Use Lyrics Fetcher
