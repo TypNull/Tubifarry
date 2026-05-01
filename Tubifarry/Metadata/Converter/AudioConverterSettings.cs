@@ -107,8 +107,8 @@ namespace Tubifarry.Metadata.Converter
     {
         private static readonly AudioConverterSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "FFmpeg Path", Type = FieldType.Path, Section = MetadataSectionType.Metadata, Placeholder = "/downloads/FFmpeg", HelpText = "Specify the path to the FFmpeg binary.")]
-        public string FFmpegPath { get; set; } = string.Empty;
+        [FieldDefinition(0, Label = "FFmpeg Path", Type = FieldType.Path, Section = MetadataSectionType.Metadata, Placeholder = "/config/plugins/TypNull/Tubifarry/", HelpText = "Specify the path to the FFmpeg binary.")]
+        public string FFmpegPath { get; set; } = "/config/plugins/TypNull/Tubifarry/";
 
         [FieldDefinition(1, Label = "Convert MP3", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Convert MP3 files.")]
         public bool ConvertMP3 { get; set; }
