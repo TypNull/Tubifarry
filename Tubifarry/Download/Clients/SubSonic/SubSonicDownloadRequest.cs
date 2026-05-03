@@ -263,29 +263,48 @@ namespace Tubifarry.Download.Clients.SubSonic
 
         private string DetermineTrackExtension(SubSonicSearchSong track)
         {
+            if (!string.IsNullOrEmpty(track.TranscodedSuffix))
+                return track.TranscodedSuffix.StartsWith('.') ? track.TranscodedSuffix : $".{track.TranscodedSuffix}";
+
+            if (!string.IsNullOrEmpty(track.TranscodedContentType))
+            {
+                string codec = track.TranscodedContentType.Contains('/')
+                    ? track.TranscodedContentType.Split('/').Last()
+                    : track.TranscodedContentType;
+                AudioFormat format = AudioFormatHelper.GetAudioFormatFromCodec(codec);
+                if (format != AudioFormat.Unknown)
+                    return AudioFormatHelper.GetFileExtensionForFormat(format);
+            }
+
             if (Options.PreferredFormat != PreferredFormatEnum.Raw)
-                return GetPreferredFormatExtension(Options.PreferredFormat);
+            {
+                AudioFormat format = Options.PreferredFormat switch
+                {
+                    PreferredFormatEnum.Mp3 => AudioFormat.MP3,
+                    PreferredFormatEnum.Opus => AudioFormat.Opus,
+                    PreferredFormatEnum.Aac => AudioFormat.AAC,
+                    PreferredFormatEnum.Flac => AudioFormat.FLAC,
+                    _ => AudioFormat.Unknown
+                };
+                return AudioFormatHelper.GetFileExtensionForFormat(format);
+            }
 
-            string? pathExtension = Path.GetExtension(track.Path);
-            AudioFormat detectedFormat = IndexerParserHelper.DetermineFormat(
-                track.Suffix ?? pathExtension,
-                track.ContentType,
-                AudioFormatHelper.GetAudioFormatFromCodec(ReleaseInfo.Codec));
+            if (!string.IsNullOrEmpty(track.Suffix))
+                return track.Suffix.StartsWith('.') ? track.Suffix : $".{track.Suffix}";
 
-            return AudioFormatHelper.GetFileExtensionForFormat(detectedFormat);
+            if (!string.IsNullOrEmpty(track.ContentType))
+            {
+                string codec = track.ContentType.Contains('/')
+                    ? track.ContentType.Split('/').Last()
+                    : track.ContentType;
+                AudioFormat format = AudioFormatHelper.GetAudioFormatFromCodec(codec);
+                if (format != AudioFormat.Unknown)
+                    return AudioFormatHelper.GetFileExtensionForFormat(format);
+            }
+
+            AudioFormat codecFormat = AudioFormatHelper.GetAudioFormatFromCodec(ReleaseInfo.Codec);
+            return AudioFormatHelper.GetFileExtensionForFormat(codecFormat);
         }
-
-        private static AudioFormat GetPreferredFormatAudioFormat(PreferredFormatEnum preferredFormat) => preferredFormat switch
-        {
-            PreferredFormatEnum.Mp3 => AudioFormat.MP3,
-            PreferredFormatEnum.Opus => AudioFormat.Opus,
-            PreferredFormatEnum.Aac => AudioFormat.AAC,
-            PreferredFormatEnum.Flac => AudioFormat.FLAC,
-            _ => AudioFormat.Unknown
-        };
-
-        private static string GetPreferredFormatExtension(PreferredFormatEnum preferredFormat)
-            => AudioFormatHelper.GetFileExtensionForFormat(GetPreferredFormatAudioFormat(preferredFormat));
 
         private LoadRequest CreateDownloadRequest(string streamUrl, string fileName, CancellationToken token) => new(streamUrl, new LoadRequestOptions()
         {
@@ -329,6 +348,24 @@ namespace Tubifarry.Download.Clients.SubSonic
 
             try
             {
+                if (AudioMetadataHandler.CheckFFmpegInstalled())
+                {
+                    AudioFormat actualFormat = await AudioMetadataHandler.GetSupportedCodecAsync(trackPath);
+                    if (actualFormat != AudioFormat.Unknown)
+                    {
+                        string currentExt = Path.GetExtension(trackPath);
+                        string correctExt = AudioFormatHelper.GetFileExtensionForFormat(actualFormat);
+
+                        if (!string.Equals(currentExt, correctExt, StringComparison.OrdinalIgnoreCase))
+                        {
+                            string newPath = Path.ChangeExtension(trackPath, correctExt);
+                            File.Move(trackPath, newPath);
+                            trackPath = newPath;
+                            _logger.Debug($"Corrected extension: {currentExt} -> {correctExt}");
+                        }
+                    }
+                }
+
                 AudioMetadataHandler audioData = new(trackPath) { AlbumCover = _albumCover };
 
                 AudioFormat detectedFormat = AudioFormatHelper.GetAudioCodecFromExtension(trackPath);

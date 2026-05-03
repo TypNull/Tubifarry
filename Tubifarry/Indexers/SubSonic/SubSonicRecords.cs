@@ -136,6 +136,8 @@ namespace Tubifarry.Indexers.SubSonic
         [property: JsonPropertyName("size")] long Size = 0,
         [property: JsonPropertyName("suffix")] string? Suffix = null,
         [property: JsonPropertyName("contentType")] string? ContentType = null,
+        [property: JsonPropertyName("transcodedSuffix")] string? TranscodedSuffix = null,
+        [property: JsonPropertyName("transcodedContentType")] string? TranscodedContentType = null,
         [property: JsonPropertyName("path")] string? Path = null)
     {
         [JsonIgnore]
