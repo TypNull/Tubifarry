@@ -91,6 +91,14 @@ namespace Tubifarry.Indexers.Soulseek
             RuleFor(c => c.MaxQueuedPerUser)
                 .GreaterThanOrEqualTo(0)
                 .WithMessage("Max queued per user must be 0 or greater.");
+
+            RuleFor(c => c.ConcurrentSearchLimit)
+                .InclusiveBetween(1, 5)
+                .WithMessage("Concurrent Search Limit must be between 1 and 5.");
+
+            RuleFor(c => c.MaxRetryAttempts)
+                .InclusiveBetween(0, 10)
+                .WithMessage("Max Retry Attempts must be between 0 and 10.");
         }
     }
 
@@ -175,6 +183,12 @@ namespace Tubifarry.Indexers.Soulseek
 
         [FieldDefinition(24, Type = FieldType.Number, Label = "Max Queued/User", HelpText = "Max currently queued albums per user. 0 = disabled.", Advanced = true)]
         public int MaxQueuedPerUser { get; set; }
+
+        [FieldDefinition(25, Type = FieldType.Number, Label = "Concurrent Search Limit", HelpText = "Max concurrent searches allowed by SLSKD (typically 1). Match your SLSKD config.", Advanced = true)]
+        public int ConcurrentSearchLimit { get; set; } = 1;
+
+        [FieldDefinition(26, Type = FieldType.Number, Label = "Max Retry Attempts", HelpText = "Retries when slskd is busy searching", Hidden = HiddenType.Hidden, Advanced = true)]
+        public int MaxRetryAttempts { get; set; } = 3;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

@@ -26,6 +26,10 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly ISentryHelper _sentry;
         private readonly HashSet<string> _processedSearches = new(StringComparer.OrdinalIgnoreCase);
 
+        private static SemaphoreSlim? _searchLimiter;
+        private static readonly object _limiterLock = new();
+        private static int _currentLimit;
+
         private SlskdSettings Settings => _indexer.Settings;
 
         public SlskdRequestGenerator(SlskdIndexer indexer, ISlskdSearchChain searchPipeline, IHttpClient client, ISentryHelper sentry)
@@ -139,49 +143,102 @@ namespace Tubifarry.Indexers.Soulseek
             return [];
         }
 
+
+        private SemaphoreSlim GetSearchLimiter()
+        {
+            lock (_limiterLock)
+            {
+                if (_searchLimiter == null || _currentLimit != Settings.ConcurrentSearchLimit)
+                {
+                    _searchLimiter?.Dispose();
+                    _currentLimit = Settings.ConcurrentSearchLimit;
+                    _searchLimiter = new SemaphoreSlim(Settings.ConcurrentSearchLimit, Settings.ConcurrentSearchLimit);
+                    _logger.Warn($"Search limiter initialized: {_currentLimit} concurrent");
+                }
+                return _searchLimiter;
+            }
+        }
+
         private async Task<IndexerRequest?> GetRequestsAsync(SearchQuery query, string searchText)
         {
+            SemaphoreSlim limiter = GetSearchLimiter();
+            await limiter.WaitAsync();
+
             try
             {
-                _logger.Debug($"Search: {searchText}");
+                int retryCount = 0;
+                int delaySeconds = 30;
 
-                dynamic searchData = CreateSearchData(searchText);
-                string searchId = searchData.Id;
-                dynamic searchRequest = CreateSearchRequest(searchData);
+                while (retryCount <= Settings.MaxRetryAttempts)
+                {
+                    try
+                    {
+                        if (retryCount > 0)
+                        {
+                            _logger.Info($"Retry {retryCount}/{Settings.MaxRetryAttempts} for '{searchText}' after {delaySeconds}s");
+                            await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
+                            delaySeconds *= 2;
+                        }
 
-                await ExecuteSearchAsync(searchRequest, searchId);
+                        _logger.Debug($"Search: {searchText}");
 
-                _sentry.LogSearch(searchId, searchText, query.Artist, query.Album, "SlskdSearch", 0);
-                _sentry.LogSearchSettings(
-                    searchId,
-                    Settings.TrackCountFilter,
-                    Settings.NormalizedSeach,
-                    Settings.AppendYear,
-                    Settings.HandleVolumeVariations,
-                    Settings.UseFallbackSearch,
-                    Settings.UseTrackFallback,
-                    Settings.MinimumResults,
-                    !string.IsNullOrEmpty(Settings.SearchTemplates));
-                _sentry.LogExpectedTracks(searchId, query.Tracks?.ToList() ?? [], query.TrackCount);
+                        dynamic searchData = CreateSearchData(searchText);
+                        string searchId = searchData.Id;
+                        dynamic searchRequest = CreateSearchRequest(searchData);
 
-                dynamic request = CreateResultRequest(searchId, query);
-                return new IndexerRequest(request);
-            }
-            catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.Conflict)
-            {
-                throw new RequestLimitReachedException(
-                    "Soulseek client is not connected (temporarily banned or disconnected). Indexer disabled.",
-                    TimeSpan.FromMinutes(15));
-            }
-            catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
-            {
-                _logger.Warn($"Search request failed for: {searchText}. Error: {ex.Message}");
+                        await ExecuteSearchAsync(searchRequest, searchId);
+
+                        _sentry.LogSearch(searchId, searchText, query.Artist, query.Album, "SlskdSearch", 0);
+                        _sentry.LogSearchSettings(
+                            searchId,
+                            Settings.TrackCountFilter,
+                            Settings.NormalizedSeach,
+                            Settings.AppendYear,
+                            Settings.HandleVolumeVariations,
+                            Settings.UseFallbackSearch,
+                            Settings.UseTrackFallback,
+                            Settings.MinimumResults,
+                            !string.IsNullOrEmpty(Settings.SearchTemplates));
+                        _sentry.LogExpectedTracks(searchId, query.Tracks?.ToList() ?? [], query.TrackCount);
+
+                        dynamic request = CreateResultRequest(searchId, query);
+                        return new IndexerRequest(request);
+                    }
+                    catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.Conflict)
+                    {
+                        throw new RequestLimitReachedException(
+                            "Soulseek client is not connected (temporarily banned or disconnected). Indexer disabled.",
+                            TimeSpan.FromMinutes(15));
+                    }
+                    catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.TooManyRequests)
+                    {
+                        if (retryCount < Settings.MaxRetryAttempts)
+                        {
+                            _logger.Warn($"Slskd busy for '{searchText}' (attempt {retryCount + 1}/{Settings.MaxRetryAttempts + 1}). Manual search or multiple instances?");
+                            retryCount++;
+                            continue;
+                        }
+
+                        _logger.Error($"Slskd busy for '{searchText}' after {Settings.MaxRetryAttempts} retries. Check for manual searches or multiple instances.");
+                        return null;
+                    }
+                    catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        _logger.Warn($"Search request failed for: {searchText}. Error: {ex.Message}");
+                        return null;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Error generating search request for: {searchText}");
+                        return null;
+                    }
+                }
+
                 return null;
             }
-            catch (Exception ex)
+            finally
             {
-                _logger.Error(ex, $"Error generating search request for: {searchText}");
-                return null;
+                limiter.Release();
             }
         }
 
