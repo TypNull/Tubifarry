@@ -195,7 +195,7 @@ namespace Tubifarry.Metadata.Converter
                 if (!RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule))
                     continue;
 
-                if (!IsRuleMatching(rule, trackFormat, currentBitrate))
+                if (!IsRuleMatching(rule, trackFormat, currentBitrate, currentBitDepth))
                     continue;
 
                 ConversionResult result = ShouldBlockConversion(rule, trackFormat, currentBitrate, currentBitDepth);
@@ -224,9 +224,13 @@ namespace Tubifarry.Metadata.Converter
             int? currentBitrate = await GetTrackBitrateAsync(trackFile.Path);
             _logger.Trace($"Track bitrate found for {trackFile.Path} at {currentBitrate ?? 0}kbps");
 
+            int? currentBitDepth = null;
+            if (!AudioFormatHelper.IsLossyFormat(trackFormat))
+                currentBitDepth = await GetTrackBitDepthAsync(trackFile.Path);
+
             if (artistRule != null)
                 return true;
-            if (MatchesAnyCustomRule(trackFormat, currentBitrate))
+            if (MatchesAnyCustomRule(trackFormat, currentBitrate, currentBitDepth))
                 return true;
             return IsFormatEnabledForConversion(trackFormat);
         }
@@ -247,14 +251,15 @@ namespace Tubifarry.Metadata.Converter
             return null;
         }
 
-        private bool MatchesAnyCustomRule(AudioFormat trackFormat, int? currentBitrate) =>
-            Settings.CustomConversion.Any(ruleEntry => RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule) && IsRuleMatching(rule, trackFormat, currentBitrate));
+        private bool MatchesAnyCustomRule(AudioFormat trackFormat, int? currentBitrate, int? currentBitDepth) =>
+            Settings.CustomConversion.Any(ruleEntry => RuleParser.TryParseRule(ruleEntry.Key, ruleEntry.Value, out ConversionRule rule) && IsRuleMatching(rule, trackFormat, currentBitrate, currentBitDepth));
 
-        private bool IsRuleMatching(ConversionRule rule, AudioFormat trackFormat, int? currentBitrate)
+        private bool IsRuleMatching(ConversionRule rule, AudioFormat trackFormat, int? currentBitrate, int? currentBitDepth)
         {
             bool formatMatches = rule.MatchesFormat(trackFormat);
-            bool bitrateMatches = rule.MatchesBitrate(currentBitrate);
-            if (formatMatches && bitrateMatches)
+            int? constraintValue = AudioFormatHelper.IsLossyFormat(trackFormat) ? currentBitrate : currentBitDepth;
+            bool constraintMatches = rule.MatchesSourceConstraint(constraintValue);
+            if (formatMatches && constraintMatches)
             {
                 _logger.Debug($"Matched conversion rule: {rule}");
                 return true;

@@ -38,8 +38,8 @@ namespace Tubifarry.Metadata.Converter
     public class ConversionRule
     {
         public AudioFormat SourceFormat { get; set; }
-        public ComparisonOperator? SourceBitrateOperator { get; set; }
-        public int? SourceBitrateValue { get; set; }
+        public ComparisonOperator? SourceOperator { get; set; }
+        public int? SourceValue { get; set; }
         public AudioFormat TargetFormat { get; set; }
         public int? TargetBitrate { get; set; }
         public int? TargetBitDepth { get; set; }
@@ -54,14 +54,26 @@ namespace Tubifarry.Metadata.Converter
 
         public bool IsCategoryRule => IsGlobalRule || IsLossyRule || IsLosslessRule;
 
-        public bool MatchesBitrate(int? currentBitrate)
+        public bool HasSourceConstraint => SourceOperator.HasValue && SourceValue.HasValue;
+
+        public bool MatchesSourceConstraint(int? currentValue)
         {
-            if (!HasBitrateConstraints())
+            if (!HasSourceConstraint)
                 return true;
 
-            if (!currentBitrate.HasValue)
+            if (!currentValue.HasValue)
                 return false;
-            return EvaluateBitrateCondition(currentBitrate.Value);
+
+            return SourceOperator!.Value switch
+            {
+                ComparisonOperator.Equal => currentValue.Value == SourceValue!.Value,
+                ComparisonOperator.NotEqual => currentValue.Value != SourceValue!.Value,
+                ComparisonOperator.LessThan => currentValue.Value < SourceValue!.Value,
+                ComparisonOperator.LessThanOrEqual => currentValue.Value <= SourceValue!.Value,
+                ComparisonOperator.GreaterThan => currentValue.Value > SourceValue!.Value,
+                ComparisonOperator.GreaterThanOrEqual => currentValue.Value >= SourceValue!.Value,
+                _ => false
+            };
         }
 
         public bool MatchesFormat(AudioFormat trackFormat)
@@ -78,27 +90,6 @@ namespace Tubifarry.Metadata.Converter
             return SourceFormat == trackFormat;
         }
 
-        private bool HasBitrateConstraints() => SourceBitrateOperator.HasValue && SourceBitrateValue.HasValue;
-
-        private bool EvaluateBitrateCondition(int currentBitrate)
-        {
-            if (!SourceBitrateOperator.HasValue || !SourceBitrateValue.HasValue)
-                return false;
-
-            return SourceBitrateOperator.Value switch
-            {
-                ComparisonOperator.Equal => currentBitrate == SourceBitrateValue.Value,
-                ComparisonOperator.NotEqual => currentBitrate != SourceBitrateValue.Value,
-                ComparisonOperator.LessThan => currentBitrate < SourceBitrateValue.Value,
-                ComparisonOperator.LessThanOrEqual => currentBitrate <= SourceBitrateValue.Value,
-                ComparisonOperator.GreaterThan => currentBitrate > SourceBitrateValue.Value,
-                ComparisonOperator.GreaterThanOrEqual => currentBitrate >= SourceBitrateValue.Value,
-                _ => false
-            };
-        }
-
-        private string GetOperatorSymbol() => SourceBitrateOperator.HasValue ? OperatorSymbols.GetSymbol(SourceBitrateOperator.Value) : string.Empty;
-
         public override string ToString() => $"{FormatSourcePart()}->{FormatTargetPart()}";
 
         private string FormatSourcePart()
@@ -113,8 +104,8 @@ namespace Tubifarry.Metadata.Converter
             else
                 source = SourceFormat.ToString();
 
-            if (HasBitrateConstraints())
-                source += GetOperatorSymbol() + SourceBitrateValue!.Value;
+            if (HasSourceConstraint)
+                source += OperatorSymbols.GetSymbol(SourceOperator!.Value) + SourceValue!.Value;
             return source;
         }
 
@@ -141,6 +132,7 @@ namespace Tubifarry.Metadata.Converter
         public const string LessThanOrEqual = "<=";
         public const string GreaterThan = ">";
         public const string GreaterThanOrEqual = ">=";
+        public const string Colon = ":";
 
         public static string GetSymbol(ComparisonOperator op)
         {
@@ -156,19 +148,16 @@ namespace Tubifarry.Metadata.Converter
             };
         }
 
-        public static ComparisonOperator? FromSymbol(string symbol)
+        public static ComparisonOperator? FromSymbol(string symbol) => symbol switch
         {
-            return symbol switch
-            {
-                Equal => ComparisonOperator.Equal,
-                NotEqual => ComparisonOperator.NotEqual,
-                LessThan => ComparisonOperator.LessThan,
-                LessThanOrEqual => ComparisonOperator.LessThanOrEqual,
-                GreaterThan => ComparisonOperator.GreaterThan,
-                GreaterThanOrEqual => ComparisonOperator.GreaterThanOrEqual,
-                _ => null
-            };
-        }
+            Equal or Colon => ComparisonOperator.Equal,
+            NotEqual => ComparisonOperator.NotEqual,
+            LessThan => ComparisonOperator.LessThan,
+            LessThanOrEqual => ComparisonOperator.LessThanOrEqual,
+            GreaterThan => ComparisonOperator.GreaterThan,
+            GreaterThanOrEqual => ComparisonOperator.GreaterThanOrEqual,
+            _ => null
+        };
     }
 
     public enum ComparisonOperator
@@ -259,20 +248,14 @@ namespace Tubifarry.Metadata.Converter
 
             if (sourceMatch.Groups[2].Success && sourceMatch.Groups[3].Success)
             {
-                // Category rules (all, lossy, lossless) cannot have bitrate constraints
+                // Category rules (all, lossy, lossless) cannot have constraints
                 if (rule.IsCategoryRule)
                 {
-                    _logger.Warn("Invalid: Bitrate constraints not applicable to category rules (all, lossy, lossless)");
+                    _logger.Warn("Invalid: Constraints not applicable to category rules (all, lossy, lossless)");
                     return false;
                 }
 
-                if (!AudioFormatHelper.IsLossyFormat(rule.SourceFormat))
-                {
-                    _logger.Warn("Invalid: Bitrate constraints not applicable to lossless format");
-                    return false;
-                }
-
-                if (!ParseSourceBitrateConstraints(sourceMatch.Groups[2].Value, sourceMatch.Groups[3].Value, rule))
+                if (!ParseSourceConstraints(sourceMatch.Groups[2].Value, sourceMatch.Groups[3].Value, rule))
                     return false;
             }
 
@@ -312,11 +295,11 @@ namespace Tubifarry.Metadata.Converter
             return true;
         }
 
-        private static bool ParseSourceBitrateConstraints(string operatorStr, string bitrateStr, ConversionRule rule)
+        private static bool ParseSourceConstraints(string operatorStr, string valueStr, ConversionRule rule)
         {
-            if (!int.TryParse(bitrateStr, out int bitrateValue))
+            if (!int.TryParse(valueStr, out int value))
             {
-                _logger.Debug("Invalid source bitrate value: {0}", bitrateStr);
+                _logger.Debug("Invalid source constraint value: {0}", valueStr);
                 return false;
             }
 
@@ -327,8 +310,8 @@ namespace Tubifarry.Metadata.Converter
                 return false;
             }
 
-            rule.SourceBitrateOperator = comparisonOp.Value;
-            rule.SourceBitrateValue = bitrateValue;
+            rule.SourceOperator = comparisonOp.Value;
+            rule.SourceValue = value;
             return true;
         }
 
@@ -356,7 +339,7 @@ namespace Tubifarry.Metadata.Converter
                     _logger.Warn("CBR flag is not applicable to lossless format {0}. Lossless formats are inherently variable bitrate.", rule.TargetFormat);
                     return false;
                 }
-                
+
                 rule.UseCBR = true;
             }
 
@@ -413,7 +396,7 @@ namespace Tubifarry.Metadata.Converter
             return true;
         }
 
-        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?:([!<>=]{1,2})(\d+))?$", RegexOptions.Compiled)]
+        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?:([:!<>=]{1,2})(\d+))?$", RegexOptions.Compiled)]
         private static partial Regex SourceFormatRegex();
 
         [GeneratedRegex(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?(?::(cbr))?$", RegexOptions.Compiled)]

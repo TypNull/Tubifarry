@@ -261,6 +261,13 @@ namespace Tubifarry.Core.Model
 
                 IConversion conversion = await FFmpeg.Conversions.FromSnippet.Convert(TrackPath, tempOutputPath);
 
+                IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(TrackPath);
+                if (mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? "")))
+                {
+                    conversion.AddParameter("-c:v mjpeg -q:v 2 -disposition:v attached_pic");
+                    _logger?.Trace("Detected attached picture stream, re-encoding as mjpeg with attached_pic disposition");
+                }
+
                 foreach (string parameter in BaseConversionParameters[audioFormat])
                     conversion.AddParameter(parameter);
 
