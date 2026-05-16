@@ -182,6 +182,60 @@ namespace Tubifarry.Download.Base
         /// </summary>
         protected string BuildTrackFilename(Track track, Album album, string extension = ".flac") => _releaseFormatter.BuildTrackFilename(null, track, album) + extension;
 
+        /// <summary>
+        /// Extracts MusicBrainz IDs from Lidarr's RemoteAlbum object.
+        /// Returns null if RemoteAlbum is incomplete or MBIDs are not available.
+        /// </summary>
+        protected Records.MusicBrainzIds? ExtractMusicBrainzIds()
+        {
+            if (_remoteAlbum == null || _remoteAlbum.Artist == null ||
+                _remoteAlbum.Albums == null || !_remoteAlbum.Albums.Any())
+            {
+                return null;
+            }
+
+            var album = _remoteAlbum.Albums[0];
+            var monitoredRelease = album.AlbumReleases?.Value?.FirstOrDefault(r => r.Monitored);
+
+            if (monitoredRelease == null)
+            {
+                // Return partial MBIDs (album-level only)
+                return new Records.MusicBrainzIds
+                {
+                    ArtistId = _remoteAlbum.Artist.ForeignArtistId,
+                    ReleaseGroupId = album.ForeignAlbumId,
+                    ReleaseId = null,
+                    ReleaseArtistId = null,
+                    TrackRecordingIds = null
+                };
+            }
+
+            Dictionary<int, string>? trackRecordingIds = null;
+            var tracks = monitoredRelease.Tracks?.Value;
+            if (tracks != null && tracks.Any())
+            {
+                trackRecordingIds = new Dictionary<int, string>();
+                foreach (var track in tracks)
+                {
+                    if (track.AbsoluteTrackNumber > 0 &&
+                        !string.IsNullOrEmpty(track.ForeignRecordingId))
+                    {
+                        trackRecordingIds[track.AbsoluteTrackNumber] =
+                            track.ForeignRecordingId;
+                    }
+                }
+            }
+
+            return new Records.MusicBrainzIds
+            {
+                ArtistId = _remoteAlbum.Artist.ForeignArtistId,
+                ReleaseGroupId = album.ForeignAlbumId,
+                ReleaseId = monitoredRelease.ForeignReleaseId,
+                ReleaseArtistId = album.Artist?.Value?.ForeignArtistId,
+                TrackRecordingIds = trackRecordingIds
+            };
+        }
+
         public override void Start() => throw new NotImplementedException();
 
         public override void Pause() => throw new NotImplementedException();

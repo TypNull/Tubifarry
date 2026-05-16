@@ -20,6 +20,7 @@ namespace Tubifarry.Download.Clients.DABMusic
     {
         private readonly BaseHttpClient _httpClient;
         private readonly IDABMusicSessionManager _sessionManager;
+        private readonly Records.MusicBrainzIds? _mbids;
         private DABMusicAlbum? _currentAlbum;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -31,6 +32,9 @@ namespace Tubifarry.Download.Clients.DABMusic
 
         public DABMusicDownloadRequest(RemoteAlbum remoteAlbum, IDABMusicSessionManager sessionManager, DABMusicDownloadOptions? options) : base(remoteAlbum, options)
         {
+            // Extract MBIDs from Lidarr's RemoteAlbum
+            _mbids = ExtractMusicBrainzIds();
+
             _httpClient = new BaseHttpClient(Options.BaseUrl, Options.RequestInterceptors, TimeSpan.FromSeconds(Options.RequestTimeout));
             _sessionManager = sessionManager;
 
@@ -296,7 +300,7 @@ namespace Tubifarry.Download.Clients.DABMusic
                 Album album = CreateAlbumFromDABData(_currentAlbum);
                 Track track = CreateTrackFromDABData(trackInfo, _currentAlbum);
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (!audioData.TryEmbedMetadata(album, track, _mbids))
                 {
                     _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(trackPath)}");
                     return false;

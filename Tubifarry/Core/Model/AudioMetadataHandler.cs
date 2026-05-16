@@ -524,7 +524,7 @@ namespace Tubifarry.Core.Model
             }
         }
 
-        public bool TryEmbedMetadata(Album albumInfo, Track trackInfo)
+        public bool TryEmbedMetadata(Album albumInfo, Track trackInfo, Records.MusicBrainzIds? mbids = null)
         {
             _logger?.Trace($"Embedding metadata for track: {trackInfo?.Title}");
             try
@@ -582,11 +582,19 @@ namespace Tubifarry.Core.Model
                 if (trackInfo?.Explicit == true)
                     file.Tag.Comment = "EXPLICIT";
 
-                if (!string.IsNullOrEmpty(trackInfo?.ForeignRecordingId) &&
-                    file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3v2Tag)
+                // Write MusicBrainz IDs
+                if (mbids != null)
                 {
-                    TagLib.Id3v2.UserTextInformationFrame mbFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "MusicBrainz Recording Id", true);
-                    mbFrame.Text = [trackInfo.ForeignRecordingId];
+                    WriteMusicBrainzTags(file, mbids, trackInfo?.AbsoluteTrackNumber);
+                }
+                else if (!string.IsNullOrEmpty(trackInfo?.ForeignRecordingId))
+                {
+                    // Fallback to existing ForeignRecordingId behavior
+                    if (file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3v2Tag)
+                    {
+                        TagLib.Id3v2.UserTextInformationFrame mbFrame = TagLib.Id3v2.UserTextInformationFrame.Get(id3v2Tag, "MusicBrainz Recording Id", true);
+                        mbFrame.Text = [trackInfo.ForeignRecordingId];
+                    }
                 }
 
                 try
@@ -623,6 +631,43 @@ namespace Tubifarry.Core.Model
             {
                 _logger?.Error(ex, $"Failed to embed metadata in track: {TrackPath}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Writes MusicBrainz tags to the file using TagLibSharp.
+        /// </summary>
+        private static void WriteMusicBrainzTags(TagLib.File file, Records.MusicBrainzIds mbids, int? trackNumber)
+        {
+            try
+            {
+                // Write release-level MBIDs
+                if (!string.IsNullOrEmpty(mbids.ReleaseId))
+                    file.Tag.MusicBrainzReleaseId = mbids.ReleaseId;
+
+                if (!string.IsNullOrEmpty(mbids.ReleaseGroupId))
+                    file.Tag.MusicBrainzReleaseGroupId = mbids.ReleaseGroupId;
+
+                if (!string.IsNullOrEmpty(mbids.ArtistId))
+                    file.Tag.MusicBrainzArtistId = mbids.ArtistId;
+
+                if (!string.IsNullOrEmpty(mbids.ReleaseArtistId))
+                    file.Tag.MusicBrainzReleaseArtistId = mbids.ReleaseArtistId;
+
+                // Write track-level MBID
+                if (trackNumber.HasValue && mbids.TrackRecordingIds != null)
+                {
+                    if (mbids.TrackRecordingIds.TryGetValue(trackNumber.Value, out var recordingId))
+                    {
+                        file.Tag.MusicBrainzTrackId = recordingId;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail the entire metadata embedding
+                var logger = NzbDroneLogger.GetLogger(typeof(AudioMetadataHandler));
+                logger?.Warn(ex, "Failed to write MusicBrainz tags to {0}", Path.GetFileName(file.Name));
             }
         }
 

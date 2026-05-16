@@ -21,8 +21,13 @@ namespace Tubifarry.Download.Clients.YouTube
     /// </summary>
     public class YouTubeDownloadRequest : BaseDownloadRequest<YouTubeDownloadOptions>
     {
+        private readonly Records.MusicBrainzIds? _mbids;
+
         public YouTubeDownloadRequest(RemoteAlbum remoteAlbum, YouTubeDownloadOptions? options) : base(remoteAlbum, options)
         {
+            // Extract MBIDs from Lidarr's RemoteAlbum
+            _mbids = ExtractMusicBrainzIds();
+
             Options.YouTubeMusicClient ??= TrustedSessionHelper.CreateAuthenticatedClientAsync().GetAwaiter().GetResult();
 
             _requestContainer.Add(new OwnRequest(async (token) =>
@@ -183,7 +188,7 @@ namespace Tubifarry.Download.Clients.YouTube
                 Album album = CreateAlbumFromYouTubeData(albumInfo);
                 Track track = CreateTrackFromYouTubeData(trackInfo, albumInfo);
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (!audioData.TryEmbedMetadata(album, track, _mbids))
                 {
                     _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(trackPath)}");
                     return false;

@@ -21,11 +21,15 @@ namespace Tubifarry.Download.Clients.SubSonic
     public class SubSonicDownloadRequest : BaseDownloadRequest<SubSonicDownloadOptions>
     {
         private readonly BaseHttpClient _httpClient;
+        private readonly Records.MusicBrainzIds? _mbids;
         private SubSonicAlbumFull? _currentAlbum;
 
         public SubSonicDownloadRequest(RemoteAlbum remoteAlbum, SubSonicDownloadOptions? options)
             : base(remoteAlbum, options)
         {
+            // Extract MBIDs from Lidarr's RemoteAlbum
+            _mbids = ExtractMusicBrainzIds();
+
             _httpClient = new BaseHttpClient(
                 Options.BaseUrl,
                 Options.RequestInterceptors,
@@ -378,7 +382,7 @@ namespace Tubifarry.Download.Clients.SubSonic
                 Album album = CreateAlbumFromSubSonicData(trackInfo, _currentAlbum);
                 Track track = CreateTrackFromSubSonicData(trackInfo);
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (!audioData.TryEmbedMetadata(album, track, _mbids))
                 {
                     _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(trackPath)}");
                     return false;
