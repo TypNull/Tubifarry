@@ -66,7 +66,7 @@ namespace Tubifarry.Metadata.Lyrics
                 return null;
 
             IEnumerable<string> lines = syncedLyrics
-                .Where(l => l != null && !string.IsNullOrEmpty(l.LrcTimestamp) && !string.IsNullOrEmpty(l.Line))
+                .Where(l => l != null && (!string.IsNullOrEmpty(l.LrcTimestamp) || !string.IsNullOrEmpty(l.Line)))
                 .OrderBy(l => double.TryParse(l.Milliseconds ?? "0", out double ms) ? ms : 0)
                 .Select(l => $"{l.LrcTimestamp} {l.Line}");
 
