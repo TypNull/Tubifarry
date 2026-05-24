@@ -24,10 +24,10 @@ public interface IPlaylistExportService
 }
 
 public sealed partial class PlaylistExportService : IPlaylistExportService,
-    IHandle<ApplicationStartedEvent>,
-    IHandle<ProviderAddedEvent<IImportList>>,
-    IHandle<ProviderUpdatedEvent<IImportList>>,
-    IHandle<ProviderDeletedEvent<IImportList>>
+    IHandleAsync<ApplicationStartedEvent>,
+    IHandleAsync<ProviderAddedEvent<IImportList>>,
+    IHandleAsync<ProviderUpdatedEvent<IImportList>>,
+    IHandleAsync<ProviderDeletedEvent<IImportList>>
 {
     private const string SnapshotKey = "playlistExport.snapshots";
 
@@ -63,11 +63,11 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         _logger = logger;
     }
 
-    public void Handle(ApplicationStartedEvent message) => RefreshSchema();
-    public void Handle(ProviderAddedEvent<IImportList> message) => RefreshSchema();
-    public void Handle(ProviderUpdatedEvent<IImportList> message) => RefreshSchema();
+    public void HandleAsync(ApplicationStartedEvent message) => RefreshSchema();
+    public void HandleAsync(ProviderAddedEvent<IImportList> message) => RefreshSchema();
+    public void HandleAsync(ProviderUpdatedEvent<IImportList> message) => RefreshSchema();
 
-    public void Handle(ProviderDeletedEvent<IImportList> message)
+    public void HandleAsync(ProviderDeletedEvent<IImportList> message)
     {
         Dictionary<int, PlaylistSnapshot> snapshots = GetSnapshots();
 
