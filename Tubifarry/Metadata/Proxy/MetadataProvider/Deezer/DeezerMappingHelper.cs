@@ -47,6 +47,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 album.Links.Add(new Links { Url = $"upc:{dAlbum.UPC}", Name = "UPC" });
 
             List<DeezerTrack> tracks = dAlbum.Tracks?.Data ?? [];
+            if (!tracks.Any(t => t.DiskNumber >= 1))
+                tracks = tracks.ConvertAll(t => t with { DiskNumber = 1 });
+
             List<int> diskNumbers = [.. tracks.Select(t => t.DiskNumber).Distinct().Order()];
             if (diskNumbers.Count == 0)
                 diskNumbers.Add(1);
@@ -76,7 +79,11 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                 album.ArtistMetadata = artist.Metadata;
                 album.ArtistMetadataId = artist.ArtistMetadataId;
             }
-            tracks = tracks.Select((x, index) => x with { TrackPosition = index + 1 }).ToList();
+            tracks = tracks
+                .GroupBy(t => t.DiskNumber)
+                .OrderBy(g => g.Key)
+                .SelectMany(g => g.Select((t, index) => t with { TrackPosition = index + 1 }))
+                .ToList();
             albumRelease.Tracks = tracks.ConvertAll(dTrack => MapTrack(dTrack, album, albumRelease, artist!)) ?? [];
 
             if (dAlbum.Contributors?.Count > 1)
