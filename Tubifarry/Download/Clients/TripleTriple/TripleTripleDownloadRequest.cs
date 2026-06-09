@@ -363,20 +363,7 @@ namespace Tubifarry.Download.Clients.TripleTriple
             if (string.IsNullOrEmpty(syncedLyrics))
                 return null;
 
-            List<SyncLine> lines = [];
-            foreach (string line in syncedLyrics.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                int bracketEnd = line.IndexOf(']');
-                if (bracketEnd > 0 && line.StartsWith('['))
-                {
-                    string timestamp = line[1..bracketEnd];
-                    string text = line[(bracketEnd + 1)..].Trim();
-                    if (!string.IsNullOrEmpty(text))
-                        lines.Add(new SyncLine { LrcTimestamp = $"[{timestamp}]", Line = text });
-                }
-            }
-
-            return lines.Count > 0 ? new Lyric(null, lines) : null;
+            return new Metadata.Lyrics.Converters.LrcConverter().Read(syncedLyrics);
         }
 
         private Album CreateAlbumFromMedia(TripleTripleMediaResponse media) => new()

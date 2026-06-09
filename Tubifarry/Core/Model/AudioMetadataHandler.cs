@@ -479,17 +479,17 @@ namespace Tubifarry.Core.Model
 
         public async Task<bool> TryCreateLrcFileAsync(CancellationToken token)
         {
-            if (Lyric?.SyncedLyrics == null)
+            if (Lyric == null || !Lyric.HasLineSync)
                 return false;
             try
             {
-                string lrcContent = string.Join(Environment.NewLine, Lyric.SyncedLyrics
-                    .Where(lyric => !string.IsNullOrEmpty(lyric.LrcTimestamp) && !string.IsNullOrEmpty(lyric.Line))
-                    .Select(lyric => $"{lyric.LrcTimestamp} {lyric.Line}"));
+                string? lrcContent = new Metadata.Lyrics.Converters.LrcConverter().Write(Lyric);
+                if (string.IsNullOrEmpty(lrcContent))
+                    return false;
 
                 string lrcPath = Path.ChangeExtension(TrackPath, ".lrc");
                 await File.WriteAllTextAsync(lrcPath, lrcContent, token);
-                _logger?.Trace($"Created LRC file with {Lyric.SyncedLyrics.Count} synced lyrics");
+                _logger?.Trace($"Created LRC file with {Lyric.Lines.Count} synced lyrics");
             }
             catch (Exception ex)
             {

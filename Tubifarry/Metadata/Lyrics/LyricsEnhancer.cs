@@ -27,7 +27,7 @@ namespace Tubifarry.Metadata.Lyrics
         private readonly TrackFileRepositoryHelper _trackFileRepositoryHelper;
         private readonly IMediaFileService _mediaFileService;
 
-        private LyricsProviders _lyricsProviders;
+        private LyricsProviderManager _lyricsProviders;
 
         // Batch size for SQL LIMIT/OFFSET pagination
         private const int SQL_BATCH_SIZE = 500;
@@ -48,7 +48,7 @@ namespace Tubifarry.Metadata.Lyrics
             _logger = logger;
             _httpClient = httpClient;
             _rootFolderWatchingService = rootFolderWatchingService;
-            _lyricsProviders = new LyricsProviders(httpClient, logger, ActiveSettings);
+            _lyricsProviders = new LyricsProviderManager(httpClient, logger, ActiveSettings);
             _artistService = artistService;
             _diskProvider = diskProvider;
             _mediaFileService = mediaFileService;
@@ -76,7 +76,7 @@ namespace Tubifarry.Metadata.Lyrics
 
             try
             {
-                _lyricsProviders = new LyricsProviders(_httpClient, _logger, ActiveSettings);
+                _lyricsProviders = new LyricsProviderManager(_httpClient, _logger, ActiveSettings);
                 _logger.ProgressInfo("Starting scheduled lyrics update");
 
                 int totalTracks = _trackFileRepositoryHelper.GetTracksWithoutLrcFilesCount();
@@ -195,7 +195,7 @@ namespace Tubifarry.Metadata.Lyrics
             if (embeddingOption == LyricOptions.Disabled)
                 return;
 
-            string? lyricsToEmbed = LyricsHelper.GetLyricsForEmbedding(lyric, embeddingOption);
+            string? lyricsToEmbed = GetLyricsContent(lyric, embeddingOption);
             if (!string.IsNullOrWhiteSpace(lyricsToEmbed))
             {
                 bool wasModified = LyricsHelper.EmbedLyricsInAudioFile(trackFile.Path, lyricsToEmbed, _logger, _rootFolderWatchingService);
@@ -293,6 +293,33 @@ namespace Tubifarry.Metadata.Lyrics
                     trackInfo.Duration);
             }
 
+            if (lyric == null && ActiveSettings.BinimumEnabled)
+            {
+                lyric = await _lyricsProviders.FetchFromBinimumAsync(
+                    trackInfo.Artist,
+                    trackInfo.Title,
+                    trackInfo.Album,
+                    trackInfo.Duration);
+            }
+
+            if (lyric == null && ActiveSettings.LyricsPlusEnabled)
+            {
+                lyric = await _lyricsProviders.FetchFromLyricsPlusAsync(
+                    trackInfo.Artist,
+                    trackInfo.Title,
+                    trackInfo.Album,
+                    trackInfo.Duration);
+            }
+
+            if (lyric == null && ActiveSettings.UnisonEnabled)
+            {
+                lyric = await _lyricsProviders.FetchFromUnisonAsync(
+                    trackInfo.Artist,
+                    trackInfo.Title,
+                    trackInfo.Album,
+                    trackInfo.Duration);
+            }
+
             if (lyric == null && ActiveSettings.GeniusEnabled && !string.IsNullOrWhiteSpace(ActiveSettings.GeniusApiKey))
             {
                 lyric = await _lyricsProviders.FetchFromGeniusAsync(trackInfo.Artist, trackInfo.Title);
@@ -304,13 +331,23 @@ namespace Tubifarry.Metadata.Lyrics
         private string? CreateLrcFileContent(Lyric lyric, (string Artist, string Title, string Album, int Duration) trackInfo)
         {
             LyricOptions lrcOption = (LyricOptions)ActiveSettings.LrcFileOptions;
-            return LyricsHelper.GetLyricsForLrcFile(
-                lyric,
-                lrcOption,
-                trackInfo.Artist,
-                trackInfo.Title,
-                trackInfo.Album,
-                trackInfo.Duration);
+            Lyric lyricWithMeta = lyric with { Artist = trackInfo.Artist, Title = trackInfo.Title, Album = trackInfo.Album, Duration = trackInfo.Duration };
+            return GetLyricsContent(lyricWithMeta, lrcOption);
+        }
+
+        private static string? GetLyricsContent(Lyric lyric, LyricOptions option)
+        {
+            Converters.LrcConverter lrc = new();
+            Converters.PlainTextConverter plain = new();
+
+            return option switch
+            {
+                LyricOptions.Disabled => null,
+                LyricOptions.OnlyPlain => plain.Write(lyric),
+                LyricOptions.OnlyLineSynced when lyric.HasLineSync => lrc.Write(lyric),
+                LyricOptions.PreferLineSynced => lyric.HasLineSync ? lrc.Write(lyric) : plain.Write(lyric),
+                _ => null
+            };
         }
 
         /// <summary>

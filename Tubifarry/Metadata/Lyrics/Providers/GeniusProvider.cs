@@ -2,79 +2,13 @@ using Newtonsoft.Json.Linq;
 using NLog;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Records;
+using Tubifarry.Metadata.Lyrics.Converters;
 
-namespace Tubifarry.Metadata.Lyrics
+namespace Tubifarry.Metadata.Lyrics.Providers
 {
-    /// <summary>
-    /// Handles fetching lyrics from LRCLIB and Genius APIs.
-    /// </summary>
-    public partial class LyricsProviders
+    public partial class GeniusProvider(HttpClient httpClient, Logger logger, LyricsEnhancerSettings settings)
     {
-        private readonly HttpClient _httpClient;
-        private readonly Logger _logger;
-        private readonly LyricsEnhancerSettings _settings;
-
-        public LyricsProviders(HttpClient httpClient, Logger logger, LyricsEnhancerSettings settings)
-        {
-            _httpClient = httpClient;
-            _logger = logger;
-            _settings = settings;
-        }
-
-        #region LRCLIB Provider
-
-        public async Task<Lyric?> FetchFromLrcLibAsync(string artistName, string trackTitle, string albumName, int duration)
-        {
-            try
-            {
-                string requestUri = $"{_settings.LrcLibInstanceUrl}/api/get?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}{(string.IsNullOrEmpty(albumName) ? "" : $"&album_name={Uri.EscapeDataString(albumName)}")}{(duration != 0 ? $"&duration={duration}" : "")}";
-
-                _logger.Trace($"Requesting lyrics from LRCLIB: {requestUri}");
-
-                HttpResponseMessage response = await _httpClient.GetAsync(requestUri);
-                if (!response.IsSuccessStatusCode)
-                {
-                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                        _logger.Debug($"No lyrics found on LRCLIB for track: {trackTitle} by {artistName}");
-                    else
-                        _logger.Debug($"Failed to fetch lyrics from LRCLIB. Status: {response.StatusCode}");
-                    return null;
-                }
-
-                string content = await response.Content.ReadAsStringAsync();
-                JObject? json = JObject.Parse(content);
-
-                if (json == null)
-                {
-                    _logger.Warn("Failed to parse JSON response from LRCLIB");
-                    return null;
-                }
-
-                string plainLyrics = json["plainLyrics"]?.ToString() ?? string.Empty;
-                string syncedLyricsStr = json["syncedLyrics"]?.ToString() ?? string.Empty;
-
-                List<SyncLine>? syncedLyrics = SyncLine.ParseSyncedLyrics(syncedLyricsStr);
-
-                if (string.IsNullOrWhiteSpace(plainLyrics) && (syncedLyrics == null || syncedLyrics.Count == 0))
-                {
-                    _logger.Debug($"No lyrics found from LRCLIB for track: {trackTitle} by {artistName}");
-                    return null;
-                }
-
-                return new Lyric(plainLyrics, syncedLyrics);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Error fetching lyrics from LRCLIB for track: {trackTitle} by {artistName}");
-                return null;
-            }
-        }
-
-        #endregion LRCLIB Provider
-
-        #region Genius Provider
-
-        public async Task<Lyric?> FetchFromGeniusAsync(string artistName, string trackTitle)
+        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle)
         {
             try
             {
@@ -85,7 +19,7 @@ namespace Tubifarry.Metadata.Lyrics
                 string? songPath = bestMatch["result"]?["path"]?.ToString();
                 if (string.IsNullOrEmpty(songPath))
                 {
-                    _logger.Warn("Could not find song path in Genius response");
+                    logger.Warn("Could not find song path in Genius response");
                     return null;
                 }
 
@@ -93,11 +27,11 @@ namespace Tubifarry.Metadata.Lyrics
                 if (string.IsNullOrWhiteSpace(plainLyrics))
                     return null;
 
-                return new Lyric(plainLyrics, null);
+                return new PlainTextConverter().Read(plainLyrics);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Error fetching lyrics from Genius for track: {trackTitle} by {artistName}");
+                logger.Error(ex, $"Error fetching lyrics from Genius for track: {trackTitle} by {artistName}");
                 return null;
             }
         }
@@ -105,15 +39,15 @@ namespace Tubifarry.Metadata.Lyrics
         private async Task<JToken?> SearchSongOnGeniusAsync(string artistName, string trackTitle)
         {
             string searchUrl = $"https://api.genius.com/search?q={Uri.EscapeDataString($"{artistName} {trackTitle}")}";
-            _logger.Debug($"Searching for track on Genius: {searchUrl}");
+            logger.Debug($"Searching for track on Genius: {searchUrl}");
 
             using HttpRequestMessage request = new(HttpMethod.Get, searchUrl);
-            request.Headers.Add("Authorization", $"Bearer {_settings.GeniusApiKey}");
+            request.Headers.Add("Authorization", $"Bearer {settings.GeniusApiKey}");
 
-            HttpResponseMessage response = await _httpClient.SendAsync(request);
+            HttpResponseMessage response = await httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.Warn($"Failed to search Genius. Status: {response.StatusCode}");
+                logger.Warn($"Failed to search Genius. Status: {response.StatusCode}");
                 return null;
             }
 
@@ -122,13 +56,13 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (searchJson?["response"] == null)
             {
-                _logger.Warn("Invalid response format from Genius API");
+                logger.Warn("Invalid response format from Genius API");
                 return null;
             }
 
             if (searchJson["response"]?["hits"] is not JArray hits || hits.Count == 0)
             {
-                _logger.Debug($"No results found on Genius for: {trackTitle} by {artistName}");
+                logger.Debug($"No results found on Genius for: {trackTitle} by {artistName}");
                 return null;
             }
 
@@ -136,39 +70,39 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (songHits.Count == 0)
             {
-                _logger.Debug("No songs found in search results");
+                logger.Debug("No songs found in search results");
                 return null;
             }
 
             List<JToken> artistMatches = songHits.Where(h => string.Equals(h["result"]?["primary_artist"]?["name"]?.ToString() ?? string.Empty,
                     artistName, StringComparison.OrdinalIgnoreCase)).ToList();
 
-            _logger.Trace($"Found {artistMatches.Count} tracks by exact artist name '{artistName}'");
+            logger.Trace($"Found {artistMatches.Count} tracks by exact artist name '{artistName}'");
 
-            return LyricsHelper.ScoreAndSelectBestMatch(artistMatches, songHits, artistName, trackTitle, _logger);
+            return LyricsHelper.ScoreAndSelectBestMatch(artistMatches, songHits, artistName, trackTitle, logger);
         }
 
         private async Task<string?> ExtractLyricsFromGeniusPageAsync(string songPath)
         {
             string songUrl = $"https://genius.com{songPath}";
-            _logger.Trace($"Fetching lyrics from Genius page: {songUrl}");
+            logger.Trace($"Fetching lyrics from Genius page: {songUrl}");
 
-            HttpResponseMessage? pageResponse = await _httpClient.GetAsync(songUrl);
+            HttpResponseMessage? pageResponse = await httpClient.GetAsync(songUrl);
 
             if (pageResponse?.IsSuccessStatusCode != true)
             {
-                _logger.Warn($"Failed to fetch Genius lyrics page. Status: {pageResponse?.StatusCode}");
+                logger.Warn($"Failed to fetch Genius lyrics page. Status: {pageResponse?.StatusCode}");
                 return null;
             }
 
             string html = await pageResponse.Content.ReadAsStringAsync();
-            _logger.Trace("Attempting to extract lyrics using multiple regex patterns");
+            logger.Trace("Attempting to extract lyrics using multiple regex patterns");
 
             string? plainLyrics = ExtractLyricsFromHtml(html);
 
             if (string.IsNullOrWhiteSpace(plainLyrics))
             {
-                _logger.Debug("Extracted lyrics from Genius are empty");
+                logger.Debug("Extracted lyrics from Genius are empty");
                 return null;
             }
 
@@ -198,11 +132,11 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (lyricsContainers.Count == 0)
             {
-                _logger.Debug("No matching lyrics pattern found in HTML");
+                logger.Debug("No matching lyrics pattern found in HTML");
                 return null;
             }
 
-            _logger.Trace($"Found {lyricsContainers.Count} potential lyrics container(s). Processing...");
+            logger.Trace($"Found {lyricsContainers.Count} potential lyrics container(s). Processing...");
 
             List<string> validLyricsBlocks = new();
 
@@ -220,7 +154,7 @@ namespace Tubifarry.Metadata.Lyrics
 
                 if (ContributorsOnlyRegex().IsMatch(plainLyrics))
                 {
-                    _logger.Trace($"Ignoring non-lyrics Genius block: '{plainLyrics}'");
+                    logger.Trace($"Ignoring non-lyrics Genius block: '{plainLyrics}'");
                     continue;
                 }
 
@@ -229,7 +163,7 @@ namespace Tubifarry.Metadata.Lyrics
 
             if (validLyricsBlocks.Count == 0)
             {
-                _logger.Debug("No valid lyrics blocks found in Genius HTML");
+                logger.Debug("No valid lyrics blocks found in Genius HTML");
                 return null;
             }
 
@@ -262,7 +196,5 @@ namespace Tubifarry.Metadata.Lyrics
 
         [GeneratedRegex(@"^\s*\d[\d.,KkMm]*\s+contributors?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase, "de-DE")]
         private static partial Regex ContributorsOnlyRegex();
-
-        #endregion Genius Provider
     }
 }
