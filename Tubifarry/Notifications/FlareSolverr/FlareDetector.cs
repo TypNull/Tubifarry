@@ -76,8 +76,7 @@ public static class FlareDetector
         }
         else
         {
-            Logger.Trace("Not a Cloudflare/DDoS-Guard server for {0}", url);
-            return false;
+            Logger.Trace("No Cloudflare/DDoS-Guard server header for {0}, falling back to body inspection", url);
         }
 
         string responseText = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -90,6 +89,16 @@ public static class FlareDetector
             return false;
         }
 
+        // Check for actual challenge indicators
+        string? challengeIndicator = CloudflareChallengeIndicators.FirstOrDefault(indicator =>
+        responseText.Contains(indicator, StringComparison.OrdinalIgnoreCase));
+
+        if (challengeIndicator != null)
+        {
+            Logger.Trace("Challenge indicator '{0}' found in content for {1}", challengeIndicator, url);
+            return true;
+        }
+
         // Check for Cloudflare error codes
         if (responseText.TrimStart().StartsWith("error code:", StringComparison.OrdinalIgnoreCase))
         {
@@ -97,14 +106,10 @@ public static class FlareDetector
             return true;
         }
 
-        // Check for actual challenge indicators
-        string? challengeIndicator = CloudflareChallengeIndicators.FirstOrDefault(indicator =>
-            responseText.Contains(indicator, StringComparison.OrdinalIgnoreCase));
-
-        if (challengeIndicator != null)
+        if (!isCloudflareServer)
         {
-            Logger.Trace("Challenge indicator '{0}' found in content for {1}", challengeIndicator, url);
-            return true;
+            Logger.Trace("No definitive challenge indicator and no Cloudflare server header for {0}", url);
+            return false;
         }
 
         // Check for custom Cloudflare configurations (some Dutch torrent sites)
