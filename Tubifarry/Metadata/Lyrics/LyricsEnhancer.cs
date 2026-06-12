@@ -13,12 +13,15 @@ using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Music;
 using Tubifarry.Core.Records;
+using Tubifarry.Metadata.Lyrics.Converters;
 using Tubifarry.Metadata.ScheduledTasks;
 
 namespace Tubifarry.Metadata.Lyrics
 {
     public class LyricsEnhancer : ScheduledTaskBase<LyricsEnhancerSettings>, IExecute<LyricsUpdateCommand>
     {
+        private const int SqlBatchSize = 500;
+
         private readonly Logger _logger;
         private readonly HttpClient _httpClient;
         private readonly IRootFolderWatchingService _rootFolderWatchingService;
@@ -28,9 +31,6 @@ namespace Tubifarry.Metadata.Lyrics
         private readonly IMediaFileService _mediaFileService;
 
         private LyricsProviderManager _lyricsProviders;
-
-        // Batch size for SQL LIMIT/OFFSET pagination
-        private const int SQL_BATCH_SIZE = 500;
 
         public LyricsEnhancer(
             HttpClient httpClient,
@@ -43,6 +43,7 @@ namespace Tubifarry.Metadata.Lyrics
             IEventAggregator eventAggregator,
             ITrackRepository trackRepository,
             IExtraFileService<OtherExtraFile> otherExtraFileService,
+            IMetadataFileService metadataFileService,
             IMediaFileService mediaFileService)
         {
             _logger = logger;
@@ -52,18 +53,18 @@ namespace Tubifarry.Metadata.Lyrics
             _artistService = artistService;
             _diskProvider = diskProvider;
             _mediaFileService = mediaFileService;
-            _trackFileRepositoryHelper = new TrackFileRepositoryHelper(database, eventAggregator, trackRepository, lyricFileService, otherExtraFileService, logger);
+            _trackFileRepositoryHelper = new TrackFileRepositoryHelper(database, eventAggregator, trackRepository, lyricFileService, otherExtraFileService, metadataFileService, logger);
         }
 
         public override string Name => "Lyrics Enhancer";
         public override Type CommandType => typeof(LyricsUpdateCommand);
+        public override CommandPriority Priority => CommandPriority.Low;
 
         public override int IntervalMinutes => ActiveSettings.EnableScheduledUpdates
             ? (int)TimeSpan.FromDays(ActiveSettings.UpdateInterval).TotalMinutes
             : 0;
 
         private LyricsEnhancerSettings ActiveSettings => Settings ?? LyricsEnhancerSettings.Instance!;
-        public override CommandPriority Priority => CommandPriority.Low;
 
         public void Execute(LyricsUpdateCommand message)
         {
@@ -80,7 +81,6 @@ namespace Tubifarry.Metadata.Lyrics
                 _logger.ProgressInfo("Starting scheduled lyrics update");
 
                 int totalTracks = _trackFileRepositoryHelper.GetTracksWithoutLrcFilesCount();
-
                 if (totalTracks == 0)
                 {
                     _logger.Info("All tracks in database have lyric file entries");
@@ -90,31 +90,19 @@ namespace Tubifarry.Metadata.Lyrics
 
                 _logger.Debug($"Found {totalTracks} tracks without lyric entries in database");
 
-                ProcessingResult totalResult = new();
-                int processedCount = 0;
+                ProcessingResult total = new();
 
-                for (int offset = 0; offset < totalTracks; offset += SQL_BATCH_SIZE)
+                for (int offset = 0; offset < totalTracks; offset += SqlBatchSize)
                 {
-                    List<TrackFile> batch = _trackFileRepositoryHelper.GetTracksWithoutLrcFilesBatch(offset, SQL_BATCH_SIZE);
-
+                    List<TrackFile> batch = _trackFileRepositoryHelper.GetTracksWithoutLrcFilesBatch(offset, SqlBatchSize);
                     if (batch.Count == 0)
                         break;
 
-                    _logger.Debug($"Processing SQL batch {(offset / SQL_BATCH_SIZE) + 1} (offset {offset}, {batch.Count} tracks)");
-
-                    ProcessingResult batchResult = ProcessTrackBatch(batch);
-
-                    totalResult.SuccessCount += batchResult.SuccessCount;
-                    totalResult.SyncedCount += batchResult.SyncedCount;
-                    totalResult.FailedCount += batchResult.FailedCount;
-
-                    processedCount += batch.Count;
-                    _logger.Debug($"Progress: {processedCount}/{totalTracks} tracks without lyric processed");
+                    total.Add(ProcessTrackBatch(batch));
+                    _logger.Debug($"Progress: {Math.Min(offset + batch.Count, totalTracks)}/{totalTracks} tracks without lyrics processed");
                 }
 
-                string completionMsg = $"Lyrics update completed: {totalResult.SuccessCount} created, " +
-                                      $"{totalResult.SyncedCount} synced, " +
-                                      $"{totalResult.FailedCount} not found.";
+                string completionMsg = $"Lyrics update completed: {total.Created} created, {total.Synced} synced, {total.Failed} not found.";
                 _logger.Info(completionMsg);
                 message.SetCompletionMessage(completionMsg);
             }
@@ -137,91 +125,57 @@ namespace Tubifarry.Metadata.Lyrics
                     if (artist == null)
                     {
                         _logger.Debug($"Could not find artist for track file: {trackFile.Path}");
-                        result.FailedCount++;
+                        result.Failed++;
                         continue;
                     }
 
-                    if (LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider))
+                    if (LyricsHelper.TryFindLyricFileOnDisk(trackFile.Path, _diskProvider, out string existingLyricPath))
                     {
-                        SyncExistingLrcFile(artist, trackFile);
-                        result.SyncedCount++;
+                        RegisterLyricFile(artist, trackFile, artist.Path.GetRelativePath(existingLyricPath));
+                        result.Synced++;
                         continue;
                     }
 
                     _logger.ProgressTrace($"Searching lyrics for: {trackFile.Tracks?.Value?.FirstOrDefault()?.Title ?? Path.GetFileName(trackFile.Path)}");
 
                     MetadataFileResult? metadataResult = TrackMetadata(artist, trackFile);
-
                     if (metadataResult != null && !string.IsNullOrEmpty(metadataResult.Contents))
                     {
-                        WriteLrcFile(artist, trackFile, metadataResult);
-                        result.SuccessCount++;
+                        _diskProvider.WriteAllText(Path.Combine(artist.Path, metadataResult.RelativePath), metadataResult.Contents);
+                        RegisterLyricFile(artist, trackFile, metadataResult.RelativePath);
+                        result.Created++;
                     }
                     else
                     {
-                        result.FailedCount++;
                         _logger.Trace($"No lyrics found for: {trackFile.Path}");
+                        result.Failed++;
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex, $"Error processing track: {trackFile.Path}");
-                    result.FailedCount++;
+                    result.Failed++;
                 }
             }
 
             return result;
         }
 
-        private void SyncExistingLrcFile(Artist artist, TrackFile trackFile)
+        private void RegisterLyricFile(Artist artist, TrackFile trackFile, string relativePath)
         {
-            string lrcPath = Path.ChangeExtension(trackFile.Path, ".lrc");
-            string relativePath = artist.Path.GetRelativePath(lrcPath);
             _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, relativePath);
-            _logger.Trace($"Synced existing LRC file to database: {lrcPath}");
-        }
-
-        private void WriteLrcFile(Artist artist, TrackFile trackFile, MetadataFileResult metadataResult)
-        {
-            string lrcPath = Path.Combine(artist.Path, metadataResult.RelativePath);
-            _diskProvider.WriteAllText(lrcPath, metadataResult.Contents);
-            _trackFileRepositoryHelper.CreateAndUpsertLyricFile(artist, trackFile, metadataResult.RelativePath);
-            _logger.Trace($"Created LRC file: {lrcPath}");
-        }
-
-        private void EmbedLyrics(Lyric lyric, TrackFile trackFile)
-        {
-            LyricOptions embeddingOption = (LyricOptions)ActiveSettings.LyricEmbeddingOption;
-            if (embeddingOption == LyricOptions.Disabled)
-                return;
-
-            string? lyricsToEmbed = GetLyricsContent(lyric, embeddingOption);
-            if (!string.IsNullOrWhiteSpace(lyricsToEmbed))
-            {
-                bool wasModified = LyricsHelper.EmbedLyricsInAudioFile(trackFile.Path, lyricsToEmbed, _logger, _rootFolderWatchingService);
-
-                if (wasModified && trackFile.Id > 0)
-                {
-                    try
-                    {
-                        FileInfo fileInfo = new(trackFile.Path);
-                        trackFile.Size = fileInfo.Length;
-                        trackFile.Modified = fileInfo.LastWriteTimeUtc;
-                        _mediaFileService.Update(trackFile);
-                        _logger.Debug($"Updated TrackFile metadata after embedding lyrics: Size={trackFile.Size}, Modified={trackFile.Modified:O}");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warn(ex, $"Failed to update TrackFile metadata after embedding lyrics: {trackFile.Path}");
-                    }
-                }
-            }
+            _logger.Trace($"Registered lyric file in database: {relativePath}");
         }
 
         public override string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile)
         {
             if (metadataFile.Type == MetadataType.TrackMetadata)
-                return Path.ChangeExtension(trackFile.Path, ".lrc");
+            {
+                string extension = Path.GetExtension(metadataFile.RelativePath);
+                if (string.IsNullOrEmpty(extension))
+                    extension = LyricsHelper.LrcExtension;
+                return Path.ChangeExtension(trackFile.Path, extension);
+            }
 
             _logger.Trace("Unknown track file metadata: {0}", metadataFile.RelativePath);
             return Path.Combine(artist.Path, metadataFile.RelativePath);
@@ -229,9 +183,9 @@ namespace Tubifarry.Metadata.Lyrics
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile)
         {
-            if (!ActiveSettings.OverwriteExistingLrcFiles && LyricsHelper.LrcFileExistsOnDisk(trackFile.Path, _diskProvider))
+            if (!ActiveSettings.OverwriteExistingLrcFiles && LyricsHelper.LyricFileExistsOnDisk(trackFile.Path, _diskProvider))
             {
-                _logger.Trace($"LRC file already exists and overwrite is disabled: {trackFile.Path}");
+                _logger.Trace($"Lyric file already exists and overwrite is disabled: {trackFile.Path}");
                 return default!;
             }
 
@@ -254,110 +208,186 @@ namespace Tubifarry.Metadata.Lyrics
 
         private async Task<MetadataFileResult> ProcessTrackLyricsAsync(Artist artist, TrackFile trackFile)
         {
-            _logger.Trace($"Processing lyrics for track: {trackFile.Path}");
-
-            (string Artist, string Title, string Album, int Duration)? trackInfo = LyricsHelper.ExtractTrackInfo(trackFile, artist, _logger);
+            TrackInfo? trackInfo = LyricsHelper.ExtractTrackInfo(trackFile, artist, _logger);
             if (trackInfo == null)
                 return default!;
 
-            Lyric? lyric = await FetchLyricsAsync(trackInfo.Value);
+            Lyric? lyric = await FetchLyricsAsync(trackInfo);
             if (lyric == null)
             {
-                _logger.Trace($"No lyrics found for track: {trackInfo.Value.Title} by {trackInfo.Value.Artist}");
+                _logger.Trace($"No lyrics found for track: {trackInfo.Title} by {trackInfo.Artist}");
                 return default!;
             }
 
-            // Embed lyrics into audio file based on settings
             EmbedLyrics(lyric, trackFile);
 
-            // Create LRC file content based on settings
-            string? lrcContent = CreateLrcFileContent(lyric, trackInfo.Value);
-            if (string.IsNullOrEmpty(lrcContent))
+            (string Content, string Extension)? lyricsFile = CreateLyricsFile(lyric, trackInfo);
+            if (lyricsFile == null)
                 return default!;
 
-            string relativePath = artist.Path.GetRelativePath(trackFile.Path);
-            relativePath = Path.ChangeExtension(relativePath, ".lrc");
-            return new MetadataFileResult(relativePath, lrcContent);
+            string relativePath = Path.ChangeExtension(artist.Path.GetRelativePath(trackFile.Path), lyricsFile.Value.Extension);
+            return new MetadataFileResult(relativePath, lyricsFile.Value.Content);
         }
 
-        private async Task<Lyric?> FetchLyricsAsync((string Artist, string Title, string Album, int Duration) trackInfo)
+        private async Task<Lyric?> FetchLyricsAsync(TrackInfo trackInfo)
         {
-            Lyric? lyric = null;
+            SyncLevel desiredLevel = GetDesiredSyncLevel();
+            Lyric? bestSoFar = null;
 
-            if (ActiveSettings.LrcLibEnabled)
+            foreach ((bool Enabled, Func<Task<Lyric?>> Fetch, string Name) provider in EnumerateProviders(trackInfo))
             {
-                lyric = await _lyricsProviders.FetchFromLrcLibAsync(
-                    trackInfo.Artist,
-                    trackInfo.Title,
-                    trackInfo.Album,
-                    trackInfo.Duration);
+                if (!provider.Enabled)
+                    continue;
+
+                Lyric? lyric = await provider.Fetch();
+                if (lyric == null)
+                    continue;
+
+                SyncLevel level = GetSyncLevel(lyric);
+                if (level >= desiredLevel)
+                {
+                    _logger.Trace($"Using {level} lyrics from {provider.Name} (desired: {desiredLevel})");
+                    return lyric;
+                }
+
+                if (bestSoFar == null || level > GetSyncLevel(bestSoFar))
+                {
+                    _logger.Trace($"{provider.Name} returned {level} lyrics, keeping as fallback while searching for {desiredLevel}");
+                    bestSoFar = lyric;
+                }
             }
 
-            if (lyric == null && ActiveSettings.BinimumEnabled)
-            {
-                lyric = await _lyricsProviders.FetchFromBinimumAsync(
-                    trackInfo.Artist,
-                    trackInfo.Title,
-                    trackInfo.Album,
-                    trackInfo.Duration);
-            }
+            if (bestSoFar != null)
+                _logger.Trace($"No provider returned {desiredLevel} lyrics, falling back to {GetSyncLevel(bestSoFar)}");
 
-            if (lyric == null && ActiveSettings.LyricsPlusEnabled)
-            {
-                lyric = await _lyricsProviders.FetchFromLyricsPlusAsync(
-                    trackInfo.Artist,
-                    trackInfo.Title,
-                    trackInfo.Album,
-                    trackInfo.Duration);
-            }
-
-            if (lyric == null && ActiveSettings.UnisonEnabled)
-            {
-                lyric = await _lyricsProviders.FetchFromUnisonAsync(
-                    trackInfo.Artist,
-                    trackInfo.Title,
-                    trackInfo.Album,
-                    trackInfo.Duration);
-            }
-
-            if (lyric == null && ActiveSettings.GeniusEnabled && !string.IsNullOrWhiteSpace(ActiveSettings.GeniusApiKey))
-            {
-                lyric = await _lyricsProviders.FetchFromGeniusAsync(trackInfo.Artist, trackInfo.Title);
-            }
-
-            return lyric;
+            return bestSoFar;
         }
 
-        private string? CreateLrcFileContent(Lyric lyric, (string Artist, string Title, string Album, int Duration) trackInfo)
+        private IEnumerable<(bool Enabled, Func<Task<Lyric?>> Fetch, string Name)> EnumerateProviders(TrackInfo track)
         {
-            LyricOptions lrcOption = (LyricOptions)ActiveSettings.LrcFileOptions;
-            Lyric lyricWithMeta = lyric with { Artist = trackInfo.Artist, Title = trackInfo.Title, Album = trackInfo.Album, Duration = trackInfo.Duration };
-            return GetLyricsContent(lyricWithMeta, lrcOption);
+            yield return (ActiveSettings.LrcLibEnabled,
+                () => _lyricsProviders.FetchFromLrcLibAsync(track.Artist, track.Title, track.Album, track.DurationSeconds), "LRCLIB");
+            yield return (ActiveSettings.BinimumEnabled,
+                () => _lyricsProviders.FetchFromBinimumAsync(track.Artist, track.Title, track.Album, track.DurationSeconds), "Binimum");
+            yield return (ActiveSettings.LyricsPlusEnabled,
+                () => _lyricsProviders.FetchFromLyricsPlusAsync(track.Artist, track.Title, track.Album, track.DurationSeconds), "LyricsPlus");
+            yield return (ActiveSettings.UnisonEnabled,
+                () => _lyricsProviders.FetchFromUnisonAsync(track.Artist, track.Title, track.Album, track.DurationSeconds), "Unison");
+            yield return (ActiveSettings.GeniusEnabled && !string.IsNullOrWhiteSpace(ActiveSettings.GeniusApiKey),
+                () => _lyricsProviders.FetchFromGeniusAsync(track.Artist, track.Title), "Genius");
         }
 
-        private static string? GetLyricsContent(Lyric lyric, LyricOptions option)
+        private void EmbedLyrics(Lyric lyric, TrackFile trackFile)
         {
-            Converters.LrcConverter lrc = new();
-            Converters.PlainTextConverter plain = new();
+            LyricOptions option = (LyricOptions)ActiveSettings.LyricEmbeddingOption;
+            if (option == LyricOptions.Disabled)
+                return;
 
-            return option switch
+            string? lyricsToEmbed = GetLyricsContent(lyric, option);
+            if (string.IsNullOrWhiteSpace(lyricsToEmbed))
+                return;
+
+            bool wasModified = LyricsHelper.EmbedLyricsInAudioFile(trackFile.Path, lyricsToEmbed, _logger, _rootFolderWatchingService);
+            if (wasModified && trackFile.Id > 0)
+                UpdateTrackFileAfterEmbed(trackFile);
+        }
+
+        private void UpdateTrackFileAfterEmbed(TrackFile trackFile)
+        {
+            try
             {
-                LyricOptions.Disabled => null,
-                LyricOptions.OnlyPlain => plain.Write(lyric),
-                LyricOptions.OnlyLineSynced when lyric.HasLineSync => lrc.Write(lyric),
-                LyricOptions.PreferLineSynced => lyric.HasLineSync ? lrc.Write(lyric) : plain.Write(lyric),
+                FileInfo fileInfo = new(trackFile.Path);
+                trackFile.Size = fileInfo.Length;
+                trackFile.Modified = fileInfo.LastWriteTimeUtc;
+                _mediaFileService.Update(trackFile);
+                _logger.Debug($"Updated TrackFile metadata after embedding lyrics: Size={trackFile.Size}, Modified={trackFile.Modified:O}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, $"Failed to update TrackFile metadata after embedding lyrics: {trackFile.Path}");
+            }
+        }
+
+        private (string Content, string Extension)? CreateLyricsFile(Lyric lyric, TrackInfo trackInfo)
+        {
+            Lyric lyricWithMeta = lyric with { Artist = trackInfo.Artist, Title = trackInfo.Title, Album = trackInfo.Album, Duration = trackInfo.DurationSeconds };
+
+            (LyricConverterBase Converter, string Extension)? target = SelectSyncLevel(lyricWithMeta, (LyricOptions)ActiveSettings.LrcFileOptions) switch
+            {
+                SyncLevel.WordSynced => LyricsHelper.ResolveWordSynced(ActiveSettings),
+                SyncLevel.LineSynced => LyricsHelper.ResolveLineSynced(ActiveSettings),
+                SyncLevel.Plain => (new PlainTextConverter(), LyricsHelper.ResolveLineSynced(ActiveSettings).Extension),
                 _ => null
             };
+
+            if (target == null)
+                return null;
+
+            string? content = target.Value.Converter.Write(lyricWithMeta);
+            return string.IsNullOrEmpty(content) ? null : (content, target.Value.Extension);
         }
 
-        /// <summary>
-        /// Result container for track processing operations.
-        /// </summary>
-        private class ProcessingResult
+        private static string? GetLyricsContent(Lyric lyric, LyricOptions option) =>
+            SelectSyncLevel(lyric, option) switch
+            {
+                SyncLevel.WordSynced => new ElrcConverter().Write(lyric),
+                SyncLevel.LineSynced => new LrcConverter().Write(lyric),
+                SyncLevel.Plain => new PlainTextConverter().Write(lyric),
+                _ => null
+            };
+
+        private static SyncLevel? SelectSyncLevel(Lyric lyric, LyricOptions option) => option switch
         {
-            public int SuccessCount { get; set; }
-            public int SyncedCount { get; set; }
-            public int FailedCount { get; set; }
+            LyricOptions.OnlyPlain => SyncLevel.Plain,
+            LyricOptions.OnlyLineSynced when lyric.HasLineSync => SyncLevel.LineSynced,
+            LyricOptions.PreferLineSynced => lyric.HasLineSync ? SyncLevel.LineSynced : SyncLevel.Plain,
+            LyricOptions.OnlyWordSynced when lyric.HasWordSync => SyncLevel.WordSynced,
+            LyricOptions.PreferWordSynced => lyric.HasWordSync ? SyncLevel.WordSynced
+                : lyric.HasLineSync ? SyncLevel.LineSynced
+                : SyncLevel.Plain,
+            _ => null
+        };
+
+        private SyncLevel GetDesiredSyncLevel()
+        {
+            static SyncLevel ForOption(LyricOptions option) => option switch
+            {
+                LyricOptions.OnlyWordSynced or LyricOptions.PreferWordSynced => SyncLevel.WordSynced,
+                LyricOptions.OnlyLineSynced or LyricOptions.PreferLineSynced => SyncLevel.LineSynced,
+                LyricOptions.OnlyPlain => SyncLevel.Plain,
+                _ => SyncLevel.None
+            };
+
+            SyncLevel fileLevel = ForOption((LyricOptions)ActiveSettings.LrcFileOptions);
+            SyncLevel embedLevel = ForOption((LyricOptions)ActiveSettings.LyricEmbeddingOption);
+            return fileLevel > embedLevel ? fileLevel : embedLevel;
+        }
+
+        private static SyncLevel GetSyncLevel(Lyric lyric) =>
+            lyric.HasWordSync ? SyncLevel.WordSynced :
+            lyric.HasLineSync ? SyncLevel.LineSynced :
+            SyncLevel.Plain;
+
+        private enum SyncLevel
+        {
+            None = 0,
+            Plain = 1,
+            LineSynced = 2,
+            WordSynced = 3
+        }
+
+        private sealed class ProcessingResult
+        {
+            public int Created;
+            public int Synced;
+            public int Failed;
+
+            public void Add(ProcessingResult other)
+            {
+                Created += other.Created;
+                Synced += other.Synced;
+                Failed += other.Failed;
+            }
         }
     }
 }

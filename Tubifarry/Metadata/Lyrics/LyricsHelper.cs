@@ -1,54 +1,78 @@
+using FuzzySharp;
 using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
+using NzbDrone.Core.Extras.Files;
+using NzbDrone.Core.Extras.Lyrics;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
+using Tubifarry.Metadata.Lyrics.Converters;
 
 namespace Tubifarry.Metadata.Lyrics
 {
+    public sealed record TrackInfo(string Artist, string Title, string Album, int DurationSeconds);
+
     public static class LyricsHelper
     {
+        public const string LrcExtension = ".lrc";
+        public const string ElrcExtension = ".elrc";
+        public const string TtmlExtension = ".ttml";
+        public const string LyricsfileExtension = ".lyricsfile";
+
+        public static readonly string[] AdditionalCoreExtensions = [ElrcExtension, TtmlExtension, LyricsfileExtension];
+
+        private const int MinimumMatchScore = 70;
+
+        public static (LyricConverterBase Converter, string Extension) ResolveWordSynced(LyricsEnhancerSettings settings) =>
+            (WordSyncedFileType)settings.WordSyncedFileTypeOption switch
+            {
+                WordSyncedFileType.Ttml => (new TtmlConverter(), TtmlExtension),
+                WordSyncedFileType.Lyricsfile => (new LyricsfileConverter(), LyricsfileExtension),
+                _ => (new ElrcConverter(), ElrcExtension)
+            };
+
+        public static (LyricConverterBase Converter, string Extension) ResolveLineSynced(LyricsEnhancerSettings settings) =>
+            (LineSyncedFileType)settings.LineSyncedFileTypeOption == LineSyncedFileType.UseSameAsWordSynced
+                ? ResolveWordSynced(settings)
+                : (new LrcConverter(), LrcExtension);
+
+        public static bool IsLyricFile(ExtraFile file)
+        {
+            string? extension = !string.IsNullOrEmpty(file.Extension) ? file.Extension : Path.GetExtension(file.RelativePath);
+            return !string.IsNullOrEmpty(extension) && LyricFileExtensions.Extensions.Contains(extension);
+        }
+
         public static JToken? ScoreAndSelectBestMatch(List<JToken> artistMatches, List<JToken> songHits, string artistName, string trackTitle, Logger logger)
         {
+            bool artistConfirmed = artistMatches.Count > 0;
+            List<JToken> candidates = artistConfirmed ? artistMatches : songHits;
+
             JToken? bestMatch = null;
             int bestScore = 0;
 
-            List<JToken> candidatesToScore = artistMatches.Count > 0 ? artistMatches : songHits;
-
-            logger.Trace("Beginning enhanced fuzzy matching process...");
-
-            foreach (JToken hit in candidatesToScore)
+            foreach (JToken hit in candidates)
             {
-                string resultTitle = hit["result"]?["title"]?.ToString() ?? string.Empty;
-                string resultArtist = hit["result"]?["primary_artist"]?["name"]?.ToString() ?? string.Empty;
+                string title = hit["result"]?["title"]?.ToString() ?? string.Empty;
+                string artist = hit["result"]?["primary_artist"]?["name"]?.ToString() ?? string.Empty;
 
-                int tokenSetScore = FuzzySharp.Fuzz.TokenSetRatio(resultTitle, trackTitle);
-                int tokenSortScore = FuzzySharp.Fuzz.TokenSortRatio(resultTitle, trackTitle);
-                int partialRatio = FuzzySharp.Fuzz.PartialRatio(resultTitle, trackTitle);
-                int weightedRatio = FuzzySharp.Fuzz.WeightedRatio(resultTitle, trackTitle);
-
-                int titleScore = Math.Max(Math.Max(tokenSetScore, tokenSortScore), Math.Max(partialRatio, weightedRatio));
-
-                int artistScore = artistMatches.Count > 0 ? 100 : FuzzySharp.Fuzz.WeightedRatio(resultArtist, artistName);
-
+                int titleScore = Math.Max(
+                    Math.Max(Fuzz.TokenSetRatio(title, trackTitle), Fuzz.TokenSortRatio(title, trackTitle)),
+                    Math.Max(Fuzz.PartialRatio(title, trackTitle), Fuzz.WeightedRatio(title, trackTitle)));
+                int artistScore = artistConfirmed ? 100 : Fuzz.WeightedRatio(artist, artistName);
                 int combinedScore = ((titleScore * 3) + (artistScore * 7)) / 10;
 
-                logger.Debug($"Match candidate: '{resultTitle}' by '{resultArtist}' - " +
-                             $"Title Score: {titleScore} (Token Set: {tokenSetScore}, Token Sort: {tokenSortScore}, " +
-                             $"Partial: {partialRatio}, Weighted: {weightedRatio}), " +
-                             $"Artist Score: {artistScore}, Combined: {combinedScore}");
+                logger.Debug($"Match candidate: '{title}' by '{artist}' - Title: {titleScore}, Artist: {artistScore}, Combined: {combinedScore}");
 
                 if (combinedScore > bestScore)
                 {
                     bestScore = combinedScore;
                     bestMatch = hit;
-                    logger.Debug($"New best match found with score: {combinedScore}");
                 }
             }
 
-            if (bestMatch == null || bestScore < 70)
+            if (bestScore < MinimumMatchScore)
             {
-                logger.Warn($"Match score below threshold (70%). No lyrics will be selected for: '{trackTitle}' by '{artistName}'");
+                logger.Warn($"Best match score {bestScore} is below threshold {MinimumMatchScore}, no lyrics selected for: '{trackTitle}' by '{artistName}'");
                 return null;
             }
 
@@ -60,12 +84,13 @@ namespace Tubifarry.Metadata.Lyrics
             try
             {
                 rootFolderWatchingService.ReportFileSystemChangeBeginning(filePath);
+
                 using (TagLib.File file = TagLib.File.Create(filePath))
                 {
                     file.Tag.Lyrics = lyrics;
                     file.Save();
                 }
-                logger.Trace($"Embedded lyrics in file: {filePath}");
+
                 return true;
             }
             catch (Exception ex)
@@ -75,41 +100,48 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        public static (string Artist, string Title, string Album, int Duration)? ExtractTrackInfo(TrackFile trackFile, Artist artist, Logger logger)
+        public static TrackInfo? ExtractTrackInfo(TrackFile trackFile, Artist artist, Logger logger)
         {
-            if (trackFile.Tracks?.Value == null || trackFile.Tracks.Value.Count == 0)
-            {
-                logger.Warn($"No tracks found for file: {trackFile.Path}");
-                return null;
-            }
-
-            Track? track = trackFile.Tracks.Value.FirstOrDefault(x => x != null);
+            Track? track = trackFile.Tracks?.Value?.FirstOrDefault(x => x != null);
             if (track == null)
             {
                 logger.Warn($"No track information found for file: {trackFile.Path}");
                 return null;
             }
 
-            Album? album = track.Album;
-            string trackTitle = track.Title;
-            string artistName = artist.Name;
-            string albumName = album?.Title ?? track?.AlbumRelease?.Value?.Album?.Value?.Title ??
-                trackFile.Tracks.Value.FirstOrDefault(x => !string.IsNullOrEmpty(x?.Album?.Title))?.Album?.Title ?? "";
+            string albumName = track.Album?.Title
+                ?? track.AlbumRelease?.Value?.Album?.Value?.Title
+                ?? trackFile.Tracks!.Value.FirstOrDefault(x => !string.IsNullOrEmpty(x?.Album?.Title))?.Album?.Title
+                ?? string.Empty;
 
-            int trackDuration = 0;
-            if (track!.Duration > 0)
-                trackDuration = (int)Math.Round(TimeSpan.FromMilliseconds(track.Duration).TotalSeconds);
+            int durationSeconds = track.Duration > 0
+                ? (int)Math.Round(TimeSpan.FromMilliseconds(track.Duration).TotalSeconds)
+                : 0;
 
-            return (artistName, trackTitle, albumName, trackDuration);
+            return new TrackInfo(artist.Name, track.Title, albumName, durationSeconds);
         }
 
-        public static bool LrcFileExistsOnDisk(string trackFilePath, IDiskProvider diskProvider)
+        public static bool LyricFileExistsOnDisk(string trackFilePath, IDiskProvider diskProvider) =>
+            TryFindLyricFileOnDisk(trackFilePath, diskProvider, out _);
+
+        public static bool TryFindLyricFileOnDisk(string trackFilePath, IDiskProvider diskProvider, out string lyricFilePath)
         {
+            lyricFilePath = string.Empty;
+
             if (string.IsNullOrEmpty(trackFilePath))
                 return false;
 
-            string lrcPath = Path.ChangeExtension(trackFilePath, ".lrc");
-            return diskProvider.FileExists(lrcPath);
+            foreach (string extension in LyricFileExtensions.Extensions)
+            {
+                string candidate = Path.ChangeExtension(trackFilePath, extension);
+                if (diskProvider.FileExists(candidate))
+                {
+                    lyricFilePath = candidate;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

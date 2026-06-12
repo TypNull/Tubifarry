@@ -73,17 +73,17 @@ namespace Tubifarry.Metadata.Lyrics
         public string GeniusApiKey { get; set; } = "";
 
         // Binimum Provider settings (ISRC-keyed Apple Music TTML cache)
-        [FieldDefinition(9, Label = "Enable Binimum", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Binimum as a lyrics provider (Apple Music TTML, requires the track's ISRC)")]
+        [FieldDefinition(9, Label = "Enable Binimum", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Binimum as a lyrics provider")]
         public bool BinimumEnabled { get; set; }
 
         [FieldDefinition(10, Label = "Binimum API URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Binimum lyrics API", Placeholder = "https://lyrics-api.binimum.org", Hidden = HiddenType.Hidden)]
         public string BinimumApiUrl { get; set; } = "https://lyrics-api.binimum.org";
 
         // LyricsPlus Provider settings (Apple Music + QQ, word-synced)
-        [FieldDefinition(11, Label = "Enable LyricsPlus", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LyricsPlus as a lyrics provider (word-synced lyrics from Apple Music and QQ Music)")]
+        [FieldDefinition(11, Label = "Enable LyricsPlus", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LyricsPlus as a lyrics provider")]
         public bool LyricsPlusEnabled { get; set; }
 
-        [FieldDefinition(12, Label = "LyricsPlus URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LyricsPlus (KPoe) instance", Placeholder = "https://lyrics.geeked.wtf", Hidden = HiddenType.Hidden)]
+        [FieldDefinition(12, Label = "LyricsPlus URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LyricsPlus instance", Placeholder = "https://lyrics.geeked.wtf", Hidden = HiddenType.Hidden)]
         public string LyricsPlusUrl { get; set; } = "https://lyrics.geeked.wtf";
 
         // Unison Provider settings (crowdsourced TTML/LRC)
@@ -146,13 +146,13 @@ namespace Tubifarry.Metadata.Lyrics
     public enum WordSyncedFileType
     {
         [FieldOption(Label = "ELRC", Hint = "Enhanced LRC format with word-level timestamps.")]
-        Elrc,
+        Elrc = 0,
 
-        [FieldOption(Label = "TTML", Hint = "Timed Text Markup Language format (Apple Music style).")]
-        Ttml,
+        [FieldOption(Label = "TTML", Hint = "Timed Text Markup Language format.")]
+        Ttml = 1,
 
-        [FieldOption(Label = "Lyricsfile", Hint = "YAML-based open lyrics format with word-by-word sync support (LRCGET/LRCLIB).")]
-        Lyricsfile
+        [FieldOption(Label = "Lyricsfile", Hint = "YAML-based open lyrics format with word-by-word sync support.")]
+        Lyricsfile = 2
     }
 
     public enum LineSyncedFileType

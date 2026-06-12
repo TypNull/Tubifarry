@@ -12,6 +12,8 @@ using NzbDrone.Core.Plugins.Commands;
 
 using NzbDrone.Core.Profiles.Delay;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Metadata.Lyrics;
+using NzbDrone.Core.Extras.Lyrics;
 
 #if !MASTER_BRANCH
 using Tubifarry.Core.Telemetry;
@@ -20,8 +22,8 @@ using Tubifarry.Core.Telemetry;
 namespace Tubifarry
 {
     public class Tubifarry : Plugin
-#if !MASTER_BRANCH
         , IHandle<ApplicationStartingEvent>
+#if !MASTER_BRANCH
         , IHandle<ApplicationShutdownRequested>
 #endif
     {
@@ -30,7 +32,7 @@ namespace Tubifarry
         private readonly IManageCommandQueue _commandQueueManager;
         private readonly IPluginSettings _pluginSettings;
 
-        public const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"; //$"{PluginInfo.Name}/{PluginInfo.AssemblyVersion} ({PluginInfo.Framework} {PluginInfo.Branch})";
+        public const string UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"; //$"{PluginInfo.Name}/{PluginInfo.AssemblyVersion} ({PluginInfo.Framework} {PluginInfo.Branch})";
 
         public override string Name => PluginInfo.Name;
         public override string Owner => PluginInfo.Author;
@@ -109,6 +111,12 @@ namespace Tubifarry
             if (AvailableVersion > InstalledVersion)
                 _commandQueueManager.Push(new InstallPluginCommand() { GithubUrl = GithubUrl });
 #endif
+            foreach (string extension in LyricsHelper.AdditionalCoreExtensions)
+            {
+                if (LyricFileExtensions.Extensions.Add(extension))
+                    _logger.Debug($"Registered lyric file extension with Lidarr core: {extension}");
+            }
+
             List<DateTime> lastStarted = _pluginSettings.GetValue<List<DateTime>>("lastStarted") ?? [];
 
             LastStarted = DateTime.UtcNow;

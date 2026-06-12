@@ -17,6 +17,7 @@
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
 			<InputAssemblies Include="$(OutputPath)Sentry.dll" />
 			<InputAssemblies Include="$(OutputPath)System.Diagnostics.DiagnosticSource.dll" />
+			<InputAssemblies Include="$(OutputPath)YamlDotNet.dll" />
 		</ItemGroup>
 
 		<ILRepack

@@ -1,10 +1,13 @@
 using Dapper;
 using NLog;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Extras.Lyrics;
+using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.Extras.Others;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Music;
 
@@ -14,11 +17,14 @@ namespace Tubifarry.Metadata.Lyrics
     /// Repository helper for querying track files and managing lyric file database entries.
     /// Provides efficient batch querying to avoid loading millions of records into memory.
     /// </summary>
-    public sealed class TrackFileRepositoryHelper : BasicRepository<TrackFile>
+    public sealed class TrackFileRepositoryHelper : BasicRepository<TrackFile>,
+         IHandleAsync<AlbumImportedEvent>,
+         IHandleAsync<ArtistScannedEvent>
     {
         private readonly ITrackRepository _trackRepository;
         private readonly ILyricFileService _lyricFileService;
         private readonly IExtraFileService<OtherExtraFile> _otherExtraFileService;
+        private readonly IMetadataFileService _metadataFileService;
         private readonly Logger _logger;
 
         public TrackFileRepositoryHelper(
@@ -27,33 +33,22 @@ namespace Tubifarry.Metadata.Lyrics
             ITrackRepository trackRepository,
             ILyricFileService lyricFileService,
             IExtraFileService<OtherExtraFile> otherExtraFileService,
+            IMetadataFileService metadataFileService,
             Logger logger)
             : base(database, eventAggregator)
         {
             _trackRepository = trackRepository;
             _lyricFileService = lyricFileService;
             _otherExtraFileService = otherExtraFileService;
+            _metadataFileService = metadataFileService;
             _logger = logger;
         }
 
-        /// <summary>
-        /// Gets the total count of track files without LRC files.
-        /// </summary>
         public int GetTracksWithoutLrcFilesCount()
         {
             try
             {
-                SqlBuilder builder = Builder()
-                    .Join<TrackFile, Track>((tf, t) => tf.Id == t.TrackFileId)
-                    .Join<Track, AlbumRelease>((t, r) => t.AlbumReleaseId == r.Id)
-                    .Join<AlbumRelease, Album>((r, a) => r.AlbumId == a.Id)
-                    .Join<Album, Artist>((album, artist) => album.ArtistMetadataId == artist.ArtistMetadataId)
-                    .LeftJoin(@"""LyricFiles"" ON ""TrackFiles"".""Id"" = ""LyricFiles"".""TrackFileId""")
-                    .Where<Artist>(a => a.Monitored == true)
-                    .Where<AlbumRelease>(r => r.Monitored == true)
-                    .Where(@"""LyricFiles"".""Id"" IS NULL")
-                    .SelectCount();
-
+                SqlBuilder builder = TracksWithoutLrcQuery().SelectCount();
                 SqlBuilder.Template template = builder.AddPageCountTemplate(typeof(TrackFile));
 
                 using System.Data.IDbConnection conn = _database.OpenConnection();
@@ -66,26 +61,11 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        /// <summary>
-        /// Queries track files without LRC files in batches using SQL LIMIT/OFFSET.
-        /// </summary>
-        /// <param name="offset">Starting position in the result set</param>
-        /// <param name="limit">Maximum number of records to return</param>
-        /// <returns>List of track files for this batch</returns>
         public List<TrackFile> GetTracksWithoutLrcFilesBatch(int offset, int limit)
         {
             try
             {
-                // Build SQL query with LIMIT/OFFSET for efficient pagination
-                SqlBuilder builder = Builder()
-                    .Join<TrackFile, Track>((tf, t) => tf.Id == t.TrackFileId)
-                    .Join<Track, AlbumRelease>((t, r) => t.AlbumReleaseId == r.Id)
-                    .Join<AlbumRelease, Album>((r, a) => r.AlbumId == a.Id)
-                    .Join<Album, Artist>((album, artist) => album.ArtistMetadataId == artist.ArtistMetadataId)
-                    .LeftJoin(@"""LyricFiles"" ON ""TrackFiles"".""Id"" = ""LyricFiles"".""TrackFileId""")
-                    .Where<Artist>(a => a.Monitored == true)
-                    .Where<AlbumRelease>(r => r.Monitored == true)
-                    .Where(@"""LyricFiles"".""Id"" IS NULL")
+                SqlBuilder builder = TracksWithoutLrcQuery()
                     .GroupBy<TrackFile>(tf => tf.Id)
                     .OrderBy($@"""TrackFiles"".""Id"" ASC LIMIT {limit} OFFSET {offset}");
 
@@ -97,9 +77,7 @@ namespace Tubifarry.Metadata.Lyrics
                     trackFile.Tracks = new LazyLoaded<List<Track>>(tracks);
 
                     if (tracks.Count > 0 && tracks[0].Artist?.Value != null)
-                    {
                         trackFile.Artist = new LazyLoaded<Artist>(tracks[0].Artist.Value);
-                    }
                 }
 
                 return trackFiles;
@@ -115,27 +93,28 @@ namespace Tubifarry.Metadata.Lyrics
         {
             try
             {
-                OtherExtraFile? conflictingEntry = _otherExtraFileService.FindByPath(artist.Id, relativePath);
-                if (conflictingEntry != null)
-                {
-                    _logger.Warn($"Found .lrc file registered as OtherExtraFile (ID: {conflictingEntry.Id}), deleting conflicting entry to prevent deletion during re-imports: {relativePath}");
-                    _otherExtraFileService.Delete(conflictingEntry.Id);
-                }
+                DeleteByPath(_otherExtraFileService, artist.Id, relativePath, "OtherExtraFiles");
+                DeleteByPath(_metadataFileService, artist.Id, relativePath, "MetadataFiles");
+
+                List<LyricFile> existing = FindByPath(_lyricFileService, artist.Id, relativePath);
+                if (existing.Count > 1)
+                    _lyricFileService.DeleteMany(existing.Skip(1).Select(x => x.Id));
 
                 LyricFile lyricFile = new()
                 {
+                    Id = existing.FirstOrDefault()?.Id ?? 0,
                     ArtistId = artist.Id,
                     TrackFileId = trackFile.Id,
                     AlbumId = trackFile.AlbumId,
                     RelativePath = relativePath,
-                    Added = DateTime.UtcNow,
+                    Added = existing.FirstOrDefault()?.Added ?? DateTime.UtcNow,
                     LastUpdated = DateTime.UtcNow,
-                    Extension = ".lrc"
+                    Extension = Path.GetExtension(relativePath) is { Length: > 0 } extension
+                        ? extension
+                        : LyricsHelper.LrcExtension
                 };
 
                 _lyricFileService.Upsert(lyricFile);
-                _logger.Debug($"Created and upserted lyric file to database: {relativePath}");
-
                 return lyricFile;
             }
             catch (Exception ex)
@@ -145,14 +124,105 @@ namespace Tubifarry.Metadata.Lyrics
             }
         }
 
-        /// <summary>
-        /// Exposes the base Builder method for advanced queries.
-        /// </summary>
-        public new SqlBuilder Builder() => base.Builder();
+        public void HandleAsync(AlbumImportedEvent message) => MigrateLyricRegistrations(message.Artist, message.ImportedTracks);
 
-        /// <summary>
-        /// Exposes the base Query method for advanced queries.
-        /// </summary>
-        public new List<TrackFile> Query(SqlBuilder builder) => base.Query(builder);
+        public void HandleAsync(ArtistScannedEvent message) => MigrateLyricRegistrations(message.Artist, null);
+
+        private void MigrateLyricRegistrations(Artist? artist, List<TrackFile>? importedTracks)
+        {
+            if (artist == null || artist.Id <= 0)
+                return;
+
+            try
+            {
+                List<ExtraFile> candidates = _metadataFileService.GetFilesByArtist(artist.Id).Cast<ExtraFile>()
+                    .Concat(_otherExtraFileService.GetFilesByArtist(artist.Id))
+                    .Where(LyricsHelper.IsLyricFile)
+                    .ToList();
+
+                if (candidates.Count == 0)
+                    return;
+
+                List<LyricFile> lyricFiles = _lyricFileService.GetFilesByArtist(artist.Id);
+
+                foreach (ExtraFile extra in candidates)
+                {
+                    if (lyricFiles.Any(x => PathsEqual(x.RelativePath, extra.RelativePath)))
+                    {
+                        DeleteExtraFile(extra);
+                        continue;
+                    }
+
+                    TrackFile? trackFile = ResolveTrackFile(artist, importedTracks, extra);
+                    if (trackFile == null)
+                        continue;
+
+                    LyricFile? created = CreateAndUpsertLyricFile(artist, trackFile, extra.RelativePath);
+                    if (created != null)
+                        lyricFiles.Add(created);
+                }
+
+                _logger.Debug($"Migrated {candidates.Count} lyric registration(s) to LyricFiles for artist: {artist.Name}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to migrate lyric registrations for artist: {artist.Name}");
+            }
+        }
+
+        private static TrackFile? ResolveTrackFile(Artist artist, List<TrackFile>? importedTracks, ExtraFile extra)
+        {
+            if (extra.TrackFileId > 0)
+                return new TrackFile { Id = extra.TrackFileId.Value, AlbumId = extra.AlbumId ?? 0 };
+
+            if (importedTracks == null || string.IsNullOrEmpty(artist.Path))
+                return null;
+
+            string basePath = Path.ChangeExtension(extra.RelativePath, null);
+
+            return importedTracks.FirstOrDefault(tf =>
+                tf.Id > 0 &&
+                !string.IsNullOrEmpty(tf.Path) &&
+                PathsEqual(Path.ChangeExtension(artist.Path.GetRelativePath(tf.Path), null), basePath));
+        }
+
+        private void DeleteExtraFile(ExtraFile extra)
+        {
+            if (extra is MetadataFile)
+                _metadataFileService.Delete(extra.Id);
+            else
+                _otherExtraFileService.Delete(extra.Id);
+        }
+
+        private void DeleteByPath<T>(IExtraFileService<T> service, int artistId, string relativePath, string table)
+            where T : ExtraFile, new()
+        {
+            List<T> rows = FindByPath(service, artistId, relativePath);
+            if (rows.Count == 0)
+                return;
+
+            _logger.Debug($"Removing {rows.Count} conflicting {table} record(s) for lyric file: {relativePath}");
+            service.DeleteMany(rows.Select(x => x.Id));
+        }
+
+        private static List<T> FindByPath<T>(IExtraFileService<T> service, int artistId, string relativePath)
+            where T : ExtraFile, new() =>
+            service.GetFilesByArtist(artistId)
+                .Where(x => PathsEqual(x.RelativePath, relativePath))
+                .OrderBy(x => x.Id)
+                .ToList();
+
+        private static bool PathsEqual(string? left, string? right) =>
+            string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+        private SqlBuilder TracksWithoutLrcQuery() => Builder()
+            .Join<TrackFile, Track>((tf, t) => tf.Id == t.TrackFileId)
+            .Join<Track, AlbumRelease>((t, r) => t.AlbumReleaseId == r.Id)
+            .Join<AlbumRelease, Album>((r, a) => r.AlbumId == a.Id)
+            .Join<Album, Artist>((album, artist) => album.ArtistMetadataId == artist.ArtistMetadataId)
+            .LeftJoin(@"""LyricFiles"" ON ""TrackFiles"".""Id"" = ""LyricFiles"".""TrackFileId""")
+            .Where<Artist>(a => a.Monitored == true)
+            .Where<AlbumRelease>(r => r.Monitored == true)
+            .Where(@"""LyricFiles"".""Id"" IS NULL");
     }
 }
