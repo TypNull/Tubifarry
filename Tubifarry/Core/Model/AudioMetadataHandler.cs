@@ -259,11 +259,20 @@ namespace Tubifarry.Core.Model
 
                 byte[]? preservedCoverArt = AlbumCover?.Length > 0 ? AlbumCover : await TryExtractCoverArtAsync();
 
-                IConversion conversion = await FFmpeg.Conversions.FromSnippet.Convert(TrackPath, tempOutputPath);
-
                 IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(TrackPath);
-                if (mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? "")))
+                bool hasCoverArt = mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? ""));
+
+                // Use explicit stream mapping instead of FromSnippet.Convert() which auto-generates
+                // "-c:v copy" for all streams. ffmpeg 8.0+ rejects duplicate codec specs for the
+                // same stream (e.g. "-c:v copy" followed by "-c:v mjpeg"), returning EINVAL.
+                IConversion conversion = FFmpeg.Conversions.New()
+                    .AddParameter($"-i \"{TrackPath}\"")
+                    .AddParameter("-map 0:a:0")
+                    .SetOutput(tempOutputPath);
+
+                if (hasCoverArt)
                 {
+                    conversion.AddParameter("-map 0:v:0");
                     conversion.AddParameter("-c:v mjpeg -q:v 2 -disposition:v attached_pic");
                     _logger?.Trace("Detected attached picture stream, re-encoding as mjpeg with attached_pic disposition");
                 }
@@ -402,7 +411,12 @@ namespace Tubifarry.Core.Model
                 if (File.Exists(tempOutputPath))
                     File.Delete(tempOutputPath);
 
-                IConversion conversion = await FFmpeg.Conversions.FromSnippet.ExtractAudio(TrackPath, tempOutputPath);
+                // Use explicit stream mapping instead of FromSnippet.ExtractAudio() for ffmpeg 8.0+
+                // compatibility; the snippet helper generates conflicting codec directives.
+                IConversion conversion = FFmpeg.Conversions.New()
+                    .AddParameter($"-i \"{TrackPath}\"")
+                    .AddParameter("-map 0:a:0")
+                    .SetOutput(tempOutputPath);
                 foreach (string parameter in ExtractionParameters)
                     conversion.AddParameter(parameter);
 
