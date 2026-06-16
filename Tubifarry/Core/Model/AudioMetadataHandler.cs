@@ -224,6 +224,25 @@ namespace Tubifarry.Core.Model
         }
 
         /// <summary>
+        /// Creates a base FFmpeg conversion using explicit stream mapping.
+        /// </summary>
+        /// <remarks>
+        /// Uses <see cref="FFmpeg.Conversions.New"/> rather than the <c>FromSnippet</c> helpers.
+        /// The snippet helpers are async because they call <c>GetMediaInfo</c> internally to
+        /// auto-discover streams, then emit <c>-c:v copy</c> for every video stream. When the
+        /// caller subsequently appends <c>-c:v mjpeg</c> for cover art, ffmpeg 8.0+ rejects the
+        /// duplicate codec directive with EINVAL. Using <c>New()</c> with an explicit
+        /// <c>-map 0:a:0</c> eliminates both the duplicate directive and the redundant
+        /// <c>GetMediaInfo</c> probe (callers already invoke it for their own purposes).
+        /// Music files and single-track video sources never have more than one audio stream.
+        /// </remarks>
+        private static IConversion CreateBaseAudioConversion(string inputPath, string outputPath) =>
+            FFmpeg.Conversions.New()
+                .AddParameter($"-i \"{inputPath}\"")
+                .AddParameter("-map 0:a:0")
+                .SetOutput(outputPath);
+
+        /// <summary>
         /// Converts audio to the specified format with optional bitrate control.
         /// </summary>
         /// <param name="audioFormat">Target audio format</param>
@@ -262,13 +281,7 @@ namespace Tubifarry.Core.Model
                 IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(TrackPath);
                 bool hasCoverArt = mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? ""));
 
-                // Use explicit stream mapping instead of FromSnippet.Convert() which auto-generates
-                // "-c:v copy" for all streams. ffmpeg 8.0+ rejects duplicate codec specs for the
-                // same stream (e.g. "-c:v copy" followed by "-c:v mjpeg"), returning EINVAL.
-                IConversion conversion = FFmpeg.Conversions.New()
-                    .AddParameter($"-i \"{TrackPath}\"")
-                    .AddParameter("-map 0:a:0")
-                    .SetOutput(tempOutputPath);
+                IConversion conversion = CreateBaseAudioConversion(TrackPath, tempOutputPath);
 
                 if (hasCoverArt)
                 {
@@ -411,12 +424,7 @@ namespace Tubifarry.Core.Model
                 if (File.Exists(tempOutputPath))
                     File.Delete(tempOutputPath);
 
-                // Use explicit stream mapping instead of FromSnippet.ExtractAudio() for ffmpeg 8.0+
-                // compatibility; the snippet helper generates conflicting codec directives.
-                IConversion conversion = FFmpeg.Conversions.New()
-                    .AddParameter($"-i \"{TrackPath}\"")
-                    .AddParameter("-map 0:a:0")
-                    .SetOutput(tempOutputPath);
+                IConversion conversion = CreateBaseAudioConversion(TrackPath, tempOutputPath);
                 foreach (string parameter in ExtractionParameters)
                     conversion.AddParameter(parameter);
 
