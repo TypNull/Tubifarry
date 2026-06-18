@@ -1,6 +1,3 @@
-using NLog;
-using NzbDrone.Common.Instrumentation;
-using NzbDrone.Core.Music;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
@@ -203,7 +200,7 @@ namespace Tubifarry.Core.Model
                 try
                 {
                     IConversion conversion = FFmpeg.Conversions.New()
-                        .AddParameter($"-i \"{TrackPath}\"")
+                        .AddParameter($"-i {TrackPath.Escape()}")
                         .AddParameter("-an -vcodec copy")
                         .SetOutput(tempCoverPath);
 
@@ -226,19 +223,9 @@ namespace Tubifarry.Core.Model
         /// <summary>
         /// Creates a base FFmpeg conversion using explicit stream mapping.
         /// </summary>
-        /// <remarks>
-        /// Uses <see cref="FFmpeg.Conversions.New"/> rather than the <c>FromSnippet</c> helpers.
-        /// The snippet helpers are async because they call <c>GetMediaInfo</c> internally to
-        /// auto-discover streams, then emit <c>-c:v copy</c> for every video stream. When the
-        /// caller subsequently appends <c>-c:v mjpeg</c> for cover art, ffmpeg 8.0+ rejects the
-        /// duplicate codec directive with EINVAL. Using <c>New()</c> with an explicit
-        /// <c>-map 0:a:0</c> eliminates both the duplicate directive and the redundant
-        /// <c>GetMediaInfo</c> probe (callers already invoke it for their own purposes).
-        /// Music files and single-track video sources never have more than one audio stream.
-        /// </remarks>
         private static IConversion CreateBaseAudioConversion(string inputPath, string outputPath) =>
             FFmpeg.Conversions.New()
-                .AddParameter($"-i \"{inputPath}\"")
+                .AddParameter($"-i {inputPath.Escape()}")
                 .AddParameter("-map 0:a:0")
                 .SetOutput(outputPath);
 
@@ -384,7 +371,7 @@ namespace Tubifarry.Core.Model
                 if (hasRealVideo)
                     return true;
 
-                string probeResult = await Probe.New().Start($"-v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 \"{TrackPath}\"");
+                string probeResult = await Probe.New().Start($"-v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 {TrackPath.Escape()}");
                 string formatName = probeResult?.Trim().ToLower() ?? "";
                 return VideoFormats.Any(container => formatName.Contains(container));
             }
@@ -477,7 +464,7 @@ namespace Tubifarry.Core.Model
 
                 IConversion conversion = FFmpeg.Conversions.New()
                     .AddParameter($"-decryption_key {decryptionKey}")
-                    .AddParameter($"-i \"{TrackPath}\"")
+                    .AddParameter($"-i {TrackPath.Escape()}")
                     .AddParameter("-c copy")
                     .SetOutput(tempOutput);
 

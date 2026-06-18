@@ -90,7 +90,7 @@ namespace Tubifarry.Metadata.Converter
         {
             try
             {
-                string probeArgs = $"-v error -select_streams a:0 -show_entries stream=bits_per_raw_sample,sample_fmt -of default=noprint_wrappers=1 \"{filePath}\"";
+                string probeArgs = $"-v error -select_streams a:0 -show_entries stream=bits_per_raw_sample,sample_fmt -of default=noprint_wrappers=1 {filePath.Escape()}";
                 string probeOutput = await Probe.New().Start(probeArgs);
 
                 if (string.IsNullOrWhiteSpace(probeOutput))
