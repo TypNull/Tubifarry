@@ -1,3 +1,6 @@
+using NLog;
+using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Music;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
