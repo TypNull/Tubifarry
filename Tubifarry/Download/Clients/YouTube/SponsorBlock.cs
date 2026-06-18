@@ -124,7 +124,7 @@ namespace Tubifarry.Download.Clients.YouTube
                         string segmentFile = Path.Combine(tempDir, $"segment_{segmentIndex:D3}{Path.GetExtension(_filePath)}");
 
                         IConversion extraction = FFmpeg.Conversions.New()
-                            .AddParameter($"-i \"{_filePath}\"")
+                            .AddParameter($"-i {_filePath.Escape()}")
                             .AddParameter($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
                             .AddParameter($"-to {segmentStart.ToString("F3", CultureInfo.InvariantCulture)}")
                             .AddParameter("-c copy")
@@ -146,7 +146,7 @@ namespace Tubifarry.Download.Clients.YouTube
                     string segmentFile = Path.Combine(tempDir, $"segment_{segmentIndex:D3}{Path.GetExtension(_filePath)}");
 
                     IConversion extraction = FFmpeg.Conversions.New()
-                        .AddParameter($"-i \"{_filePath}\"")
+                        .AddParameter($"-i {_filePath.Escape()}")
                         .AddParameter($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
                         .AddParameter("-c copy")
                         .AddParameter("-map 0")  // Copy all streams
@@ -175,8 +175,8 @@ namespace Tubifarry.Download.Clients.YouTube
                 IConversion concat = FFmpeg.Conversions.New()
                     .AddParameter("-f concat")
                     .AddParameter("-safe 0")
-                    .AddParameter($"-i \"{concatListPath}\"")
-                    .AddParameter($"-i \"{_filePath}\"")  // Add original file for metadata
+                    .AddParameter($"-i {concatListPath.Escape()}")
+                    .AddParameter($"-i {_filePath.Escape()}")  // Add original file for metadata
                     .AddParameter("-c copy")
                     .AddParameter("-map 0")  // Map concat result
                     .AddParameter("-map_metadata 1")  // Take metadata from original file

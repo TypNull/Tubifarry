@@ -1,6 +1,3 @@
-using NLog;
-using NzbDrone.Common.Instrumentation;
-using NzbDrone.Core.Music;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
 using Xabe.FFmpeg;
@@ -203,7 +200,7 @@ namespace Tubifarry.Core.Model
                 try
                 {
                     IConversion conversion = FFmpeg.Conversions.New()
-                        .AddParameter($"-i \"{TrackPath}\"")
+                        .AddParameter($"-i {TrackPath.Escape()}")
                         .AddParameter("-an -vcodec copy")
                         .SetOutput(tempCoverPath);
 
@@ -222,6 +219,15 @@ namespace Tubifarry.Core.Model
 
             return null;
         }
+
+        /// <summary>
+        /// Creates a base FFmpeg conversion using explicit stream mapping.
+        /// </summary>
+        private static IConversion CreateBaseAudioConversion(string inputPath, string outputPath) =>
+            FFmpeg.Conversions.New()
+                .AddParameter($"-i {inputPath.Escape()}")
+                .AddParameter("-map 0:a:0")
+                .SetOutput(outputPath);
 
         /// <summary>
         /// Converts audio to the specified format with optional bitrate control.
@@ -259,11 +265,14 @@ namespace Tubifarry.Core.Model
 
                 byte[]? preservedCoverArt = AlbumCover?.Length > 0 ? AlbumCover : await TryExtractCoverArtAsync();
 
-                IConversion conversion = await FFmpeg.Conversions.FromSnippet.Convert(TrackPath, tempOutputPath);
-
                 IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(TrackPath);
-                if (mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? "")))
+                bool hasCoverArt = mediaInfo.VideoStreams.Any(vs => CoverArtCodecs.Contains(vs.Codec ?? ""));
+
+                IConversion conversion = CreateBaseAudioConversion(TrackPath, tempOutputPath);
+
+                if (hasCoverArt)
                 {
+                    conversion.AddParameter("-map 0:v:0");
                     conversion.AddParameter("-c:v mjpeg -q:v 2 -disposition:v attached_pic");
                     _logger?.Trace("Detected attached picture stream, re-encoding as mjpeg with attached_pic disposition");
                 }
@@ -362,7 +371,7 @@ namespace Tubifarry.Core.Model
                 if (hasRealVideo)
                     return true;
 
-                string probeResult = await Probe.New().Start($"-v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 \"{TrackPath}\"");
+                string probeResult = await Probe.New().Start($"-v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 {TrackPath.Escape()}");
                 string formatName = probeResult?.Trim().ToLower() ?? "";
                 return VideoFormats.Any(container => formatName.Contains(container));
             }
@@ -402,7 +411,7 @@ namespace Tubifarry.Core.Model
                 if (File.Exists(tempOutputPath))
                     File.Delete(tempOutputPath);
 
-                IConversion conversion = await FFmpeg.Conversions.FromSnippet.ExtractAudio(TrackPath, tempOutputPath);
+                IConversion conversion = CreateBaseAudioConversion(TrackPath, tempOutputPath);
                 foreach (string parameter in ExtractionParameters)
                     conversion.AddParameter(parameter);
 
@@ -455,7 +464,7 @@ namespace Tubifarry.Core.Model
 
                 IConversion conversion = FFmpeg.Conversions.New()
                     .AddParameter($"-decryption_key {decryptionKey}")
-                    .AddParameter($"-i \"{TrackPath}\"")
+                    .AddParameter($"-i {TrackPath.Escape()}")
                     .AddParameter("-c copy")
                     .SetOutput(tempOutput);
 
