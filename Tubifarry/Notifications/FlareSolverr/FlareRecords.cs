@@ -11,7 +11,7 @@ public record FlareCookie(
     [property: JsonPropertyName("value")] string Value,
     [property: JsonPropertyName("domain")] string Domain,
     [property: JsonPropertyName("path")] string Path = "/",
-    [property: JsonPropertyName("expires")] int Expiry = 0,
+    [property: JsonPropertyName("expires")] double Expiry = 0,
     [property: JsonPropertyName("httpOnly")] bool HttpOnly = false,
     [property: JsonPropertyName("secure")] bool Secure = false,
     [property: JsonPropertyName("sameSite")] string? SameSite = null)

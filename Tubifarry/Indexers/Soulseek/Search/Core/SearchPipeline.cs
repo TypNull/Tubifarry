@@ -31,9 +31,8 @@ public sealed class SearchPipeline : ISlskdSearchChain
     {
         var chain = new LazyIndexerPageableRequestChain(context.Settings.MinimumResults);
 
-        // Analyze and normalize once
         QueryType queryType = QueryAnalyzer.Analyze(context);
-        SearchContext ctx = ApplyNormalization(context, queryType);
+        SearchContext ctx = context with { QueryType = queryType };
 
         _logger.Debug($"Search: Artist='{ctx.Artist}', Album='{ctx.Album}', Type={queryType}");
 
@@ -59,19 +58,6 @@ public sealed class SearchPipeline : ISlskdSearchChain
         return chain;
     }
 
-    private SearchContext ApplyNormalization(SearchContext context, QueryType queryType)
-    {
-        if (!queryType.HasFlag(QueryType.NeedsNormalization) || !context.Settings.NormalizedSeach)
-            return context with { QueryType = queryType };
-
-        var normalized = QueryNormalizer.Normalize(context with { QueryType = queryType });
-        
-        if (normalized.NormalizedArtist != null || normalized.NormalizedAlbum != null)
-            _logger.Trace($"Normalized: '{normalized.NormalizedArtist ?? context.Artist}' / '{normalized.NormalizedAlbum ?? context.Album}'");
-
-        return normalized;
-    }
-
     private IEnumerable<IndexerRequest> ExecuteStrategy(
         ISearchStrategy strategy,
         SearchContext context,
@@ -79,6 +65,11 @@ public sealed class SearchPipeline : ISlskdSearchChain
         SearchExecutor searchExecutor)
     {
         string? query = strategy.GetQuery(context, queryType);
+
+        if (string.IsNullOrWhiteSpace(query))
+            return [];
+
+        query = ResolveRestrictedTerms(query);
 
         if (string.IsNullOrWhiteSpace(query))
             return [];
@@ -102,5 +93,20 @@ public sealed class SearchPipeline : ISlskdSearchChain
             _logger.Error(ex, $"[{strategy.Name}] Error: '{query}'");
             return [];
         }
+    }
+
+    private string ResolveRestrictedTerms(string query)
+    {
+        if (!SlskdTextProcessor.ContainsBlockedTerms(query))
+            return query;
+
+        for (int variant = 0; variant < 3; variant++)
+        {
+            string candidate = SlskdTextProcessor.RewriteRestrictedTerms(query, variant);
+            if (candidate != query && !SlskdTextProcessor.ContainsBlockedTerms(candidate))
+                return candidate;
+        }
+
+        return string.Empty;
     }
 }

@@ -38,6 +38,8 @@ namespace Tubifarry.Core.Model
         public long? Size { get; set; }
 
         public int Priotity { get; set; }
+        public bool ShowPriorityInTitle { get; set; }
+        public string SourceTag { get; set; } = "WEB";
         public List<string>? ExtraInfo { get; set; }
 
         public string DownloadProtocol { get; set; } = downloadProtocol;
@@ -48,7 +50,7 @@ namespace Tubifarry.Core.Model
         /// <summary>
         /// Converts AlbumData into a ReleaseInfo object.
         /// </summary>
-        public ReleaseInfo ToReleaseInfo() => new()
+        public ReleaseInfo ToReleaseInfo() => new ShareInfo()
         {
             Guid = Guid ?? $"{IndexerName}-{AlbumId}-{Codec}-{Bitrate}-{BitDepth}",
             Artist = ArtistName,
@@ -57,6 +59,7 @@ namespace Tubifarry.Core.Model
             InfoUrl = InfoUrl,
             PublishDate = ReleaseDateTime == DateTime.MinValue ? DateTime.UtcNow : ReleaseDateTime,
             DownloadProtocol = DownloadProtocol,
+            Seeders = Priotity > 0 ? Priotity : null,
             Title = ConstructTitle(),
             Codec = Codec.ToString(),
             Resolution = CoverResolution,
@@ -106,7 +109,10 @@ namespace Tubifarry.Core.Model
             if (ExtraInfo?.Count > 0)
                 title += string.Concat(ExtraInfo.Where(info => !string.IsNullOrEmpty(info)).Select(info => $" [{info}]"));
 
-            title += " [WEB]";
+            if (ShowPriorityInTitle && Priotity > 0)
+                title += $" [🔥 {Priotity}]";
+
+            title += $" [{SourceTag}]";
             return title;
         }
 

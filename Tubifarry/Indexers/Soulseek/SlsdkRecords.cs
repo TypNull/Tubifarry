@@ -114,12 +114,23 @@ namespace Tubifarry.Indexers.Soulseek
                 score += Math.Min(1800, (int)(Math.Log10(Math.Max(0.1, speedMbps) + 1) * 1100));
             }
 
-            // ===== QUEUE LENGTH (50 to +1500) =====
-            double queueFactor = Math.Pow(0.94, Math.Min(QueueLength, 40));
-            score += (int)(queueFactor * 1500);
+            // ===== QUEUE LENGTH x FREE SLOT (0 to +2300, multiplicative) =====
+            double queueFactor = Math.Pow(0.94, Math.Min(QueueLength, 60));
+            double slotFactor = HasFreeUploadSlot ? 1.0 : 0.35;
+            score += (int)(queueFactor * slotFactor * 2300);
 
-            // ===== FREE UPLOAD SLOT (0 or +800) =====
-            score += HasFreeUploadSlot ? 800 : 0;
+            // ===== FILE CONSISTENCY (0 to +300) =====
+            if (Files.Count > 0)
+            {
+                int distinctExtensions = Files
+                    .Select(f => (f.Extension ?? System.IO.Path.GetExtension(f.Filename) ?? string.Empty).ToLowerInvariant())
+                    .Where(ext => ext.Length > 0)
+                    .Distinct()
+                    .Count();
+
+                double durationCoverage = Files.Count(f => f.Length is > 0) / (double)Files.Count;
+                score += (int)((distinctExtensions <= 1 ? 150 : 0) + durationCoverage * 150);
+            }
 
             // ===== COLLECTION SIZE (0 to +300) =====
             score += Math.Min(300, (int)(Math.Log10(Math.Max(1, FileCount) + 1) * 150));
@@ -134,10 +145,60 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("interactive")] bool Interactive,
         [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
         [property: JsonPropertyName("mimimumFiles")] int MinimumFiles,
-        [property: JsonPropertyName("maximumFiles")] int? MaximumFiles)
+        [property: JsonPropertyName("maximumFiles")] int? MaximumFiles,
+        [property: JsonPropertyName("tracks")] List<string>? Tracks = null)
     {
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, _jsonOptions)!;
+    }
+
+    public record SlskdEnqueueFailure(
+        [property: JsonPropertyName("filename")] string Filename,
+        [property: JsonPropertyName("message")] string Message
+    );
+
+    public record SlskdEnqueueResult(string? BatchId, List<string> Enqueued, List<SlskdEnqueueFailure> Failed)
+    {
+        public bool AllFailed => Enqueued.Count == 0 && Failed.Count > 0;
+    }
+
+    public record SlskdDestinationConfig(string DownloadsDirectory, string? SubdirectoryPattern)
+    {
+        public const string DefaultPattern = "${SOURCE_DIRECTORY}";
+
+        public bool UsesDefaultPattern =>
+            SubdirectoryPattern is null ||
+            string.Equals(SubdirectoryPattern, DefaultPattern, StringComparison.OrdinalIgnoreCase);
+
+        public static SlskdDestinationConfig? FromOptions(JsonElement options)
+        {
+            if (!options.TryGetProperty("directories", out JsonElement directories) ||
+                !directories.TryGetProperty("downloads", out JsonElement downloads) ||
+                downloads.GetString() is not { Length: > 0 } downloadsDirectory)
+                return null;
+
+            string? pattern = null;
+            if (options.TryGetProperty("transfers", out JsonElement transfers) &&
+                transfers.TryGetProperty("download", out JsonElement download) &&
+                download.TryGetProperty("destination", out JsonElement destination) &&
+                destination.TryGetProperty("subdirectory", out JsonElement subdirectory))
+                pattern = subdirectory.GetString();
+
+            return new SlskdDestinationConfig(downloadsDirectory, pattern);
+        }
+    }
+
+    public sealed record SlskdSearchRequestBody
+    {
+        public required string Id { get; init; }
+        public int FileLimit { get; init; }
+        public bool FilterResponses { get; init; }
+        public long MaximumPeerQueueLength { get; init; }
+        public int MinimumPeerUploadSpeed { get; init; }
+        public int MinimumResponseFileCount { get; init; }
+        public int ResponseLimit { get; init; }
+        public required string SearchText { get; init; }
+        public int SearchTimeout { get; init; }
     }
 
     public record SlskdDirectoryApiResponse(

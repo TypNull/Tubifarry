@@ -1,7 +1,6 @@
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Common.Instrumentation;
-using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Indexers.Exceptions;
 using NzbDrone.Core.IndexerSearch.Definitions;
@@ -18,6 +17,8 @@ namespace Tubifarry.Indexers.Soulseek
 {
     internal class SlskdRequestGenerator : IIndexerRequestGenerator<LazyIndexerPageableRequest>
     {
+        private static readonly TimeSpan SearchStartupGrace = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan SearchDrainGrace = TimeSpan.FromSeconds(20);
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         private readonly SlskdIndexer _indexer;
         private readonly Logger _logger;
@@ -105,7 +106,12 @@ namespace Tubifarry.Indexers.Soulseek
 
         private IEnumerable<IndexerRequest> ExecuteSearch(SearchQuery query)
         {
-            string? searchText = query.SearchText ?? SlskdTextProcessor.BuildSearchText(query.Artist, query.Album);
+            string? searchText = query.SearchText;
+            if (string.IsNullOrWhiteSpace(searchText))
+            {
+                searchText = SlskdTextProcessor.RewriteRestrictedTerms(
+                    SlskdTextProcessor.BuildSearchText(query.Artist, query.Album));
+            }
 
             if (string.IsNullOrWhiteSpace(searchText))
                 return [];
@@ -182,9 +188,9 @@ namespace Tubifarry.Indexers.Soulseek
 
                         _logger.Debug($"Search: {searchText}");
 
-                        dynamic searchData = CreateSearchData(searchText);
+                        SlskdSearchRequestBody searchData = CreateSearchData(searchText);
                         string searchId = searchData.Id;
-                        dynamic searchRequest = CreateSearchRequest(searchData);
+                        HttpRequest searchRequest = CreateSearchRequest(searchData);
 
                         await ExecuteSearchAsync(searchRequest, searchId);
 
@@ -242,20 +248,20 @@ namespace Tubifarry.Indexers.Soulseek
             }
         }
 
-        private dynamic CreateSearchData(string searchText) => new
+        private SlskdSearchRequestBody CreateSearchData(string searchText) => new()
         {
             Id = Guid.NewGuid().ToString(),
-            Settings.FileLimit,
+            FileLimit = Settings.FileLimit,
             FilterResponses = true,
-            Settings.MaximumPeerQueueLength,
-            Settings.MinimumPeerUploadSpeed,
-            Settings.MinimumResponseFileCount,
-            Settings.ResponseLimit,
+            MaximumPeerQueueLength = Settings.MaximumPeerQueueLength,
+            MinimumPeerUploadSpeed = Settings.MinimumPeerUploadSpeed,
+            MinimumResponseFileCount = Settings.MinimumResponseFileCount,
+            ResponseLimit = Settings.ResponseLimit,
             SearchText = searchText,
             SearchTimeout = (int)(Settings.TimeoutInSeconds * 1000),
         };
 
-        private HttpRequest CreateSearchRequest(dynamic searchData)
+        private HttpRequest CreateSearchRequest(SlskdSearchRequestBody searchData)
         {
             HttpRequest searchRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches")
                 .SetHeader("X-API-KEY", Settings.ApiKey)
@@ -296,55 +302,44 @@ namespace Tubifarry.Indexers.Soulseek
                 _ => null
             };
 
-            request.ContentSummary = new
-            {
-                Album = query.Album ?? "",
-                Artist = query.Artist,
-                Interactive = query.Interactive,
-                ExpandDirectory = query.ExpandDirectory,
-                MimimumFiles = minimumFiles,
-                MaximumFiles = maximumFiles
-            }.ToJson();
+            request.ContentSummary = JsonSerializer.Serialize(new SlskdSearchData(
+                Artist: query.Artist,
+                Album: query.Album ?? "",
+                Interactive: query.Interactive,
+                ExpandDirectory: query.ExpandDirectory,
+                MinimumFiles: minimumFiles,
+                MaximumFiles: maximumFiles,
+                Tracks: query.Tracks.Take(50).ToList()));
 
             return request;
         }
 
         private async Task WaitOnSearchCompletionAsync(string searchId, TimeSpan timeout)
         {
-            DateTime startTime = DateTime.UtcNow.AddSeconds(2);
+            DateTime timeoutAt = DateTime.UtcNow + SearchStartupGrace + timeout;
+            DateTime? drainEndsAt = null;
             string state = "InProgress";
-            int totalFilesFound = 0;
-            bool hasTimedOut = false;
-            DateTime timeoutEndTime = DateTime.UtcNow;
 
             while (state == "InProgress")
             {
-                TimeSpan elapsed = DateTime.UtcNow - startTime;
+                DateTime now = DateTime.UtcNow;
 
-                if (elapsed > timeout && !hasTimedOut)
-                {
-                    hasTimedOut = true;
-                    timeoutEndTime = DateTime.UtcNow.AddSeconds(20);
-                }
-                else if (hasTimedOut && timeoutEndTime < DateTime.UtcNow)
-                {
+                if (drainEndsAt == null && now >= timeoutAt)
+                    drainEndsAt = now + SearchDrainGrace;
+                else if (drainEndsAt != null && now >= drainEndsAt)
                     break;
-                }
 
                 JsonNode? searchStatus = await GetSearchResultsAsync(searchId);
 
                 state = searchStatus?["state"]?.GetValue<string>() ?? "InProgress";
-                int fileCount = searchStatus?["fileCount"]?.GetValue<int>() ?? 0;
-
-                if (fileCount > totalFilesFound)
-                    totalFilesFound = fileCount;
-
-                double progress = Math.Clamp(fileCount / (double)Settings.FileLimit, 0.0, 1.0);
-                double delay = hasTimedOut && DateTime.UtcNow < timeoutEndTime ? 1.0 : CalculateQuadraticDelay(progress);
-
-                await Task.Delay(TimeSpan.FromSeconds(delay));
                 if (state != "InProgress")
                     break;
+
+                int fileCount = searchStatus?["fileCount"]?.GetValue<int>() ?? 0;
+                double progress = Math.Clamp(fileCount / (double)Settings.FileLimit, 0.0, 1.0);
+                double delay = drainEndsAt != null ? 1.0 : CalculateQuadraticDelay(progress);
+
+                await Task.Delay(TimeSpan.FromSeconds(delay));
             }
         }
 

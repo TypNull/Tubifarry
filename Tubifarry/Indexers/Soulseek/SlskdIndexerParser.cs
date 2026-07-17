@@ -74,7 +74,10 @@ namespace Tubifarry.Indexers.Soulseek
 
                     IEnumerable<SlskdFileData> filteredFiles = SlskdFileData.GetFilteredFiles(response.Files, Settings.OnlyAudioFiles, Settings.IncludeFileExtensions);
 
-                    foreach (IGrouping<string, SlskdFileData> directoryGroup in filteredFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)))
+                    List<IGrouping<string, SlskdFileData>> directoryGroups = SlskdTextProcessor.MergeDiscSubdirectories(
+                        filteredFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)));
+
+                    foreach (IGrouping<string, SlskdFileData> directoryGroup in directoryGroups)
                     {
                         if (string.IsNullOrEmpty(directoryGroup.Key))
                             continue;
