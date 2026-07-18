@@ -354,7 +354,7 @@ namespace Tubifarry.Metadata.Converter
                 return false;
             }
 
-            if (!AudioMetadataHandler.IsTargetFormatSupportedForEncoding(targetFormat))
+            if (!AudioFormatHelper.IsTargetFormatSupportedForEncoding(targetFormat))
             {
                 _logger.Warn("Target format {0} is not supported for encoding by FFmpeg", targetFormat);
                 return false;

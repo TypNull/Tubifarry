@@ -20,17 +20,17 @@
 	
 	<ItemGroup>
 		<PackageReference Include="FuzzySharp" Version="2.0.2" />
-		<PackageReference Include="Sentry" Version="6.6.0" />
-		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.45">
+		<PackageReference Include="Sentry" Version="6.7.0" />
+		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.46">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.2" />
 		<PackageReference Include="System.Text.Json" Version="8.0.6" GeneratePathProperty="true" />
-		<PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
-		<PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
-		<PackageReference Include="YamlDotNet" Version="18.0.0" />
-		<PackageReference Include="YouTubeMusicAPI" Version="3.0.9" />
+		<PackageReference Include="FFMpegCore" Version="5.0.2" />
+		<PackageReference Include="SharpCompress" Version="0.50.0" />
+		<PackageReference Include="YamlDotNet" Version="18.1.0" />
+		<PackageReference Include="YouTubeMusicAPI" Version="3.0.10" />
 		<PackageReference Include="YouTubeSessionGenerator" Version="1.0.3" />
 	</ItemGroup>
 	

@@ -4,16 +4,16 @@ using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
 using NzbDrone.Core.Tags;
-using Tubifarry.Core.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Utilities;
-using Xabe.FFmpeg;
 
 namespace Tubifarry.Metadata.Converter
 {
-    public class AudioConverter(Logger logger, Lazy<ITagService> tagService) : MetadataBase<AudioConverterSettings>
+    public class AudioConverter(Logger logger, Lazy<ITagService> tagService, IAudioProcessingService audioProcessing) : MetadataBase<AudioConverterSettings>
     {
         private readonly Logger _logger = logger;
         private readonly Lazy<ITagService> _tagService = tagService;
+        private readonly IAudioProcessingService _audioProcessing = audioProcessing;
 
         public override string Name => "Codec Tinker";
 
@@ -57,9 +57,9 @@ namespace Tubifarry.Metadata.Converter
 
         private async Task PerformConversion(TrackFile trackFile, ConversionResult result)
         {
-            AudioMetadataHandler audioHandler = new(trackFile.Path);
-            bool success = await audioHandler.TryConvertToFormatAsync(result.TargetFormat, result.TargetBitrate, result.TargetBitDepth, result.UseCBR);
-            trackFile.Path = audioHandler.TrackPath;
+            AudioFileContext audioFile = new(trackFile.Path);
+            bool success = await _audioProcessing.ConvertToFormatAsync(audioFile, result.TargetFormat, result.TargetBitrate, result.TargetBitDepth, result.UseCBR);
+            trackFile.Path = audioFile.FilePath;
 
             if (success)
                 _logger.Info($"Successfully converted track: {trackFile.Path}");
@@ -67,64 +67,9 @@ namespace Tubifarry.Metadata.Converter
                 _logger.Warn($"Failed to convert track: {trackFile.Path}");
         }
 
-        private async Task<int?> GetTrackBitrateAsync(string filePath)
-        {
-            try
-            {
-                IMediaInfo mediaInfo = await FFmpeg.GetMediaInfo(filePath);
-                IAudioStream? audioStream = mediaInfo.AudioStreams.FirstOrDefault();
+        private Task<int?> GetTrackBitrateAsync(string filePath) => _audioProcessing.GetAudioBitrateAsync(filePath);
 
-                if (audioStream == null)
-                    return null;
-
-                return AudioFormatHelper.RoundToStandardBitrate((int)(audioStream.Bitrate / 1000));
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to get bitrate: {0}", filePath);
-                return null;
-            }
-        }
-
-        private async Task<int?> GetTrackBitDepthAsync(string filePath)
-        {
-            try
-            {
-                string probeArgs = $"-v error -select_streams a:0 -show_entries stream=bits_per_raw_sample,sample_fmt -of default=noprint_wrappers=1 {filePath.Escape()}";
-                string probeOutput = await Probe.New().Start(probeArgs);
-
-                if (string.IsNullOrWhiteSpace(probeOutput))
-                    return null;
-
-                foreach (string line in probeOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (line.StartsWith("bits_per_raw_sample=") && int.TryParse(line.AsSpan(20), out int bitsPerRaw) && bitsPerRaw > 0)
-                        return bitsPerRaw;
-                }
-
-                foreach (string line in probeOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (line.StartsWith("sample_fmt="))
-                    {
-                        string sampleFmt = line[11..].Trim().ToLower();
-                        return sampleFmt switch
-                        {
-                            "s16" or "s16le" or "s16be" or "s16p" => 16,
-                            "s24" or "s24le" or "s24be" or "s24p" => 24,
-                            "s32" or "s32le" or "s32be" or "s32p" => 32,
-                            _ => null
-                        };
-                    }
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to get bit depth: {0}", filePath);
-                return null;
-            }
-        }
+        private Task<int?> GetTrackBitDepthAsync(string filePath) => _audioProcessing.GetAudioBitDepthAsync(filePath);
 
 
         private ConversionResult ShouldBlockConversion(ConversionRule rule, AudioFormat trackFormat, int? currentBitrate, int? currentBitDepth)
@@ -274,7 +219,7 @@ namespace Tubifarry.Metadata.Converter
             // For .m4a files, use codec detection since they can contain AAC or ALAC
             if (string.Equals(extension, ".m4a", StringComparison.OrdinalIgnoreCase))
             {
-                AudioFormat detectedFormat = await AudioMetadataHandler.GetSupportedCodecAsync(trackPath);
+                AudioFormat detectedFormat = await _audioProcessing.DetectAudioFormatAsync(trackPath);
                 if (detectedFormat != AudioFormat.Unknown)
                 {
                     _logger.Trace($"Detected codec-based format {detectedFormat} for .m4a file: {trackPath}");

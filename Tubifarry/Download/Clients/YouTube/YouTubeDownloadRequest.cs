@@ -7,6 +7,7 @@ using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 using Tubifarry.Download.Base;
@@ -168,22 +169,25 @@ namespace Tubifarry.Download.Clients.YouTube
 
             try
             {
-                AudioMetadataHandler audioData = new(trackPath) { AlbumCover = _albumCover, UseID3v2_3 = Options.UseID3v2_3 };
+                if (Options.AudioProcessing == null)
+                    return false;
+
+                AudioFileContext audioFile = new(trackPath) { AlbumCover = _albumCover, UseID3v2_3 = Options.UseID3v2_3 };
 
                 AudioFormat format = AudioFormatHelper.ConvertOptionToAudioFormat(Options.ReEncodeOptions);
 
                 if (Options.ReEncodeOptions == ReEncodeOptions.OnlyExtract)
-                    await audioData.TryExtractAudioFromVideoAsync();
+                    await Options.AudioProcessing.ExtractAudioFromVideoAsync(audioFile);
                 else if (format != AudioFormat.Unknown)
-                    await audioData.TryConvertToFormatAsync(format);
+                    await Options.AudioProcessing.ConvertToFormatAsync(audioFile, format);
 
                 if (Options.UseSponsorBlock && !string.IsNullOrWhiteSpace(trackInfo.Id))
-                    await new SponsorBlock(audioData.TrackPath, trackInfo.Id, Options.SponsorBlockApiEndpoint).LookupAndTrimAsync(token);
-                trackPath = audioData.TrackPath;
+                    await new SponsorBlock(audioFile.FilePath, trackInfo.Id, Options.SponsorBlockApiEndpoint).LookupAndTrimAsync(token);
+                trackPath = audioFile.FilePath;
                 Album album = CreateAlbumFromYouTubeData(albumInfo);
                 Track track = CreateTrackFromYouTubeData(trackInfo, albumInfo);
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (!Options.AudioProcessing.EmbedMetadata(audioFile, album, track))
                 {
                     _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(trackPath)}");
                     return false;

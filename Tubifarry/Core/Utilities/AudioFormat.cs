@@ -169,6 +169,29 @@ namespace Tubifarry.Core.Utilities
         /// </summary>
         public static bool IsLossyFormat(AudioFormat format) => _lossyFormats.Contains(format);
 
+        private static readonly AudioFormat[] _encodableFormats = [
+            AudioFormat.AAC,
+            AudioFormat.MP3,
+            AudioFormat.Opus,
+            AudioFormat.Vorbis,
+            AudioFormat.FLAC,
+            AudioFormat.ALAC,
+            AudioFormat.WAV,
+            AudioFormat.MP4,
+            AudioFormat.AIFF,
+            AudioFormat.OGG,
+            AudioFormat.AMR,
+            AudioFormat.WMA
+        ];
+
+        public static bool IsTargetFormatSupportedForEncoding(AudioFormat format) => _encodableFormats.Contains(format);
+
+        public static bool SupportsMetadataEmbedding(AudioFormat format) => format switch
+        {
+            AudioFormat.AC3 or AudioFormat.EAC3 or AudioFormat.MIDI => false,
+            _ => true
+        };
+
         /// <summary>
         /// Determines the audio format from a given file extension.
         /// </summary>

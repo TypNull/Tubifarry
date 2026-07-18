@@ -1,9 +1,9 @@
+using FFMpegCore;
 using NLog;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Xabe.FFmpeg;
 
 namespace Tubifarry.Download.Clients.YouTube
 {
@@ -123,17 +123,16 @@ namespace Tubifarry.Download.Clients.YouTube
                     {
                         string segmentFile = Path.Combine(tempDir, $"segment_{segmentIndex:D3}{Path.GetExtension(_filePath)}");
 
-                        IConversion extraction = FFmpeg.Conversions.New()
-                            .AddParameter($"-i {_filePath.Escape()}")
-                            .AddParameter($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
-                            .AddParameter($"-to {segmentStart.ToString("F3", CultureInfo.InvariantCulture)}")
-                            .AddParameter("-c copy")
-                            .AddParameter("-map 0")  // Copy all streams
-                            .AddParameter("-avoid_negative_ts make_zero")
-                            .SetOverwriteOutput(true)
-                            .SetOutput(segmentFile);
-
-                        await extraction.Start(cancellationToken);
+                        await FFMpegArguments
+                            .FromFileInput(_filePath)
+                            .OutputToFile(segmentFile, overwrite: true, outputOptions => outputOptions
+                                .WithCustomArgument($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
+                                .WithCustomArgument($"-to {segmentStart.ToString("F3", CultureInfo.InvariantCulture)}")
+                                .WithCustomArgument("-c copy")
+                                .WithCustomArgument("-map 0")
+                                .WithCustomArgument("-avoid_negative_ts make_zero"))
+                            .CancellableThrough(cancellationToken)
+                            .ProcessAsynchronously();
                         segmentFiles.Add(segmentFile);
                         segmentIndex++;
                     }
@@ -145,15 +144,14 @@ namespace Tubifarry.Download.Clients.YouTube
                 {
                     string segmentFile = Path.Combine(tempDir, $"segment_{segmentIndex:D3}{Path.GetExtension(_filePath)}");
 
-                    IConversion extraction = FFmpeg.Conversions.New()
-                        .AddParameter($"-i {_filePath.Escape()}")
-                        .AddParameter($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
-                        .AddParameter("-c copy")
-                        .AddParameter("-map 0")  // Copy all streams
-                        .SetOverwriteOutput(true)
-                        .SetOutput(segmentFile);
-
-                    await extraction.Start(cancellationToken);
+                    await FFMpegArguments
+                        .FromFileInput(_filePath)
+                        .OutputToFile(segmentFile, overwrite: true, outputOptions => outputOptions
+                            .WithCustomArgument($"-ss {previousEnd.ToString("F3", CultureInfo.InvariantCulture)}")
+                            .WithCustomArgument("-c copy")
+                            .WithCustomArgument("-map 0"))
+                        .CancellableThrough(cancellationToken)
+                        .ProcessAsynchronously();
                     segmentFiles.Add(segmentFile);
                 }
 
@@ -172,18 +170,17 @@ namespace Tubifarry.Download.Clients.YouTube
                 // Concatenate with proper metadata handling
                 string tempOutputPath = Path.Combine(inputDir, $"sponsorblock_{Guid.NewGuid()}{Path.GetExtension(_filePath)}");
 
-                IConversion concat = FFmpeg.Conversions.New()
-                    .AddParameter("-f concat")
-                    .AddParameter("-safe 0")
-                    .AddParameter($"-i {concatListPath.Escape()}")
-                    .AddParameter($"-i {_filePath.Escape()}")  // Add original file for metadata
-                    .AddParameter("-c copy")
-                    .AddParameter("-map 0")  // Map concat result
-                    .AddParameter("-map_metadata 1")  // Take metadata from original file
-                    .SetOverwriteOutput(true)
-                    .SetOutput(tempOutputPath);
-
-                await concat.Start(cancellationToken);
+                await FFMpegArguments
+                    .FromFileInput(concatListPath, verifyExists: true, inputOptions => inputOptions
+                        .WithCustomArgument("-f concat")
+                        .WithCustomArgument("-safe 0"))
+                    .AddFileInput(_filePath)
+                    .OutputToFile(tempOutputPath, overwrite: true, outputOptions => outputOptions
+                        .WithCustomArgument("-c copy")
+                        .WithCustomArgument("-map 0")
+                        .WithCustomArgument("-map_metadata 1"))
+                    .CancellableThrough(cancellationToken)
+                    .ProcessAsynchronously();
 
                 if (File.Exists(tempOutputPath) && new FileInfo(tempOutputPath).Length > 0)
                 {

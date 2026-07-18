@@ -7,6 +7,7 @@ using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
 using System.Text.Json;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Model;
 using Tubifarry.Download.Base;
 using Tubifarry.Indexers.DABMusic;
@@ -291,12 +292,12 @@ namespace Tubifarry.Download.Clients.DABMusic
 
             try
             {
-                AudioMetadataHandler audioData = new(trackPath) { AlbumCover = _albumCover };
+                AudioFileContext audioFile = new(trackPath) { AlbumCover = _albumCover };
 
                 Album album = CreateAlbumFromDABData(_currentAlbum);
                 Track track = CreateTrackFromDABData(trackInfo, _currentAlbum);
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (Options.AudioProcessing?.EmbedMetadata(audioFile, album, track) != true)
                 {
                     _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(trackPath)}");
                     return false;

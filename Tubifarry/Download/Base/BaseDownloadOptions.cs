@@ -2,6 +2,7 @@
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Organizer;
 using Requests.Options;
+using Tubifarry.Core.FFmpeg;
 
 namespace Tubifarry.Download.Base
 {
@@ -65,6 +66,11 @@ namespace Tubifarry.Download.Base
         /// </summary>
         public IEnumerable<IHttpRequestInterceptor> RequestInterceptors { get; set; } = [];
 
+        /// <summary>
+        /// Audio processing service for conversion, extraction and tagging
+        /// </summary>
+        public IAudioProcessingService? AudioProcessing { get; set; }
+
         public BaseDownloadOptions() { }
 
         protected BaseDownloadOptions(BaseDownloadOptions options) : base(options)
@@ -80,6 +86,7 @@ namespace Tubifarry.Download.Base
             Chunks = options.Chunks;
             ItemId = options.ItemId;
             RequestInterceptors = options.RequestInterceptors;
+            AudioProcessing = options.AudioProcessing;
         }
     }
 }

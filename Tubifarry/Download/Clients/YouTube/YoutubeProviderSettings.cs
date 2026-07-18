@@ -28,17 +28,6 @@ namespace Tubifarry.Download.Clients.YouTube
                 .Must(chunks => chunks > 0 && chunks < 5)
                 .WithMessage("Chunks must be greater than 0 and smaller than 5.");
 
-            // Validate FFmpegPath (if re-encoding is enabled)
-            RuleFor(x => x.FFmpegPath)
-                .NotEmpty()
-                .When(x => x.ReEncode != (int)ReEncodeOptions.Disabled)
-                .WithMessage("FFmpeg path is required when re-encoding is enabled.");
-
-            RuleFor(x => x.FFmpegPath)
-                .IsValidPath()
-                .When(x => x.ReEncode != (int)ReEncodeOptions.Disabled)
-                .WithMessage("Invalid FFmpeg path. Please provide a valid path to the FFmpeg binary.");
-
             // Validate Random Delay Range
             RuleFor(x => x.RandomDelayMin)
                 .LessThanOrEqualTo(x => x.RandomDelayMax)
@@ -88,9 +77,6 @@ namespace Tubifarry.Download.Clients.YouTube
 
         [FieldDefinition(3, Label = "ReEncode", Type = FieldType.Select, SelectOptions = typeof(ReEncodeOptions), HelpText = "Specify whether to re-encode audio files and how to handle FFmpeg.", Advanced = true)]
         public int ReEncode { get; set; } = (int)ReEncodeOptions.Disabled;
-
-        [FieldDefinition(4, Label = "FFmpeg Path", Type = FieldType.Path, Placeholder = "/downloads/FFmpeg", HelpText = "Specify the path to the FFmpeg binary. Not required if 'Disabled' is selected.", Advanced = true)]
-        public string FFmpegPath { get; set; } = string.Empty;
 
         [FieldDefinition(5, Label = "File Chunk Count", Type = FieldType.Number, HelpText = "Number of chunks to split the download into. Each chunk is its own download. Note: Non-chunked downloads from YouTube are typically much slower.", Advanced = true)]
         public int Chunks { get; set; } = 2;

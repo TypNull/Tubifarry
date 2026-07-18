@@ -3,6 +3,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Records;
 using Tubifarry.Download.Base;
 using YouTubeMusicAPI.Client;
@@ -21,10 +22,11 @@ namespace Tubifarry.Download.Clients.YouTube
     {
         private YouTubeMusicClient? _youTubeClient;
         private SessionTokens? _sessionToken;
-        private Task? _testTask;
+        private readonly IAudioProcessingService _audioProcessing;
 
-        public YoutubeDownloadManager(Logger logger) : base(logger)
+        public YoutubeDownloadManager(IAudioProcessingService audioProcessing, Logger logger) : base(logger)
         {
+            _audioProcessing = audioProcessing;
             _requesthandler.MaxParallelism = 2;
         }
 
@@ -34,14 +36,13 @@ namespace Tubifarry.Download.Clients.YouTube
             NamingConfig namingConfig,
             YoutubeClient provider)
         {
-            _testTask ??= provider.TestFFmpeg();
-            _testTask.GetAwaiter().GetResult();
             await UpdateClientAsync(provider);
 
             YouTubeDownloadOptions options = new()
             {
                 YouTubeMusicClient = _youTubeClient,
                 Handler = _requesthandler,
+                AudioProcessing = _audioProcessing,
                 DownloadPath = provider.Settings.DownloadPath,
                 Chunks = provider.Settings.Chunks,
                 DelayBetweenAttemps = TimeSpan.FromSeconds(5),

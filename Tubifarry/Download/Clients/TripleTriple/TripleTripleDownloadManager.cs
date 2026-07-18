@@ -4,6 +4,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Download.Base;
 using Tubifarry.Indexers.TripleTriple;
 
@@ -14,10 +15,12 @@ namespace Tubifarry.Download.Clients.TripleTriple
     public class TripleTripleDownloadManager : BaseDownloadManager<TripleTripleDownloadRequest, TripleTripleDownloadOptions, TripleTripleClient>, ITripleTripleDownloadManager
     {
         private readonly IEnumerable<IHttpRequestInterceptor> _requestInterceptors;
+        private readonly IAudioProcessingService _audioProcessing;
 
-        public TripleTripleDownloadManager(IEnumerable<IHttpRequestInterceptor> requestInterceptors, Logger logger) : base(logger)
+        public TripleTripleDownloadManager(IEnumerable<IHttpRequestInterceptor> requestInterceptors, IAudioProcessingService audioProcessing, Logger logger) : base(logger)
         {
             _requestInterceptors = requestInterceptors;
+            _audioProcessing = audioProcessing;
         }
 
         protected override Task<TripleTripleDownloadRequest> CreateDownloadRequest(
@@ -32,6 +35,7 @@ namespace Tubifarry.Download.Clients.TripleTriple
             TripleTripleDownloadOptions options = new()
             {
                 Handler = _requesthandler,
+                AudioProcessing = _audioProcessing,
                 DownloadPath = provider.Settings.DownloadPath,
                 BaseUrl = baseUrl,
                 MaxDownloadSpeed = provider.Settings.MaxDownloadSpeed * 1024,

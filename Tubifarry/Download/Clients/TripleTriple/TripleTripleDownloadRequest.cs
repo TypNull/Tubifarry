@@ -7,6 +7,7 @@ using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
 using System.Text.Json;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
@@ -318,11 +319,14 @@ namespace Tubifarry.Download.Clients.TripleTriple
 
             try
             {
-                AudioMetadataHandler audioData = new(trackPath) { AlbumCover = _albumCover };
+                if (Options.AudioProcessing == null)
+                    return false;
+
+                AudioFileContext audioFile = new(trackPath) { AlbumCover = _albumCover };
 
                 if (!string.IsNullOrEmpty(media.DecryptionKey))
                 {
-                    if (!await audioData.TryDecryptAsync(media.DecryptionKey, media.StreamInfo?.Codec, token))
+                    if (!await Options.AudioProcessing.DecryptAsync(audioFile, media.DecryptionKey, media.StreamInfo?.Codec, token))
                     {
                         _logger.Error($"Failed to decrypt track: {Path.GetFileName(trackPath)}");
                         return false;
@@ -336,19 +340,19 @@ namespace Tubifarry.Download.Clients.TripleTriple
                 {
                     string? syncedLyrics = media.Lyrics?.Synced ?? media.Tags?.PlainLyrics;
                     if (!string.IsNullOrEmpty(syncedLyrics))
-                        audioData.Lyric = ParseSyncedLyrics(syncedLyrics);
+                        audioFile.Lyric = ParseSyncedLyrics(syncedLyrics);
                 }
 
-                if (!audioData.TryEmbedMetadata(album, track))
+                if (!Options.AudioProcessing.EmbedMetadata(audioFile, album, track))
                 {
-                    _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(audioData.TrackPath)}");
+                    _logger.Warn($"Failed to embed metadata for: {Path.GetFileName(audioFile.FilePath)}");
                     return false;
                 }
 
-                if (Options.CreateLrcFile && audioData.Lyric != null)
-                    await audioData.TryCreateLrcFileAsync(token);
+                if (Options.CreateLrcFile && audioFile.Lyric != null)
+                    await Options.AudioProcessing.CreateLrcFileAsync(audioFile, token);
 
-                _logger.Trace($"Successfully processed track: {Path.GetFileName(audioData.TrackPath)}");
+                _logger.Trace($"Successfully processed track: {Path.GetFileName(audioFile.FilePath)}");
                 return true;
             }
             catch (Exception ex)

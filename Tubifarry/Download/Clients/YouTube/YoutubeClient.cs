@@ -10,10 +10,9 @@ using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using Requests;
-using Tubifarry.Core.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Core.Records;
 using Tubifarry.Core.Utilities;
-using Xabe.FFmpeg;
 
 namespace Tubifarry.Download.Clients.YouTube
 {
@@ -21,11 +20,13 @@ namespace Tubifarry.Download.Clients.YouTube
     {
         private readonly IYoutubeDownloadManager _dlManager;
         private readonly INamingConfigService _naminService;
+        private readonly IFFmpegInstallation _ffmpegInstallation;
 
-        public YoutubeClient(IYoutubeDownloadManager dlManager, IConfigService configService, IDiskProvider diskProvider, INamingConfigService namingConfigService, IRemotePathMappingService remotePathMappingService, ILocalizationService localizationService, Logger logger) : base(configService, diskProvider, remotePathMappingService, localizationService, logger)
+        public YoutubeClient(IYoutubeDownloadManager dlManager, IConfigService configService, IDiskProvider diskProvider, INamingConfigService namingConfigService, IRemotePathMappingService remotePathMappingService, ILocalizationService localizationService, IFFmpegInstallation ffmpegInstallation, Logger logger) : base(configService, diskProvider, remotePathMappingService, localizationService, logger)
         {
             _dlManager = dlManager;
             _naminService = namingConfigService;
+            _ffmpegInstallation = ffmpegInstallation;
             RequestHandler.MainRequestHandlers[1].MaxParallelism = 1;
         }
 
@@ -66,32 +67,17 @@ namespace Tubifarry.Download.Clients.YouTube
                 failures.Add(new ValidationFailure("TrustedSessionGeneratorUrl", $"Failed to valiate session generator service: {ex.Message}"));
             }
 
-            if (string.IsNullOrEmpty(Settings.DownloadPath))
-                failures.AddRange(PermissionTester.TestAllPermissions(Settings.FFmpegPath, _logger));
-            failures.AddIfNotNull(TestFFmpeg().GetAwaiter().GetResult());
+            failures.AddIfNotNull(TestFFmpeg());
         }
 
-        public async Task<ValidationFailure> TestFFmpeg()
+        public ValidationFailure TestFFmpeg()
         {
             if (Settings.ReEncode != (int)ReEncodeOptions.Disabled || Settings.UseSponsorBlock)
             {
-                string old = FFmpeg.ExecutablesPath;
-                FFmpeg.SetExecutablesPath(Settings.FFmpegPath);
-                AudioMetadataHandler.ResetFFmpegInstallationCheck();
-                if (!AudioMetadataHandler.CheckFFmpegInstalled())
-                {
-                    try
-                    {
-                        await AudioMetadataHandler.InstallFFmpeg(Settings.FFmpegPath);
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!string.IsNullOrEmpty(old))
-                            FFmpeg.SetExecutablesPath(old);
-                        return new ValidationFailure("FFmpegInstallation", $"Failed to install FFmpeg: {ex.Message}");
-                    }
-                }
+                if (!_ffmpegInstallation.IsInstalled())
+                    return new ValidationFailure("ReEncode", "FFmpeg is not available. Set up and test the 'FFmpeg' provider in the Metadata settings to download it, or disable re-encoding and SponsorBlock.");
             }
+
             return null!;
         }
     }

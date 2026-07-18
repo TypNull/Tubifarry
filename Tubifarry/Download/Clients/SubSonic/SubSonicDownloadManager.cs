@@ -4,6 +4,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Download.Base;
 
 namespace Tubifarry.Download.Clients.SubSonic
@@ -14,9 +15,10 @@ namespace Tubifarry.Download.Clients.SubSonic
     /// <summary>
     /// Manager for SubSonic downloads, handles creating and managing download requests
     /// </summary>
-    public class SubSonicDownloadManager(IEnumerable<IHttpRequestInterceptor> requestInterceptors, Logger logger) : BaseDownloadManager<SubSonicDownloadRequest, SubSonicDownloadOptions, SubSonicClient>(logger), ISubSonicDownloadManager
+    public class SubSonicDownloadManager(IEnumerable<IHttpRequestInterceptor> requestInterceptors, IAudioProcessingService audioProcessing, Logger logger) : BaseDownloadManager<SubSonicDownloadRequest, SubSonicDownloadOptions, SubSonicClient>(logger), ISubSonicDownloadManager
     {
         private readonly IEnumerable<IHttpRequestInterceptor> _requestInterceptors = requestInterceptors;
+        private readonly IAudioProcessingService _audioProcessing = audioProcessing;
 
         protected override async Task<SubSonicDownloadRequest> CreateDownloadRequest(
             RemoteAlbum remoteAlbum,
@@ -38,6 +40,7 @@ namespace Tubifarry.Download.Clients.SubSonic
             SubSonicDownloadOptions options = new()
             {
                 Handler = _requesthandler,
+                AudioProcessing = _audioProcessing,
                 DownloadPath = provider.Settings.DownloadPath,
                 BaseUrl = baseUrl,
                 Username = provider.Settings.Username,

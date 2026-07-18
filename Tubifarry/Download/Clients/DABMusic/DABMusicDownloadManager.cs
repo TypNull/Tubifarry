@@ -4,6 +4,7 @@ using NzbDrone.Core.Download;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
+using Tubifarry.Core.FFmpeg;
 using Tubifarry.Download.Base;
 using Tubifarry.Indexers.DABMusic;
 
@@ -12,17 +13,8 @@ namespace Tubifarry.Download.Clients.DABMusic
     public interface IDABMusicDownloadManager : IBaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>
     { }
 
-    public class DABMusicDownloadManager : BaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>, IDABMusicDownloadManager
+    public class DABMusicDownloadManager(IDABMusicSessionManager sessionManager, IEnumerable<IHttpRequestInterceptor> requestInterceptors, IAudioProcessingService audioProcessing, Logger logger) : BaseDownloadManager<DABMusicDownloadRequest, DABMusicDownloadOptions, DABMusicClient>(logger), IDABMusicDownloadManager
     {
-        private readonly IDABMusicSessionManager _sessionManager;
-        private readonly IEnumerable<IHttpRequestInterceptor> _requestInterceptors;
-
-        public DABMusicDownloadManager(IDABMusicSessionManager sessionManager, IEnumerable<IHttpRequestInterceptor> requestInterceptors, Logger logger) : base(logger)
-        {
-            _sessionManager = sessionManager;
-            _requestInterceptors = requestInterceptors;
-        }
-
         protected override async Task<DABMusicDownloadRequest> CreateDownloadRequest(
             RemoteAlbum remoteAlbum,
             IIndexer indexer,
@@ -38,12 +30,13 @@ namespace Tubifarry.Download.Clients.DABMusic
             DABMusicDownloadOptions options = new()
             {
                 Handler = _requesthandler,
+                AudioProcessing = audioProcessing,
                 DownloadPath = provider.Settings.DownloadPath,
                 BaseUrl = baseUrl,
                 MaxDownloadSpeed = provider.Settings.MaxDownloadSpeed * 1024, // Convert KB/s to bytes/s
                 ConnectionRetries = provider.Settings.ConnectionRetries,
                 NamingConfig = namingConfig,
-                RequestInterceptors = _requestInterceptors,
+                RequestInterceptors = requestInterceptors,
                 DelayBetweenAttemps = TimeSpan.FromSeconds(2),
                 NumberOfAttempts = (byte)provider.Settings.ConnectionRetries,
                 ClientInfo = DownloadClientItemClientInfo.FromDownloadClient(provider, false),
@@ -54,7 +47,7 @@ namespace Tubifarry.Download.Clients.DABMusic
             };
 
             _requesthandler.MaxParallelism = provider.Settings.MaxParallelDownloads;
-            return new DABMusicDownloadRequest(remoteAlbum, _sessionManager, options);
+            return new DABMusicDownloadRequest(remoteAlbum, sessionManager, options);
         }
     }
 }
