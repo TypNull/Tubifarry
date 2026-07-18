@@ -3,6 +3,7 @@ using NzbDrone.Core.Annotations;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.Validation;
 using System.Text.RegularExpressions;
+using Tubifarry.Indexers.Soulseek;
 
 namespace Tubifarry.Download.Clients.Soulseek
 {
@@ -70,6 +71,11 @@ namespace Tubifarry.Download.Clients.Soulseek
         public bool IsLocalhost { get; set; }
 
         public string DownloadPath { get; set; } = string.Empty;
+
+        public string? SubdirectoryPattern { get; set; }
+
+        public SlskdDestinationConfig? GetDestinationConfig() =>
+            string.IsNullOrEmpty(DownloadPath) ? null : new SlskdDestinationConfig(DownloadPath, SubdirectoryPattern);
 
         public TimeSpan? GetTimeout() => Timeout == null ? null : TimeSpan.FromHours(Timeout.Value);
 

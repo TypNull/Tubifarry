@@ -25,6 +25,10 @@ public class SlskdDownloadItem
 
     public List<Task> PostProcessTasks { get; } = [];
     public DownloadItemStatus? LastReportedStatus { get; set; }
+    public string? ConfirmedSubdirectory { get; set; }
+    public string? DerivedSubdirectory { get; set; }
+    public string? BatchId { get; set; }
+    public bool DiscMergeScheduled { get; set; }
     public IReadOnlyDictionary<string, SlskdFileState> FileStates => _previousFileStates;
 
     public SlskdDownloadDirectory? SlskdDownloadDirectory
@@ -87,11 +91,19 @@ public class SlskdDownloadItem
         }
     }
 
-    public OsPath GetFullFolderPath(OsPath downloadPath) => new(Path.Combine(
-        downloadPath.FullPath,
-        SlskdDownloadDirectory?.Directory
-            .Replace('\\', '/')
-            .TrimEnd('/')
-            .Split('/')
-            .LastOrDefault() ?? ""));
+    public OsPath GetFullFolderPath(OsPath downloadPath)
+    {
+        string subdirectory = ConfirmedSubdirectory
+            ?? DerivedSubdirectory
+            ?? SlskdDownloadDirectory?.Directory
+                .Replace('\\', '/')
+                .TrimEnd('/')
+                .Split('/')
+                .LastOrDefault()
+            ?? string.Empty;
+
+        return subdirectory.Length == 0
+            ? downloadPath
+            : downloadPath + new OsPath(subdirectory);
+    }
 }
