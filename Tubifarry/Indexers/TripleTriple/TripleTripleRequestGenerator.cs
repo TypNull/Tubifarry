@@ -22,29 +22,45 @@ namespace Tubifarry.Indexers.TripleTriple
 
         public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
-            string query = string.Join(' ', new[] { searchCriteria.AlbumQuery, searchCriteria.ArtistQuery }.Where(s => !string.IsNullOrWhiteSpace(s)));
             bool isSingle = searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value?.Min(r => r.TrackCount) == 1;
-            return Generate(query, isSingle);
+            return Generate(searchCriteria.ArtistQuery, searchCriteria.AlbumQuery, isSingle);
         }
 
-        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria) => Generate(searchCriteria.ArtistQuery, false);
+        public IndexerPageableRequestChain GetSearchRequests(ArtistSearchCriteria searchCriteria) => Generate(searchCriteria.ArtistQuery, null, false);
 
         public void SetSetting(TripleTripleIndexerSettings settings) => _settings = settings;
 
-        private IndexerPageableRequestChain Generate(string query, bool isSingle)
+        private IndexerPageableRequestChain Generate(string? artistQuery, string? albumQuery, bool isSingle)
         {
             IndexerPageableRequestChain chain = new();
-            if (string.IsNullOrWhiteSpace(query))
+            string combinedQuery = string.Join(' ', new[] { albumQuery, artistQuery }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            if (string.IsNullOrWhiteSpace(combinedQuery))
             {
                 _logger.Warn("Empty query, skipping search request");
                 return chain;
             }
 
+            string type = isSingle ? "track" : "album";
+
+            chain.AddTier([CreateRequest(combinedQuery, type, isSingle)]);
+
+            string? fallbackQuery = !string.IsNullOrWhiteSpace(artistQuery) ? artistQuery : albumQuery;
+            if (!string.IsNullOrWhiteSpace(fallbackQuery) && !string.Equals(fallbackQuery, combinedQuery, StringComparison.OrdinalIgnoreCase))
+                chain.AddTier([CreateRequest(fallbackQuery, type, isSingle)]);
+
+            if (isSingle)
+                chain.AddTier([CreateRequest(combinedQuery, "album", true)]);
+
+            return chain;
+        }
+
+        private IndexerRequest CreateRequest(string query, string type, bool isSingle)
+        {
             string baseUrl = _settings!.BaseUrl.TrimEnd('/');
             string country = ((TripleTripleCountry)_settings.CountryCode).ToString();
             string codec = ((TripleTripleCodec)_settings.Codec).ToString().ToLowerInvariant();
 
-            string url = $"{baseUrl}/api/amazon-music/search?query={Uri.EscapeDataString(query)}&types=track,album&country={country}";
+            string url = $"{baseUrl}/api/amazon-music/search?query={Uri.EscapeDataString(query)}&type={type}&country={country}";
             _logger.Trace("Creating TripleTriple search request: {Url}", url);
 
             HttpRequest req = new(url)
@@ -55,25 +71,7 @@ namespace Tubifarry.Indexers.TripleTriple
             req.Headers["User-Agent"] = Tubifarry.UserAgent;
             req.Headers["Referer"] = $"{baseUrl}/search/{Uri.EscapeDataString(query)}";
 
-            chain.AddTier([new IndexerRequest(req)]);
-
-            if (isSingle)
-            {
-                string fallbackUrl = $"{baseUrl}/api/amazon-music/search?query={Uri.EscapeDataString(query)}&types=track&country={country}";
-                _logger.Trace("Adding fallback track-only search: {Url}", fallbackUrl);
-
-                HttpRequest fallbackReq = new(fallbackUrl)
-                {
-                    RequestTimeout = TimeSpan.FromSeconds(_settings.RequestTimeout),
-                    ContentSummary = new TripleTripleRequestData(baseUrl, country, codec, true).ToJson()
-                };
-                fallbackReq.Headers["User-Agent"] = Tubifarry.UserAgent;
-                fallbackReq.Headers["Referer"] = $"{baseUrl}/search/{Uri.EscapeDataString(query)}";
-
-                chain.AddTier([new IndexerRequest(fallbackReq)]);
-            }
-
-            return chain;
+            return new IndexerRequest(req);
         }
     }
 }

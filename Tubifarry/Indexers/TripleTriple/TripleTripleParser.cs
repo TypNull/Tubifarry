@@ -32,35 +32,30 @@ namespace Tubifarry.Indexers.TripleTriple
                     indexerResponse.Content,
                     IndexerParserHelper.StandardJsonOptions);
 
-                if (response?.Results == null)
+                if (response?.Data == null)
                 {
                     logger.Trace("No results found in response");
                     return releases;
                 }
 
-                foreach (TripleTripleResult result in response.Results)
+                foreach (TripleTripleSearchEdge edge in response.Data.SearchAlbums?.Edges ?? [])
                 {
-                    if (result.Hits == null)
+                    if (edge.Node == null)
                         continue;
+                    AlbumData albumData = CreateAlbumRelease(edge.Node, codec);
+                    albumData.ParseReleaseDate();
+                    releases.Add(albumData.ToReleaseInfo());
+                }
 
-                    foreach (TripleTripleSearchHit hit in result.Hits)
+                if (isSingle)
+                {
+                    foreach (TripleTripleSearchEdge edge in response.Data.SearchTracks?.Edges ?? [])
                     {
-                        TripleTripleDocument? document = hit.Document;
-                        if (document == null)
+                        if (edge.Node == null)
                             continue;
-
-                        if (document.IsAlbum)
-                        {
-                            AlbumData albumData = CreateAlbumRelease(document, codec);
-                            albumData.ParseReleaseDate();
-                            releases.Add(albumData.ToReleaseInfo());
-                        }
-                        else if (document.IsTrack && isSingle)
-                        {
-                            AlbumData trackData = CreateTrackRelease(document, codec);
-                            trackData.ParseReleaseDate();
-                            releases.Add(trackData.ToReleaseInfo());
-                        }
+                        AlbumData trackData = CreateTrackRelease(edge.Node, codec);
+                        trackData.ParseReleaseDate();
+                        releases.Add(trackData.ToReleaseInfo());
                     }
                 }
             }
@@ -72,24 +67,24 @@ namespace Tubifarry.Indexers.TripleTriple
             return releases;
         }
 
-        private AlbumData CreateAlbumRelease(TripleTripleDocument album, TripleTripleCodec codec)
+        private AlbumData CreateAlbumRelease(TripleTripleSearchNode album, TripleTripleCodec codec)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(codec);
-            int trackCount = album.TrackNum > 0 ? album.TrackNum : 10;
-            long estimatedSize = IndexerParserHelper.EstimateSize(0, 0, bitrate, trackCount);
+            int trackCount = album.TrackCount > 0 ? album.TrackCount : 10;
+            long estimatedSize = IndexerParserHelper.EstimateSize(0, album.Duration, bitrate, trackCount);
+            bool hasDate = DateTime.TryParse(album.ReleaseDate, out DateTime releaseDate);
 
             return new("TripleTriple", nameof(AmazonMusicDownloadProtocol))
             {
-                AlbumId = $"album/{album.Asin}",
+                AlbumId = $"album/{album.Id}",
                 AlbumName = album.Title,
                 ArtistName = album.ArtistName,
-                InfoUrl = $"https://music.amazon.com/albums/{album.Asin}",
+                InfoUrl = $"https://music.amazon.com/albums/{album.Id}",
                 TotalTracks = trackCount,
-                ReleaseDate = album.OriginalReleaseDate.HasValue && album.OriginalReleaseDate.Value > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds(album.OriginalReleaseDate.Value).ToString("yyyy-MM-dd")
-                    : DateTime.Now.Year.ToString(),
-                ReleaseDatePrecision = album.OriginalReleaseDate.HasValue && album.OriginalReleaseDate.Value > 0 ? "day" : "year",
-                CustomString = album.ArtOriginal?.Url ?? album.ArtOriginal?.ArtUrl ?? string.Empty,
+                ReleaseDate = hasDate ? releaseDate.ToString("yyyy-MM-dd") : DateTime.Now.Year.ToString(),
+                ReleaseDatePrecision = hasDate ? "day" : "year",
+                Duration = album.Duration,
+                CustomString = album.CoverUrl ?? string.Empty,
                 Codec = format,
                 Bitrate = bitrate,
                 BitDepth = bitDepth,
@@ -97,24 +92,23 @@ namespace Tubifarry.Indexers.TripleTriple
             };
         }
 
-        private AlbumData CreateTrackRelease(TripleTripleDocument track, TripleTripleCodec codec)
+        private AlbumData CreateTrackRelease(TripleTripleSearchNode track, TripleTripleCodec codec)
         {
             (AudioFormat format, int bitrate, int bitDepth) = GetQualityForCodec(codec);
             long estimatedSize = IndexerParserHelper.EstimateSize(0, track.Duration, bitrate);
+            bool hasDate = DateTime.TryParse(track.ReleaseDate, out DateTime releaseDate);
 
             return new("TripleTriple", nameof(AmazonMusicDownloadProtocol))
             {
-                AlbumId = $"track/{track.Asin}",
-                AlbumName = track.AlbumName ?? track.Title,
+                AlbumId = $"track/{track.Id}",
+                AlbumName = track.Album?.Title ?? track.Title,
                 ArtistName = track.ArtistName,
-                InfoUrl = $"https://music.amazon.com/tracks/{track.Asin}",
+                InfoUrl = $"https://music.amazon.com/tracks/{track.Id}",
                 TotalTracks = 1,
-                ReleaseDate = track.OriginalReleaseDate.HasValue && track.OriginalReleaseDate.Value > 0
-                    ? DateTimeOffset.FromUnixTimeSeconds(track.OriginalReleaseDate.Value).ToString("yyyy-MM-dd")
-                    : DateTime.Now.Year.ToString(),
-                ReleaseDatePrecision = track.OriginalReleaseDate.HasValue && track.OriginalReleaseDate.Value > 0 ? "day" : "year",
+                ReleaseDate = hasDate ? releaseDate.ToString("yyyy-MM-dd") : DateTime.Now.Year.ToString(),
+                ReleaseDatePrecision = hasDate ? "day" : "year",
                 Duration = track.Duration,
-                CustomString = track.ArtOriginal?.Url ?? track.ArtOriginal?.ArtUrl ?? string.Empty,
+                CustomString = track.CoverUrl ?? track.Album?.CoverUrl ?? string.Empty,
                 Codec = format,
                 Bitrate = bitrate,
                 BitDepth = bitDepth,

@@ -6,38 +6,46 @@ namespace Tubifarry.Indexers.TripleTriple
         [property: JsonPropertyName("amazonMusic")] string AmazonMusic);
 
     public record TripleTripleSearchResponse(
-        [property: JsonPropertyName("results")] List<TripleTripleResult>? Results);
+        [property: JsonPropertyName("data")] TripleTripleSearchData? Data);
 
-    public record TripleTripleResult(
-        [property: JsonPropertyName("hits")] List<TripleTripleSearchHit>? Hits);
+    public record TripleTripleSearchData(
+        [property: JsonPropertyName("searchAlbums")] TripleTripleSearchConnection? SearchAlbums,
+        [property: JsonPropertyName("searchTracks")] TripleTripleSearchConnection? SearchTracks);
 
-    public record TripleTripleSearchHit(
-        [property: JsonPropertyName("document")] TripleTripleDocument? Document);
+    public record TripleTripleSearchConnection(
+        [property: JsonPropertyName("edgeCount")] int EdgeCount,
+        [property: JsonPropertyName("edges")] List<TripleTripleSearchEdge>? Edges);
 
-    public record TripleTripleDocument(
-        [property: JsonPropertyName("__type")] string Type,
-        [property: JsonPropertyName("asin")] string Asin,
+    public record TripleTripleSearchEdge(
+        [property: JsonPropertyName("node")] TripleTripleSearchNode? Node);
+
+    public record TripleTripleSearchNode(
+        [property: JsonPropertyName("id")] string Id,
         [property: JsonPropertyName("title")] string Title,
-        [property: JsonPropertyName("artistName")] string ArtistName,
-        [property: JsonPropertyName("duration")] int Duration,
-        [property: JsonPropertyName("trackNum")] int TrackNum,
-        [property: JsonPropertyName("discNum")] int DiscNum,
-        [property: JsonPropertyName("albumName")] string? AlbumName = null,
-        [property: JsonPropertyName("albumAsin")] string? AlbumAsin = null,
-        [property: JsonPropertyName("artistAsin")] string? ArtistAsin = null,
-        [property: JsonPropertyName("artOriginal")] TripleTripleArt? ArtOriginal = null,
-        [property: JsonPropertyName("originalReleaseDate")] long? OriginalReleaseDate = null,
-        [property: JsonPropertyName("primaryGenre")] string? PrimaryGenre = null,
-        [property: JsonPropertyName("isrc")] string? Isrc = null,
-        [property: JsonPropertyName("isMusicSubscription")] bool IsMusicSubscription = false)
+        [property: JsonPropertyName("duration")] int Duration = 0,
+        [property: JsonPropertyName("trackCount")] int TrackCount = 0,
+        [property: JsonPropertyName("trackNumber")] int TrackNumber = 0,
+        [property: JsonPropertyName("releaseDate")] string? ReleaseDate = null,
+        [property: JsonPropertyName("format")] string? Format = null,
+        [property: JsonPropertyName("artistNames")] string? ArtistNames = null,
+        [property: JsonPropertyName("images")] List<TripleTripleImage>? Images = null,
+        [property: JsonPropertyName("album")] TripleTripleSearchNode? Album = null,
+        [property: JsonPropertyName("contributingArtists")] TripleTripleContributingArtists? ContributingArtists = null)
     {
-        public bool IsTrack => Type?.Contains("Track") == true;
-        public bool IsAlbum => Type?.Contains("Album") == true;
+        [JsonIgnore]
+        public string ArtistName => ArtistNames ?? ContributingArtists?.ConcatenatedName ?? string.Empty;
+
+        [JsonIgnore]
+        public string? CoverUrl => Images?.OrderByDescending(i => i.Width).FirstOrDefault()?.Url;
     }
 
-    public record TripleTripleArt(
-        [property: JsonPropertyName("URL")] string Url,
-        [property: JsonPropertyName("artUrl")] string? ArtUrl);
+    public record TripleTripleContributingArtists(
+        [property: JsonPropertyName("concatenatedName")] string? ConcatenatedName);
+
+    public record TripleTripleImage(
+        [property: JsonPropertyName("width")] int Width,
+        [property: JsonPropertyName("height")] int Height,
+        [property: JsonPropertyName("url")] string Url);
 
     public record TripleTripleMediaResponse(
         [property: JsonPropertyName("asin")] string Asin,
