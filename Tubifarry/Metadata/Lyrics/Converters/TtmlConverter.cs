@@ -64,7 +64,7 @@ namespace Tubifarry.Metadata.Lyrics.Converters
             if (!hasTimedSpans)
             {
                 string plainOnly = p.Value.Trim();
-                return string.IsNullOrEmpty(plainOnly)
+                return string.IsNullOrEmpty(plainOnly) && !lineStart.HasValue
                     ? null
                     : new LyricLine { Text = plainOnly, StartMs = lineStart, EndMs = lineEnd };
             }
@@ -132,7 +132,7 @@ namespace Tubifarry.Metadata.Lyrics.Converters
             }
 
             string plain = p.Value.Trim();
-            if (string.IsNullOrEmpty(plain))
+            if (string.IsNullOrEmpty(plain) && !lineStart.HasValue)
                 return null;
 
             return new LyricLine { Text = plain, StartMs = lineStart, EndMs = lineEnd };
@@ -150,7 +150,7 @@ namespace Tubifarry.Metadata.Lyrics.Converters
                     string.IsNullOrEmpty(lyric.Title) ? null : new XElement(Tt + "title", lyric.Title)));
 
             XElement div = new(Tt + "div");
-            foreach (LyricLine line in lyric.Lines.Where(l => !string.IsNullOrEmpty(l.Text)).OrderBy(l => l.StartMs ?? 0))
+            foreach (LyricLine line in lyric.Lines.Where(l => !string.IsNullOrEmpty(l.Text) || l.StartMs.HasValue).OrderBy(l => l.StartMs ?? 0))
             {
                 XElement p = new(Tt + "p", new XText(line.Text));
                 if (line.StartMs.HasValue)

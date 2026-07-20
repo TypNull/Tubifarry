@@ -72,10 +72,11 @@ public partial class ElrcConverter : LyricConverterBase
                 lineText.Append(wordText);
             }
 
+            long? resolvedStart = lineStart ?? words.FirstOrDefault()?.StartMs ?? ParseTimestamp(wordStamps[0].Groups[1].Value);
             lines.Add(new LyricLine
             {
                 Text = lineText.ToString().Trim(),
-                StartMs = lineStart ?? words.FirstOrDefault()?.StartMs,
+                StartMs = resolvedStart,
                 Words = words.Count > 0 ? words : null
             });
         }
