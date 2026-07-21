@@ -120,7 +120,12 @@ namespace Tubifarry.Notifications.QueueCleaner
             if (importCleaningOption != (int)requiredOption && importCleaningOption != (int)ImportCleaningOptions.Always)
                 return;
 
-            if (Settings.RenameOption != (int)RenameOptions.DoNotRename && Rename(trackedDownload))
+            bool changed = Settings.FillMissingTags && FillMissingTags(trackedDownload);
+
+            if (Settings.RenameOption != (int)RenameOptions.DoNotRename)
+                changed |= Rename(trackedDownload);
+
+            if (changed)
             {
                 Retry(trackedDownload);
                 return;
@@ -166,11 +171,169 @@ namespace Tubifarry.Notifications.QueueCleaner
                 return false;
             }
 
+            bool folderRenamed = TryRenameFolder(item, ref downloadPath);
+
             List<IFileInfo> filesOnDisk = [.. _diskProvider.GetFileInfos(downloadPath, true)];
             HashSet<string> audioExtensions = new(MediaFileExtensions.Extensions, StringComparer.OrdinalIgnoreCase);
             ReleaseFormatter releaseFormatter = new(item.RemoteAlbum.Release, item.RemoteAlbum.Artist, _namingConfig.GetConfig());
 
-            return filesOnDisk.Any(file => TryRenameFile(file, audioExtensions, releaseFormatter, filesOnDisk));
+            bool anyFileRenamed = filesOnDisk.Any(file => TryRenameFile(file, audioExtensions, releaseFormatter, filesOnDisk));
+            return folderRenamed || anyFileRenamed;
+        }
+
+        private bool FillMissingTags(TrackedDownload item)
+        {
+            Artist? artist = item.RemoteAlbum?.Artist;
+            Album? album = item.RemoteAlbum?.Albums?.Count == 1 ? item.RemoteAlbum.Albums[0] : null;
+            if (artist == null && album == null)
+                return false;
+
+            string downloadPath = item.DownloadItem.OutputPath.FullPath;
+            bool anyChanged = false;
+
+            IFileInfo[] audioFiles = GetAudioFiles(downloadPath);
+            bool mbidsConsistent = AreExistingMbidsConsistent(audioFiles, album?.ForeignAlbumId, artist?.ForeignArtistId);
+
+            foreach (IFileInfo file in audioFiles)
+            {
+                try
+                {
+                    TagLib.File fileTags = TagLib.File.Create(file.FullName);
+                    TagLib.Tag tag = fileTags.Tag;
+
+                    string existingArtist = tag.FirstAlbumArtist ?? tag.FirstPerformer ?? string.Empty;
+                    string existingAlbum = tag.Album ?? string.Empty;
+
+                    bool artistCorroborated = artist != null && existingArtist.Length > 0 &&
+                        FuzzySharp.Fuzz.Ratio(existingArtist.ToLowerInvariant(), artist.Name.ToLowerInvariant()) > 85;
+                    bool albumCorroborated = album != null && existingAlbum.Length > 0 &&
+                        FuzzySharp.Fuzz.Ratio(existingAlbum.ToLowerInvariant(), album.Title.ToLowerInvariant()) > 85;
+
+                    if (!artistCorroborated && !albumCorroborated)
+                        continue;
+
+                    bool changed = false;
+
+                    if (albumCorroborated && artist != null && existingArtist.Length == 0)
+                    {
+                        tag.AlbumArtists = [artist.Name];
+                        changed = true;
+                    }
+
+                    if (artistCorroborated && album != null && existingAlbum.Length == 0)
+                    {
+                        tag.Album = album.Title;
+                        changed = true;
+                    }
+
+                    if (artistCorroborated && albumCorroborated)
+                    {
+                        if (tag.Year == 0 && album!.ReleaseDate.HasValue)
+                        {
+                            tag.Year = (uint)album.ReleaseDate.Value.Year;
+                            changed = true;
+                        }
+
+                        if (mbidsConsistent)
+                        {
+                            if (string.IsNullOrEmpty(tag.MusicBrainzReleaseGroupId) && !string.IsNullOrEmpty(album!.ForeignAlbumId))
+                            {
+                                tag.MusicBrainzReleaseGroupId = album.ForeignAlbumId;
+                                changed = true;
+                            }
+
+                            if (string.IsNullOrEmpty(tag.MusicBrainzArtistId) && !string.IsNullOrEmpty(artist!.ForeignArtistId))
+                            {
+                                tag.MusicBrainzArtistId = artist.ForeignArtistId;
+                                changed = true;
+                            }
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        fileTags.Save();
+                        anyChanged = true;
+                        _logger.Debug($"Filled missing tags for: {file.Name}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Trace(ex, $"Could not read/write tags for {file.FullName}");
+                }
+            }
+
+            return anyChanged;
+        }
+
+        private static bool AreExistingMbidsConsistent(IFileInfo[] audioFiles, string? albumGroupId, string? artistId)
+        {
+            foreach (IFileInfo file in audioFiles)
+            {
+                try
+                {
+                    TagLib.Tag tag = TagLib.File.Create(file.FullName).Tag;
+
+                    if (!string.IsNullOrEmpty(tag.MusicBrainzReleaseGroupId) &&
+                        !tag.MusicBrainzReleaseGroupId.Equals(albumGroupId, StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    if (!string.IsNullOrEmpty(tag.MusicBrainzArtistId) &&
+                        !tag.MusicBrainzArtistId.Equals(artistId, StringComparison.OrdinalIgnoreCase))
+                        return false;
+
+                    if (!string.IsNullOrEmpty(tag.MusicBrainzReleaseId))
+                        return false;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool TryRenameFolder(TrackedDownload item, ref string downloadPath)
+        {
+            try
+            {
+                IFileInfo? firstAudio = GetAudioFiles(downloadPath).FirstOrDefault();
+                if (firstAudio == null)
+                    return false;
+
+                TagLib.File fileTags = TagLib.File.Create(firstAudio.FullName);
+                string? artist = fileTags.Tag.FirstAlbumArtist ?? fileTags.Tag.FirstPerformer;
+                string? album = fileTags.Tag.Album;
+                uint year = fileTags.Tag.Year;
+
+                if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(album))
+                    return false;
+
+                string newLeaf = year > 0 ? $"{artist} - {album} ({year})" : $"{artist} - {album}";
+                newLeaf = string.Concat(newLeaf.Split(Path.GetInvalidFileNameChars())).Trim();
+
+                string? parent = Path.GetDirectoryName(downloadPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                string currentLeaf = Path.GetFileName(downloadPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+
+                if (parent == null || newLeaf.Length == 0 || newLeaf.Equals(currentLeaf, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                string newPath = Path.Combine(parent, newLeaf);
+                if (_diskProvider.FolderExists(newPath))
+                    return false;
+
+                _diskProvider.MoveFolder(downloadPath, newPath);
+                item.DownloadItem.OutputPath = new OsPath(newPath);
+                downloadPath = newPath;
+                _logger.Info($"Renamed download folder from tags: '{currentLeaf}' -> '{newLeaf}'");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to rename download folder: {downloadPath}");
+                return false;
+            }
         }
 
         private bool TryRenameFile(IFileInfo file, HashSet<string> audioExtensions, ReleaseFormatter releaseFormatter, List<IFileInfo> filesOnDisk)
@@ -188,6 +351,7 @@ namespace Tubifarry.Notifications.QueueCleaner
                 TagLib.File fileTags = TagLib.File.Create(filePath);
                 string artistName = fileTags.Tag.FirstAlbumArtist ?? fileTags.Tag.FirstPerformer ?? "UnknownArtist";
                 string title = fileTags.Tag.Title ?? Path.GetFileNameWithoutExtension(filePath);
+                string albumTitle = fileTags.Tag.Album ?? title;
                 string trackNumber = fileTags.Tag.Track.ToString("D2");
 
                 string newFileNameWithoutExtension = releaseFormatter.BuildTrackFilename(null, new Track
@@ -195,7 +359,7 @@ namespace Tubifarry.Notifications.QueueCleaner
                     Title = title,
                     TrackNumber = trackNumber,
                     Artist = new Artist { Name = artistName }
-                }, new Album { Title = title });
+                }, new Album { Title = albumTitle });
 
                 string newFileName = $"{newFileNameWithoutExtension}{Path.GetExtension(filePath)}";
                 string newFilePath = Path.Combine(directory, newFileName);
@@ -236,6 +400,12 @@ namespace Tubifarry.Notifications.QueueCleaner
             item.State = TrackedDownloadState.DownloadFailed;
 
             List<EntityHistory> grabbedItems = [.. _historyService.Find(item.DownloadItem.DownloadId, EntityHistoryEventType.Grabbed)];
+            if (grabbedItems.Count == 0)
+            {
+                _logger.Debug($"No grab history found for '{item.DownloadItem.Title}'; cannot blocklist.");
+                return;
+            }
+
             EntityHistory historyItem = grabbedItems[^1];
 
             _ = Enum.TryParse(historyItem.Data.GetValueOrDefault(EntityHistory.RELEASE_SOURCE, nameof(ReleaseSourceType.Unknown)), out ReleaseSourceType releaseSource);
@@ -269,10 +439,16 @@ namespace Tubifarry.Notifications.QueueCleaner
                 return ImportFailureReason.DidNotFail;
 
             bool hasMissingTracks = trackedDownload.StatusMessages
-                .Any(sm => sm.Messages.Any(m => m.Contains("Has missing tracks", StringComparison.OrdinalIgnoreCase)));
+                .Any(sm => sm.Messages.Any(m =>
+                    m.Contains("Has missing tracks", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("fewer tracks than existing release", StringComparison.OrdinalIgnoreCase)));
 
             bool hasInsufficientInformation = trackedDownload.StatusMessages
-                .Any(sm => sm.Messages.Any(m => m.Contains("Album match is not close enough", StringComparison.OrdinalIgnoreCase)));
+                .Any(sm => sm.Messages.Any(m =>
+                    m.Contains("Album match is not close enough", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("Couldn't find similar album", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("Has unmatched tracks", StringComparison.OrdinalIgnoreCase) ||
+                    m.Contains("Worst track match", StringComparison.OrdinalIgnoreCase)));
 
             return (hasMissingTracks, hasInsufficientInformation) switch
             {

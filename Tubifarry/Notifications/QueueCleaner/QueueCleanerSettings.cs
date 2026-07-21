@@ -23,10 +23,13 @@ namespace Tubifarry.Notifications.Queue
         [FieldDefinition(4, Label = "Skip Release Sources", Type = FieldType.Select, SelectOptions = typeof(SkipReleaseSourceOptions), HelpText = "Skip processing downloads from these release sources and below, allowing manual import control.")]
         public int SkipReleaseSources { get; set; } = (int)SkipReleaseSourceOptions.Disabled;
 
-        [FieldDefinition(5, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
+        [FieldDefinition(5, Label = "Fill Missing Tags", Type = FieldType.Checkbox, HelpText = "Fill empty tags before retrying the import, but only when the existing tags already corroborate the grabbed release. Nothing is ever overwritten and nothing is written for unclear matches.")]
+        public bool FillMissingTags { get; set; } = false;
+
+        [FieldDefinition(6, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
         public bool RetryFindingRelease { get; set; } = true;
 
-        [FieldDefinition(6, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
+        [FieldDefinition(7, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
         public IEnumerable<string> Indexers { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
