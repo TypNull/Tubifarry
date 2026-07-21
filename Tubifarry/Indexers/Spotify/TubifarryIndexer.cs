@@ -16,6 +16,7 @@ namespace Tubifarry.Indexers.Spotify
     internal class TubifarryIndexer : ExtendedHttpIndexerBase<SpotifyIndexerSettings, LazyIndexerPageableRequest>
     {
         public override string Name => "Tubifarry";
+        public override IEnumerable<ProviderDefinition> DefaultDefinitions => [];
         public override string Protocol => nameof(YoutubeDownloadProtocol);
         public override bool SupportsRss => true;
         public override bool SupportsSearch => true;
