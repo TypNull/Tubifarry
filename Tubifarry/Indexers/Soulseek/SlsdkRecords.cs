@@ -63,7 +63,8 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("queueLength")] int QueueLength,
         [property: JsonPropertyName("token")] int Token,
         [property: JsonPropertyName("fileCount")] int FileCount,
-        [property: JsonPropertyName("files")] List<SlskdFileData> Files)
+        [property: JsonPropertyName("files")] List<SlskdFileData> Files,
+        int RecentFailures = 0)
     {
         public int CalculatePriority(int expectedTrackCount = 0)
         {
@@ -108,16 +109,16 @@ namespace Tubifarry.Indexers.Soulseek
             score += (int)(Math.Pow(availabilityRatio, 2.0) * 2000);
 
             // ===== UPLOAD SPEED (0 to +1800) =====
-            if (UploadSpeed > 0)
-            {
-                double speedMbps = UploadSpeed / (1024.0 * 1024.0 / 8.0);
-                score += Math.Min(1800, (int)(Math.Log10(Math.Max(0.1, speedMbps) + 1) * 1100));
-            }
+            double speedMBps = UploadSpeed / (1024.0 * 1024.0);
+            if (speedMBps > 0)
+                score += Math.Min(1800, (int)(Math.Log10(speedMBps + 1) * 1800));
 
-            // ===== QUEUE LENGTH x FREE SLOT (0 to +2300, multiplicative) =====
-            double queueFactor = Math.Pow(0.94, Math.Min(QueueLength, 60));
-            double slotFactor = HasFreeUploadSlot ? 1.0 : 0.35;
-            score += (int)(queueFactor * slotFactor * 2300);
+            // ===== ESTIMATED QUEUE WAIT (0 to +2300) =====
+            const double assumedBytesPerQueuedItem = 40.0 * 1024 * 1024;
+            double effectiveSpeed = Math.Max(UploadSpeed, 128 * 1024);
+            double estimatedWaitSeconds = QueueLength * assumedBytesPerQueuedItem / effectiveSpeed;
+            double queueFactor = Math.Exp(-estimatedWaitSeconds / 900.0);
+            score += (int)(queueFactor * 2300);
 
             // ===== FILE CONSISTENCY (0 to +300) =====
             if (Files.Count > 0)
@@ -134,6 +135,12 @@ namespace Tubifarry.Indexers.Soulseek
 
             // ===== COLLECTION SIZE (0 to +300) =====
             score += Math.Min(300, (int)(Math.Log10(Math.Max(1, FileCount) + 1) * 150));
+
+            if (!HasFreeUploadSlot)
+                score = (int)(score * 0.6 * Math.Pow(0.97, Math.Min(QueueLength, 100)));
+
+            if (RecentFailures > 0)
+                score = (int)(score * Math.Pow(0.7, Math.Min(RecentFailures, 8)));
 
             return Math.Clamp(score, 0, 10000);
         }

@@ -188,7 +188,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                         _logger.Debug($"Search: {searchText}");
 
-                        SlskdSearchRequestBody searchData = CreateSearchData(searchText);
+                        SlskdSearchRequestBody searchData = CreateSearchData(searchText, query.TrackCount);
                         string searchId = searchData.Id;
                         HttpRequest searchRequest = CreateSearchRequest(searchData);
 
@@ -248,14 +248,17 @@ namespace Tubifarry.Indexers.Soulseek
             }
         }
 
-        private SlskdSearchRequestBody CreateSearchData(string searchText) => new()
+        private int GetEffectiveMinimumFileCount(int trackCount) =>
+            trackCount > 0 ? Math.Min(Settings.MinimumResponseFileCount, trackCount) : Settings.MinimumResponseFileCount;
+
+        private SlskdSearchRequestBody CreateSearchData(string searchText, int trackCount) => new()
         {
             Id = Guid.NewGuid().ToString(),
             FileLimit = Settings.FileLimit,
             FilterResponses = true,
             MaximumPeerQueueLength = Settings.MaximumPeerQueueLength,
             MinimumPeerUploadSpeed = Settings.MinimumPeerUploadSpeed,
-            MinimumResponseFileCount = Settings.MinimumResponseFileCount,
+            MinimumResponseFileCount = GetEffectiveMinimumFileCount(trackCount),
             ResponseLimit = Settings.ResponseLimit,
             SearchText = searchText,
             SearchTimeout = (int)(Settings.TimeoutInSeconds * 1000),
@@ -288,11 +291,13 @@ namespace Tubifarry.Indexers.Soulseek
 
             TrackCountFilterType filterType = (TrackCountFilterType)Settings.TrackCountFilter;
 
+            int effectiveMinimum = GetEffectiveMinimumFileCount(query.TrackCount);
+
             int minimumFiles = filterType switch
             {
                 TrackCountFilterType.Exact or TrackCountFilterType.Lower or TrackCountFilterType.Unfitting
-                    => Math.Max(Settings.MinimumResponseFileCount, query.TrackCount),
-                _ => Settings.MinimumResponseFileCount
+                    => Math.Max(effectiveMinimum, query.TrackCount),
+                _ => effectiveMinimum
             };
 
             int? maximumFiles = filterType switch

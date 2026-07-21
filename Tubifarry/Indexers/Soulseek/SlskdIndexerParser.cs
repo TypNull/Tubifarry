@@ -34,6 +34,9 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly object _rateLimitLock = new();
         private DateTime _rateLimitCacheTimestamp = DateTime.MinValue;
         private HashSet<string> _rateLimitedUsersCache = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _failureLock = new();
+        private DateTime _failureCacheTimestamp = DateTime.MinValue;
+        private Dictionary<string, int> _failureCountCache = new(StringComparer.OrdinalIgnoreCase);
 
         private SlskdSettings Settings => _indexer.Settings;
 
@@ -66,6 +69,7 @@ namespace Tubifarry.Indexers.Soulseek
                 SlskdSearchData searchTextData = SlskdSearchData.FromJson(indexerResponse.HttpRequest.ContentSummary);
                 HashSet<string>? ignoredUsers = GetIgnoredUsers(Settings.IgnoreListPath);
                 HashSet<string> rateLimitedUsers = GetRateLimitedUsers();
+                Dictionary<string, int> recentFailures = GetRecentFailureCounts();
 
                 foreach (SlskdFolderData response in searchResponse.Responses)
                 {
@@ -91,7 +95,8 @@ namespace Tubifarry.Indexers.Soulseek
                             LockedFiles = response.LockedFiles,
                             QueueLength = response.QueueLength,
                             Token = response.Token,
-                            FileCount = response.FileCount
+                            FileCount = response.FileCount,
+                            RecentFailures = recentFailures.GetValueOrDefault(response.Username)
                         };
 
                         IGrouping<string, SlskdFileData> finalGroup = directoryGroup;
@@ -242,6 +247,52 @@ namespace Tubifarry.Indexers.Soulseek
                 _rateLimitedUsersCache = blocked;
                 _rateLimitCacheTimestamp = DateTime.UtcNow;
                 return blocked;
+            }
+        }
+
+        private Dictionary<string, int> GetRecentFailureCounts()
+        {
+            lock (_failureLock)
+            {
+                if (DateTime.UtcNow - _failureCacheTimestamp < TimeSpan.FromMinutes(30))
+                    return _failureCountCache;
+
+                Dictionary<string, int> counts = new(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    int? indexerId = _indexer.Definition?.Id;
+
+                    IEnumerable<string> failedDownloadIds = _historyService
+                        .Since(DateTime.UtcNow.AddHours(-24), EntityHistoryEventType.DownloadFailed)
+                        .Select(h => h.DownloadId)
+                        .Where(id => !string.IsNullOrWhiteSpace(id))
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (string downloadId in failedDownloadIds)
+                    {
+                        DownloadHistory? grab = _downloadHistoryService.GetLatestGrab(downloadId);
+                        if (grab == null)
+                            continue;
+
+                        if (!string.Equals(grab.Protocol, nameof(SoulseekDownloadProtocol), StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (indexerId.HasValue && grab.IndexerId != indexerId.Value)
+                            continue;
+
+                        string? username = ExtractUsernameFromUrl(grab.Release?.DownloadUrl);
+                        if (username != null)
+                            counts[username] = counts.GetValueOrDefault(username) + 1;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug(ex, "Failed to collect download failure counts from history.");
+                }
+
+                _failureCountCache = counts;
+                _failureCacheTimestamp = DateTime.UtcNow;
+                return counts;
             }
         }
 

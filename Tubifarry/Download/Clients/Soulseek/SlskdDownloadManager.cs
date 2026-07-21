@@ -80,6 +80,10 @@ public class SlskdDownloadManager : ISlskdDownloadManager
             List<(string Filename, long Size)> files = ParseFilesFromSource(remoteAlbum.Release.Source);
             string? destination = GetMultiDiscDestination(files.Select(f => f.Filename));
 
+            string? sourceLeaf = destination ?? GetSingleParentLeaf(files.Select(f => f.Filename));
+            if (sourceLeaf != null && GetArtistPrefixedName(sourceLeaf, remoteAlbum.Release.Artist) is string prefixed)
+                destination = prefixed;
+
             SlskdEnqueueResult result = await _apiClient.EnqueueDownloadAsync(settings, username, files, externalId: item.ID, destination: destination);
 
             if (result.AllFailed)
@@ -280,6 +284,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
             }
 
             MergeSplitDiscFolders(item, settings);
+            NormalizeAlbumFolderName(item, settings);
         }
     }
 
@@ -468,6 +473,72 @@ public class SlskdDownloadManager : ISlskdDownloadManager
             }
 
             _logger.Trace($"Removed transfer {file.Id}");
+        }));
+    }
+
+    private static string? GetSingleParentLeaf(IEnumerable<string> filenames)
+    {
+        List<string> parents = filenames
+            .Select(f => { int i = f.Replace('/', '\\').LastIndexOf('\\'); return i > 0 ? f.Replace('/', '\\')[..i] : null; })
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return parents.Count == 1 ? parents[0].Split('\\').Last() : null;
+    }
+
+    private static string? GetArtistPrefixedName(string leaf, string? artist)
+    {
+        if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(leaf))
+            return null;
+
+        static string Normalize(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
+        string normLeaf = Normalize(leaf);
+        string normArtist = Normalize(artist);
+        if (normArtist.Length < 3 || normLeaf.Contains(normArtist))
+            return null;
+
+        string sanitizedArtist = string.Concat(artist.Split(Path.GetInvalidFileNameChars())).Trim();
+        return sanitizedArtist.Length == 0 ? null : $"{sanitizedArtist} - {leaf}";
+    }
+
+    private void NormalizeAlbumFolderName(SlskdDownloadItem item, SlskdProviderSettings settings)
+    {
+        if (item.BatchId != null || item.DiscMergeScheduled || item.FolderRenameScheduled ||
+            item.ConfirmedSubdirectory != null || item.DerivedSubdirectory != null ||
+            item.FileStates.Count == 0 ||
+            item.FileStates.Values.Any(fs => fs.GetStatus() != DownloadItemStatus.Completed))
+            return;
+
+        string? leaf = item.SlskdDownloadDirectory?.Directory?
+            .Replace('/', '\\').TrimEnd('\\').Split('\\').LastOrDefault();
+        if (string.IsNullOrEmpty(leaf))
+            return;
+
+        string? renamed = GetArtistPrefixedName(leaf, item.ReleaseInfo.Artist);
+        if (renamed == null)
+            return;
+
+        item.FolderRenameScheduled = true;
+        OsPath root = _remotePathMappingService.RemapRemoteToLocal(settings.Host, new OsPath(settings.DownloadPath));
+        OsPath source = root + new OsPath(leaf);
+        OsPath target = root + new OsPath(renamed);
+
+        item.PostProcessTasks.Add(Task.Run(() =>
+        {
+            try
+            {
+                if (!_diskProvider.FolderExists(source.FullPath) || _diskProvider.FolderExists(target.FullPath))
+                    return;
+                _diskProvider.MoveFolder(source.FullPath, target.FullPath);
+                item.ConfirmedSubdirectory = renamed;
+                _logger.Debug($"Normalized download folder: '{leaf}' -> '{renamed}'");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Folder normalization failed for {item.ID}; leaving folder in place");
+            }
         }));
     }
 

@@ -94,7 +94,7 @@ public sealed record SearchQuery
         Artist = context.SearchArtist,
         Album = context.SearchAlbum,
         Interactive = context.Interactive,
-        ExpandDirectory = false,
+        ExpandDirectory = !string.IsNullOrEmpty(context.SearchArtist) && !string.IsNullOrEmpty(context.SearchAlbum),
         TrackCount = context.TrackCount,
         Tracks = context.Tracks,
         SearchText = null

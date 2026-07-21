@@ -152,6 +152,10 @@ namespace Tubifarry.Indexers.Soulseek
             priority += (int)(trackEvidence * 400);
             if (HasTrackNumberGaps(directory))
                 priority /= 2;
+            if (!isAlbumMatch)
+                priority = (int)(priority * 0.35);
+            if (!isArtistMatch)
+                priority = (int)(priority * 0.7);
             priority = Math.Clamp(priority, 0, 10000);
 
             string regexMatchType = DetermineRegexMatchType(folderData.Path);
