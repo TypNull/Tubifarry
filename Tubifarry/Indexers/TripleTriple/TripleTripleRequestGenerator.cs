@@ -3,6 +3,7 @@ using NzbDrone.Common.Http;
 using NzbDrone.Common.Serializer;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.IndexerSearch.Definitions;
+using NzbDrone.Core.Music;
 
 namespace Tubifarry.Indexers.TripleTriple
 {
@@ -22,7 +23,10 @@ namespace Tubifarry.Indexers.TripleTriple
 
         public IndexerPageableRequestChain GetSearchRequests(AlbumSearchCriteria searchCriteria)
         {
-            bool isSingle = searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value?.Min(r => r.TrackCount) == 1;
+            List<AlbumRelease>? albumReleases = searchCriteria.Albums?.FirstOrDefault()?.AlbumReleases?.Value;
+            int trackCount = albumReleases?.FirstOrDefault(r => r.Monitored)?.TrackCount
+                ?? (albumReleases?.Count > 0 ? albumReleases.Min(r => r.TrackCount) : 0);
+            bool isSingle = trackCount == 1;
             return Generate(searchCriteria.ArtistQuery, searchCriteria.AlbumQuery, isSingle);
         }
 

@@ -361,6 +361,22 @@ namespace Tubifarry.Core.FFmpeg
             }
         }
 
+        private static bool IsMp4Container(string filePath)
+        {
+            try
+            {
+                using FileStream stream = File.OpenRead(filePath);
+                Span<byte> header = stackalloc byte[12];
+                if (stream.Read(header) < 12)
+                    return false;
+                return header[4] == (byte)'f' && header[5] == (byte)'t' && header[6] == (byte)'y' && header[7] == (byte)'p';
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task<bool> DecryptAsync(AudioFileContext file, string decryptionKey, string? codec, CancellationToken token = default)
         {
             if (string.IsNullOrEmpty(decryptionKey))
@@ -381,8 +397,12 @@ namespace Tubifarry.Core.FFmpeg
                 if (File.Exists(tempOutputPath))
                     File.Delete(tempOutputPath);
 
+                string inputArgs = IsMp4Container(file.FilePath)
+                    ? $"-f mp4 -decryption_key {decryptionKey}"
+                    : $"-decryption_key {decryptionKey}";
+
                 await FFMpegArguments
-                    .FromFileInput(file.FilePath, verifyExists: true, inputOptions => inputOptions.WithCustomArgument($"-decryption_key {decryptionKey}"))
+                    .FromFileInput(file.FilePath, verifyExists: true, inputOptions => inputOptions.WithCustomArgument(inputArgs))
                     .OutputToFile(tempOutputPath, overwrite: true, outputOptions => outputOptions.WithCustomArgument("-c copy"))
                     .CancellableThrough(token)
                     .ProcessAsynchronously();

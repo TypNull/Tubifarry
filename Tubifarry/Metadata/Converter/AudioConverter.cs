@@ -1,4 +1,5 @@
-﻿using NLog;
+﻿using FluentValidation.Results;
+using NLog;
 using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
@@ -9,11 +10,12 @@ using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Metadata.Converter
 {
-    public class AudioConverter(Logger logger, Lazy<ITagService> tagService, IAudioProcessingService audioProcessing) : MetadataBase<AudioConverterSettings>
+    public class AudioConverter(Logger logger, Lazy<ITagService> tagService, IAudioProcessingService audioProcessing, IFFmpegInstallation ffmpegInstallation) : MetadataBase<AudioConverterSettings>
     {
         private readonly Logger _logger = logger;
         private readonly Lazy<ITagService> _tagService = tagService;
         private readonly IAudioProcessingService _audioProcessing = audioProcessing;
+        private readonly IFFmpegInstallation _ffmpegInstallation = ffmpegInstallation;
 
         public override string Name => "Codec Tinker";
 
@@ -263,5 +265,19 @@ namespace Tubifarry.Metadata.Converter
             AudioFormat.AMR => Settings.ConvertOther,
             _ => false
         };
+
+        public new ValidationResult Test()
+        {
+            List<ValidationFailure> failures = [];
+
+            if (!_ffmpegInstallation.IsInstalled())
+                failures.Add(new ValidationFailure(string.Empty,
+                    "FFmpeg is not available. Set up and test the 'FFmpeg' provider in the Metadata settings to download it before enabling Codec Tinker."));
+            else
+                _logger.Debug("FFmpeg found at {0}", _ffmpegInstallation.ExecutablesDirectory);
+
+            return new ValidationResult(failures);
+        }
+
     }
 }
