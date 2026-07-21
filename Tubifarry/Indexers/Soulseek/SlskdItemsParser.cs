@@ -183,6 +183,7 @@ namespace Tubifarry.Indexers.Soulseek
 
             return new AlbumData("Slskd", nameof(SoulseekDownloadProtocol))
             {
+                Guid = $"Slskd-{folderData.Username}-{folderData.Path}-{Codec}-{BitRate}-{BitDepth}",
                 AlbumId = $"/api/v0/transfers/downloads/{folderData.Username}",
                 ArtistName = finalArtist,
                 AlbumName = finalAlbum,
