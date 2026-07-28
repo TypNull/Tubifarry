@@ -16,7 +16,16 @@ namespace Tubifarry.Core.Utilities
             pattern ??= _namingConfig?.StandardTrackFormat ?? "{track:0} {Track Title}";
             Dictionary<string, Func<string>> tokenHandlers = GetTokenHandlers(track, album);
             string formattedString = ReplaceTokens(pattern, tokenHandlers);
-            return CleanFileName(Path.GetFileName(formattedString));
+            string? name = CleanFileName(formattedString.Split('/', '\\').Last());
+            if (name.TrimStart('.').Length == 0)
+                name = null;
+            if (string.IsNullOrWhiteSpace(name))
+                name = CleanFileName(ReplaceTokens("{track:00} - {Track Title}", tokenHandlers)).Trim(' ', '-');
+
+            if (string.IsNullOrWhiteSpace(name) || name.TrimStart('.').Length == 0)
+                name = $"Track {track?.TrackNumber ?? "0"}";
+
+            return name;
         }
 
         public string BuildAlbumFilename(string? pattern, Album album)

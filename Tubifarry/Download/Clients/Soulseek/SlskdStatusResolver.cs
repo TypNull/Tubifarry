@@ -42,7 +42,16 @@ public static class SlskdStatusResolver
             }
             else if (fs == DownloadItemStatus.Queued)
             {
-                anyActive = true;
+                // Remotely queued files are waiting on the uploader, not on us.
+                // They must NOT count as "active", otherwise the stale-timeout
+                // branches below can never fire (a remotely-queued file would
+                // simultaneously satisfy "all stuck in remote queue" and negate it).
+                bool remotelyQueued = Enum.TryParse(f.State, ignoreCase: true, out TransferStates queuedState)
+                    && queuedState.HasFlag(TransferStates.Queued)
+                    && queuedState.HasFlag(TransferStates.Remotely);
+
+                if (!remotelyQueued)
+                    anyActive = true;
             }
 
             // Inactivity timestamp: max of enqueued / started / (started + elapsed)
@@ -54,11 +63,17 @@ public static class SlskdStatusResolver
             // All-stuck check: short-circuit once one file is NOT stuck
             if (allIncompleteRemoteQueued)
             {
+                // Reference time for "how long has this been waiting": prefer EnqueuedAt,
+                // fall back to RequestedAt. If neither is known (MinValue), the file must
+                // NOT be considered stuck — otherwise a fresh enqueue with a missing
+                // timestamp would be failed instantly.
+                DateTime queuedSince = f.EnqueuedAt != DateTime.MinValue ? f.EnqueuedAt : f.RequestedAt;
                 bool stuckRemote = timeout.HasValue
+                    && queuedSince != DateTime.MinValue
                     && Enum.TryParse<TransferStates>(f.State, ignoreCase: true, out TransferStates ts)
                     && ts.HasFlag(TransferStates.Queued)
                     && ts.HasFlag(TransferStates.Remotely)
-                    && (utcNow - f.EnqueuedAt) > timeout.Value;
+                    && (utcNow - queuedSince) > timeout.Value;
                 if (!stuckRemote)
                     allIncompleteRemoteQueued = false;
             }
@@ -97,7 +112,7 @@ public static class SlskdStatusResolver
         }
         else if (!anyActive && anyIncomplete)
         {
-            status = timeout.HasValue && (utcNow - lastActivity) > timeout.Value * 2
+            status = timeout.HasValue && lastActivity != DateTime.MinValue && (utcNow - lastActivity) > timeout.Value * 2
                 ? DownloadItemStatus.Failed
                 : DownloadItemStatus.Queued;
         }
