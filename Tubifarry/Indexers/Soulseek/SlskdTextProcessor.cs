@@ -22,6 +22,7 @@ namespace Tubifarry.Indexers.Soulseek
         private static readonly HashSet<string> BlockedSearchTerms = new(StringComparer.OrdinalIgnoreCase)
         {
             "beyonce",
+            "jay-z",
             "Beyoncé",
             "beyoncè",
             "gorillaz",
@@ -37,6 +38,8 @@ namespace Tubifarry.Indexers.Soulseek
             "ymca",
             "lemonade",
             "macho man",
+            "in the navy",
+            "purple rain",
             "rihanna",
             "weeknd",
             "kanye west",
