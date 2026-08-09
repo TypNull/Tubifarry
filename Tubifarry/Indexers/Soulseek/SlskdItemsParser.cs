@@ -193,6 +193,7 @@ namespace Tubifarry.Indexers.Soulseek
                     : new DateTime(yearInt, 1, 1),
                 Codec = Codec,
                 BitDepth = BitDepth ?? 0,
+                SampleRate = SampleRate ?? 0,
                 Bitrate = (Codec == AudioFormat.MP3
                           ? AudioFormatHelper.RoundToStandardBitrate(BitRate ?? 0)
                           : BitRate) ?? 0,

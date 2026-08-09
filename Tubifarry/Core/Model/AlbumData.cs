@@ -32,6 +32,9 @@ namespace Tubifarry.Core.Model
         public int Bitrate { get; set; }
 
         public int BitDepth { get; set; }
+
+        public int SampleRate { get; set; }
+
         public long Duration { get; set; }
 
         // Soulseek
@@ -102,7 +105,9 @@ namespace Tubifarry.Core.Model
             if (AudioFormatHelper.IsLossyFormat(Codec) && calculatedBitrate != 0)
                 title += $" [{Codec} {calculatedBitrate}kbps]";
             else if (!AudioFormatHelper.IsLossyFormat(Codec) && BitDepth != 0)
-                title += $" [{Codec} {BitDepth}bit]";
+                title += SampleRate > 0
+                    ? $" [{Codec} {BitDepth}bit/{FormatSampleRate(SampleRate)}]"
+                    : $" [{Codec} {BitDepth}bit]";
             else
                 title += $" [{Codec}]";
 
@@ -115,6 +120,10 @@ namespace Tubifarry.Core.Model
             title += $" [{SourceTag}]";
             return title;
         }
+
+        private static string FormatSampleRate(int sampleRate)
+            => (sampleRate / 1000.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "kHz";
+
 
         /// <summary>
         /// Normalizes the album name to handle featuring artists and other parentheses.
