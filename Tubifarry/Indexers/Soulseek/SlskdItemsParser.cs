@@ -164,7 +164,7 @@ namespace Tubifarry.Indexers.Soulseek
                 ExplicitContent = ExtractExplicitTag(folderData.Path),
                 Priotity = priority,
                 CustomString = JsonConvert.SerializeObject(filesToDownload),
-                ExtraInfo = [edition, $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
+                ExtraInfo = [qualityInfo, edition, $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
                 Duration = TotalDuration
             };
         }
@@ -498,13 +498,9 @@ namespace Tubifarry.Indexers.Soulseek
 
         private static string FormatQualityInfo(AudioFormat codec, int? bitRate, int? bitDepth, int? sampleRate)
         {
-            if (codec == AudioFormat.MP3 && bitRate.HasValue)
-                return $"{codec} {bitRate}kbps";
-
             if (bitDepth.HasValue && sampleRate.HasValue)
-                return $"{codec} {bitDepth}bit/{sampleRate / 1000}kHz";
-
-            return codec.ToString();
+                return $"{sampleRate / 1000}kHz";
+            return null;
         }
 
         [GeneratedRegex(@"(?ix)
