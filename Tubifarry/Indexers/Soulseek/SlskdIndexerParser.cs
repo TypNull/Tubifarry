@@ -134,7 +134,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                 _sentry.UpdateSearchResultCount(searchResponse.Id, albumDatas.Count);
 
-                RemoveSearch(searchResponse.Id, albumDatas.Count != 0 && searchTextData.Interactive);
+                RemoveSearch(searchResponse.Id, searchTextData.Interactive);
             }
             catch (Exception ex)
             {
