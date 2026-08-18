@@ -73,11 +73,10 @@ public class SlskdDownloadItem
         {
             if (_previousFileStates.TryGetValue(file.Filename, out SlskdFileState? fileState) && fileState != null)
             {
-                string previousState = fileState.State;
                 fileState.UpdateFile(file);
-                if (fileState.State != previousState)
+                if (fileState.State != fileState.PreviousState)
                 {
-                    _logger.Trace($"State change: {Path.GetFileName(file.Filename)} | {previousState} -> {fileState.State}");
+                    _logger.Trace($"State change: {Path.GetFileName(file.Filename)} | {fileState.PreviousState} -> {fileState.State}");
                     FileStateChanged?.Invoke(this, fileState);
                 }
             }

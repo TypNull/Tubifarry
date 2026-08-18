@@ -65,7 +65,7 @@ public static class SlskdStatusResolver
             {
                 // Reference time for "how long has this been waiting": prefer EnqueuedAt,
                 // fall back to RequestedAt. If neither is known (MinValue), the file must
-                // NOT be considered stuck â€” otherwise a fresh enqueue with a missing
+                // NOT be considered stuck — otherwise a fresh enqueue with a missing
                 // timestamp would be failed instantly.
                 DateTime queuedSince = f.EnqueuedAt != DateTime.MinValue ? f.EnqueuedAt : f.RequestedAt;
                 bool stuckRemote = timeout.HasValue
@@ -80,6 +80,12 @@ public static class SlskdStatusResolver
         }
 
         bool allStuckInRemoteQueue = anyIncomplete && allIncompleteRemoteQueued;
+
+        bool isStaleTimedOut = !anyActive
+            && anyIncomplete
+            && timeout.HasValue
+            && lastActivity != DateTime.MinValue
+            && (utcNow - lastActivity) > timeout.Value * 2;
 
         int totalFileCount = 0, failedCount = 0, completedCount = 0;
         bool anyWarning = false, anyPaused = false, anyDownloadingState = false;
@@ -110,11 +116,10 @@ public static class SlskdStatusResolver
             status = DownloadItemStatus.Failed;
             message = "All files stuck in remote queue past timeout.";
         }
-        else if (!anyActive && anyIncomplete)
+        else if (isStaleTimedOut)
         {
-            status = timeout.HasValue && lastActivity != DateTime.MinValue && (utcNow - lastActivity) > timeout.Value * 2
-                ? DownloadItemStatus.Failed
-                : DownloadItemStatus.Queued;
+            status = DownloadItemStatus.Failed;
+            message = "Download staled out with no progress past timeout.";
         }
         else if (totalFileCount > 0 && (double)failedCount / totalFileCount * 100 > 20)
         {
@@ -126,6 +131,11 @@ public static class SlskdStatusResolver
             status = DownloadItemStatus.Warning;
             message = $"Downloading {failedCount} files failed: {string.Join(", ", failedFileNames)}";
         }
+        else if (anyWarning)
+        {
+            status = DownloadItemStatus.Warning;
+            message = "Some files failed. Retrying download...";
+        }
         else if (totalFileCount > 0 && completedCount == totalFileCount)
         {
             status = item.PostProcessTasks.Any(t => !t.IsCompleted)
@@ -136,14 +146,13 @@ public static class SlskdStatusResolver
         {
             status = DownloadItemStatus.Paused;
         }
-        else if (anyWarning)
-        {
-            status = DownloadItemStatus.Warning;
-            message = "Some files failed. Retrying download...";
-        }
         else if (anyDownloadingState)
         {
             status = DownloadItemStatus.Downloading;
+        }
+        else if (!anyActive && anyIncomplete)
+        {
+            status = DownloadItemStatus.Queued;
         }
         else
         {

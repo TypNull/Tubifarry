@@ -16,6 +16,19 @@ public class SlskdRetryHandler(ISlskdApiClient apiClient, ISentryHelper sentry, 
     {
         fileState.UpdateMaxRetryCount(settings.RetryAttempts);
 
+        if (item != null
+            && fileState.GetStatus() == DownloadItemStatus.Failed
+            && fileState.RetryCount >= fileState.MaxRetryCount)
+        {
+            bool allOthersCompleted = item.FileStates.Values
+                .Where(fs => !ReferenceEquals(fs, fileState))
+                .All(fs => fs.GetStatus() == DownloadItemStatus.Completed);
+
+            if (allOthersCompleted)
+                fileState.UpdateMaxRetryCount(fileState.MaxRetryCount + 2);
+
+        }
+
         if (fileState.GetStatus() != DownloadItemStatus.Warning)
             return;
         if (item == null)

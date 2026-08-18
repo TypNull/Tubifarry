@@ -400,8 +400,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
 
             if (item != null)
             {
-                item.ConfirmedSubdirectory = SlskdPathResolver.MakeRelativeToDownloads(settings.DownloadPath, localDir)
-                    ?? item.ConfirmedSubdirectory;
+                item.ConfirmedSubdirectory ??= SlskdPathResolver.MakeRelativeToDownloads(settings.DownloadPath, localDir);
 
                 _logger.Trace($"[def={definitionId}] Event DownloadDirectoryComplete: {remoteDir} by {username} -> {item.ConfirmedSubdirectory ?? "<unresolved>"}");
 
