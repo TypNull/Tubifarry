@@ -209,11 +209,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 for (int i = 0; i < Math.Min(imageUrls.Count, 3); i++)
                 {
                     MediaCoverTypes type = i == 0 ? MediaCoverTypes.Poster : MediaCoverTypes.Fanart;
-                    newImages.Add(new MediaCover
-                    {
-                        Url = imageUrls[i],
-                        CoverType = type
-                    });
+                    newImages.Add(new MediaCover(type, imageUrls[i]));
                 }
                 artist.Metadata.Value.Images = newImages;
 
