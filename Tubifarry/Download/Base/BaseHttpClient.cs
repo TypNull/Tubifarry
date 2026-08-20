@@ -1,5 +1,6 @@
 using DownloadAssistant.Base;
 using NzbDrone.Common.Http;
+using System.IO.Compression;
 
 namespace Tubifarry.Download.Base
 {
@@ -245,7 +246,21 @@ namespace Tubifarry.Download.Base
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(_timeout);
 
-            return await response.Content.ReadAsStringAsync(cts.Token);
+            return await ReadContentAsStringAsync(response, cts.Token);
+        }
+
+        private static async Task<string> ReadContentAsStringAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+        {
+            Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            string? encoding = response.Content.Headers.ContentEncoding.FirstOrDefault();
+
+            if (string.Equals(encoding, "gzip", StringComparison.OrdinalIgnoreCase))
+                stream = new GZipStream(stream, CompressionMode.Decompress);
+            else if (string.Equals(encoding, "deflate", StringComparison.OrdinalIgnoreCase))
+                stream = new DeflateStream(stream, CompressionMode.Decompress);
+
+            using StreamReader reader = new(stream);
+            return await reader.ReadToEndAsync(cancellationToken);
         }
 
         /// <summary>

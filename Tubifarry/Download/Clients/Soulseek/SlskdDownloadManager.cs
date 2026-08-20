@@ -585,8 +585,15 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         {
             try
             {
-                if (!_diskProvider.FolderExists(source.FullPath) || _diskProvider.FolderExists(target.FullPath))
+                if (_diskProvider.FolderExists(target.FullPath) && _diskProvider.GetFiles(target.FullPath, false).Any())
+                {
+                    item.ConfirmedSubdirectory = renamed;
                     return;
+                }
+
+                if (!_diskProvider.FolderExists(source.FullPath))
+                    return;
+
                 _diskProvider.MoveFolder(source.FullPath, target.FullPath);
                 item.ConfirmedSubdirectory = renamed;
                 _logger.Debug($"Normalized download folder: '{leaf}' -> '{renamed}'");

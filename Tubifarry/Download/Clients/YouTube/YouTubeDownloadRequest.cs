@@ -8,7 +8,6 @@ using NzbDrone.Core.Parser.Model;
 using Requests;
 using Requests.Options;
 using Tubifarry.Core.FFmpeg;
-using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
 using Tubifarry.Download.Base;
 using YouTubeMusicAPI.Models;
