@@ -163,12 +163,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         /// <summary>
         /// Maps a Discogs image to a MediaCover object.
         /// </summary>
-        public static MediaCover? MapImage(DiscogsImage img, bool isArtist) => new()
-        {
-            Url = img.Uri,
-            RemoteUrl = img.Uri,
-            CoverType = MapCoverType(img.Type, isArtist)
-        };
+        public static MediaCover? MapImage(DiscogsImage img, bool isArtist) => new(MapCoverType(img.Type, isArtist), img.Uri);
 
         /// <summary>
         /// Maps a Discogs image type to a MediaCoverTypes enum.
@@ -445,7 +440,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 CleanTitle = release.Title.CleanArtistName() ?? string.Empty,
                 Ratings = new Ratings(),
                 Genres = [release.Label ?? string.Empty],
-                Images = [new() { Url = release.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={release.UserAgent}" }],
+                Images = [new(MapCoverType("primary", false), release.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={release.UserAgent}")],
             };
 
             album.AlbumReleases = new List<AlbumRelease>()
@@ -560,7 +555,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 Name = searchItem.Title ?? string.Empty,
                 ForeignArtistId = "a" + searchItem.Id + _identifier,
                 Overview = "Found on Discogs",
-                Images = [new() { Url = searchItem.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={searchItem.UserAgent}", CoverType = MapCoverType("primary", true) }],
+                Images = [new(MapCoverType("primary", true), searchItem.Thumb + $"?{FlexibleHttpDispatcher.UA_PARAM}={searchItem.UserAgent}")],
                 Links = [new() { Url = searchItem.ResourceUrl, Name = "Discogs" }],
                 Ratings = ComputeCommunityRating(searchItem.Community),
                 Genres = searchItem.Genre,
