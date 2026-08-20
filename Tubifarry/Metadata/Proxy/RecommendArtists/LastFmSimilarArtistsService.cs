@@ -273,11 +273,7 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
         /// </summary>
         private static List<MediaCover> MapLastfmImages(List<LastfmImage>? images) => images?
             .Where(i => !string.IsNullOrEmpty(i.Url))
-            .Select(i => new MediaCover
-            {
-                Url = i.Url,
-                CoverType = MapImageSize(i.Size)
-            }).ToList() ?? [];
+            .Select(i => new MediaCover(MapImageSize(i.Size), i.Url)).ToList() ?? [];
 
         /// <summary>
         /// Maps Last.fm image size to MediaCoverTypes

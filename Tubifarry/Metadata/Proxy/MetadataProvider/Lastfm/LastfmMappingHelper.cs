@@ -276,11 +276,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         {
             return images?
                 .Where(i => !string.IsNullOrEmpty(i.Url))
-                .Select(i => new MediaCover
-                {
-                    Url = i.Url,
-                    CoverType = MapCoverType(i.Size + $"{FlexibleHttpDispatcher.UA_PARAM}={userAgent}", isArtist)
-                })
+                .Select(i => new MediaCover(MapCoverType(i.Size + $"{FlexibleHttpDispatcher.UA_PARAM}={userAgent}", isArtist), i.Url))
                 .ToList() ?? [];
         }
 
