@@ -27,6 +27,7 @@ public sealed record SearchContext
     public PrimaryAlbumType PrimaryType { get; init; }
     public IReadOnlyList<string> Aliases { get; init; }
     public IReadOnlyList<string> Tracks { get; init; }
+    public IReadOnlyList<int> TrackDurations { get; init; }
     public SlskdSettings Settings { get; init; }
     public HashSet<string> ProcessedSearches { get; init; }
     public SearchCriteriaBase? SearchCriteria { get; init; }
@@ -61,6 +62,7 @@ public sealed record SearchContext
         PrimaryAlbumType PrimaryType,
         IReadOnlyList<string> Aliases,
         IReadOnlyList<string> Tracks,
+        IReadOnlyList<int> TrackDurations,
         SlskdSettings Settings,
         HashSet<string> ProcessedSearches,
         SearchCriteriaBase? SearchCriteria = null)
@@ -73,6 +75,7 @@ public sealed record SearchContext
         this.PrimaryType = PrimaryType;
         this.Aliases = Aliases;
         this.Tracks = Tracks;
+        this.TrackDurations = TrackDurations;
         this.Settings = Settings;
         this.ProcessedSearches = ProcessedSearches;
         this.SearchCriteria = SearchCriteria;
@@ -87,6 +90,7 @@ public sealed record SearchQuery
     public bool ExpandDirectory { get; init; }
     public int TrackCount { get; init; }
     public IReadOnlyList<string> Tracks { get; init; } = [];
+    public IReadOnlyList<int> TrackDurations { get; init; } = [];
     public string? SearchText { get; init; }
 
     public static SearchQuery FromContext(SearchContext context) => new()
@@ -97,6 +101,7 @@ public sealed record SearchQuery
         ExpandDirectory = !string.IsNullOrEmpty(context.SearchArtist) && !string.IsNullOrEmpty(context.SearchAlbum),
         TrackCount = context.TrackCount,
         Tracks = context.Tracks,
+        TrackDurations = context.TrackDurations,
         SearchText = null
     };
 }

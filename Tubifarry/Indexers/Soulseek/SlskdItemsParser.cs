@@ -38,10 +38,21 @@ namespace Tubifarry.Indexers.Soulseek
             { 'C', 100 }, { 'D', 500 }, { 'M', 1000 }
         };
 
-        private static readonly string[] _nonArtistFolders =
+        private static readonly HashSet<string> _nonArtistFolders = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "audio", "compilations", "soundtracks",
+            "pop", "rock", "jazz", "classical", "various",
+            "torrents", "albums", "album", "recordings",
+            "my music", "mymusic", "new music", "saved music",
+            "muziek", "musiques", "muzika",
+            "deezer", "deezloader", "spotify", "beets"
+        };
+
+        private static readonly string[] _nonArtistStems =
         [
-            "music", "mp3", "flac", "audio", "compilations", "soundtracks",
-            "pop", "rock", "jazz", "classical", "various", "downloads"
+            "music", "share", "complete", "download", "soulseek",
+            "library", "collection", "sorted", "unsorted",
+            "misc", "upload", "media"
         ];
 
         public SlskdItemsParser(ISentryHelper sentry, Logger logger)
@@ -52,7 +63,9 @@ namespace Tubifarry.Indexers.Soulseek
 
         public SlskdFolderData ParseFolderName(string folderPath)
         {
-            string[] pathComponents = SplitPathIntoComponents(folderPath);
+            string[] rawComponents = SplitPathIntoComponents(folderPath);
+            string[] pathComponents = rawComponents.Length > 1 ? rawComponents[1..] : rawComponents;
+
             (string? artist, string? album, string? year) = ParseFromRegexPatterns(pathComponents);
 
             if (string.IsNullOrEmpty(artist) && pathComponents.Length >= 2)
@@ -130,7 +143,7 @@ namespace Tubifarry.Indexers.Soulseek
             (AudioFormat Codec, int? BitRate, int? BitDepth, int? SampleRate, long TotalSize, int TotalDuration) = AnalyzeAudioQuality(directory);
             string qualityInfo = FormatQualityInfo(Codec, BitRate, BitDepth, SampleRate);
 
-            List<SlskdFileData>? filesToDownload = directory
+            List<SlskdFileData>? filesToDownload = [.. directory
                 .Where(f =>
                 {
                     int separatorIndex = f.Filename?.LastIndexOf('\\') ?? -1;
@@ -139,8 +152,7 @@ namespace Tubifarry.Indexers.Soulseek
 
                     string parent = f.Filename![..separatorIndex];
                     return parent == directory.Key || SlskdTextProcessor.GetMergedDirectoryKey(parent) == directory.Key;
-                })
-                .ToList();
+                })];
             int actualTrackCount = filesToDownload?.Count ?? 0;
 
             _logger.Trace($"Audio: {Codec}, BitRate: {BitRate}, BitDepth: {BitDepth}, Files: {actualTrackCount}");
@@ -150,6 +162,16 @@ namespace Tubifarry.Indexers.Soulseek
 
             int priority = folderData.CalculatePriority(expectedTrackCount);
             priority += (int)(trackEvidence * 400);
+
+            double durationMatch = CalculateDurationMatch(directory, searchData.TrackDurations);
+            if (durationMatch >= 0)
+            {
+                if (durationMatch >= 0.8)
+                    priority += (int)(durationMatch * 400);
+                else if (durationMatch < 0.5)
+                    priority = (int)(priority * (0.5 + durationMatch));
+            }
+
             if (HasTrackNumberGaps(directory))
                 priority /= 2;
             if (!isAlbumMatch)
@@ -278,10 +300,38 @@ namespace Tubifarry.Indexers.Soulseek
         {
             if (pathComponents.Length < 2) return null;
             string parentFolder = pathComponents[^2];
-            if (!_nonArtistFolders.Contains(parentFolder.ToLowerInvariant()))
-                return parentFolder;
+            if (IsNonArtistFolder(parentFolder))
+                return null;
 
-            return null;
+            return parentFolder;
+        }
+
+        private static bool IsNonArtistFolder(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return true;
+
+            if (_nonArtistFolders.Contains(name))
+                return true;
+
+            string lettersOnly = RemoveNonAlphanumericRegex().Replace(name, "").ToLowerInvariant();
+            if (lettersOnly.Length > 0 && _nonArtistStems.Any(stem => lettersOnly.StartsWith(stem, StringComparison.Ordinal)))
+                return true;
+
+            if (IsQualityBucketFolder(name))
+                return true;
+
+            return false;
+        }
+
+        private static bool IsQualityBucketFolder(string name)
+        {
+            foreach (string word in name.Split([' ', '_', '-'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (AudioFormatHelper.GetAudioCodecFromExtension(word) != AudioFormat.Unknown)
+                    return true;
+            }
+            return false;
         }
 
         private bool CheckVolumeSeriesMatch(string directoryPath, string? searchAlbum)
@@ -562,32 +612,79 @@ namespace Tubifarry.Indexers.Soulseek
                 return 0;
 
             string haystack = NormalizeString(string.Join(" ", files
-                .Select(f => System.IO.Path.GetFileNameWithoutExtension(f.Filename ?? string.Empty))
+                .Select(f => Path.GetFileNameWithoutExtension(f.Filename ?? string.Empty))
                 .Select(n => TrackNumberPrefixRegex().Replace(n, string.Empty))));
 
             return titles.Count(haystack.Contains) / (double)titles.Count;
         }
 
+        private static double CalculateDurationMatch(IEnumerable<SlskdFileData> files, List<int>? trackDurationsMs)
+        {
+            if (trackDurationsMs == null || trackDurationsMs.Count == 0)
+                return -1;
+
+            List<int> trackSeconds = [.. trackDurationsMs
+                .Select(ms => (int)Math.Round(ms / 1000.0))
+                .Where(d => d > 0)
+                .OrderBy(d => d)];
+
+            if (trackSeconds.Count < trackDurationsMs.Count * 0.8)
+                return -1;
+
+            List<SlskdFileData> fileList = files as List<SlskdFileData> ?? files.ToList();
+            List<int> fileSeconds = [.. fileList
+                .Where(f => f.Length is > 0)
+                .Select(f => f.Length!.Value)
+                .OrderBy(d => d)];
+
+            if (fileSeconds.Count < fileList.Count * 0.8)
+                return -1;
+
+            if (trackSeconds.Count == 0 || fileSeconds.Count == 0)
+                return -1;
+
+            int comparable = Math.Min(trackSeconds.Count, fileSeconds.Count);
+
+            const int toleranceSeconds = 8;
+            int matches = 0;
+            int ti = 0, fi = 0;
+
+            while (ti < trackSeconds.Count && fi < fileSeconds.Count)
+            {
+                int diff = fileSeconds[fi] - trackSeconds[ti];
+                if (Math.Abs(diff) <= toleranceSeconds)
+                {
+                    matches++;
+                    ti++;
+                    fi++;
+                }
+                else if (diff < 0)
+                    fi++;
+                else
+                    ti++;
+            }
+
+            return matches / (double)comparable;
+        }
+
         private static bool HasTrackNumberGaps(IEnumerable<SlskdFileData> files)
         {
-            List<int> numbers = files
+            List<int> numbers = [.. files
                 .Select(f => TrackNumberPrefixCaptureRegex().Match(System.IO.Path.GetFileName(f.Filename ?? string.Empty)))
                 .Where(m => m.Success)
                 .Select(m => int.Parse(m.Groups[1].Value))
                 .Where(n => n is > 0 and <= 150)
                 .Distinct()
-                .Order()
-                .ToList();
+                .Order()];
 
             return numbers.Count >= 3 && numbers[^1] - numbers[0] + 1 != numbers.Count;
         }
 
         private static List<string> ExtractReleaseTags(string path) =>
-            ReleaseTagRegex().Matches(path)
+            [.. ReleaseTagRegex().Matches(path)
                 .Select(m => ReduceWhitespaceRegex().Replace(m.Groups["tag"].Value, " ").Trim().ToUpperInvariant())
                 .Distinct()
-                .Take(4)
-                .ToList();
+                .Take(4)];
 
         private static string DetectSourceTag(string path)
         {
@@ -629,12 +726,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         public static string? GetMostCommonExtension(IEnumerable<SlskdFileData> files)
         {
-            List<string?> extensions = files
+            List<string?> extensions = [.. files
                 .Select(f => string.IsNullOrEmpty(f.Extension)
                     ? Path.GetExtension(f.Filename)?.TrimStart('.').ToLowerInvariant()
                     : f.Extension)
-                .Where(ext => !string.IsNullOrEmpty(ext))
-                .ToList();
+                .Where(ext => !string.IsNullOrEmpty(ext))];
 
             if (extensions.Count == 0)
                 return null;

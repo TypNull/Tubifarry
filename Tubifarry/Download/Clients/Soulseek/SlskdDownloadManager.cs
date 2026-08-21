@@ -726,7 +726,15 @@ public class SlskdDownloadManager : ISlskdDownloadManager
                 _diskProvider.DeleteFolder(localPath, true);
 
                 string? parent = Path.GetDirectoryName(localPath);
-                if (!string.IsNullOrEmpty(parent) && _diskProvider.FolderExists(parent) && _diskProvider.FolderEmpty(parent))
+                string downloadRoot = _remotePathMappingService
+                    .RemapRemoteToLocal(settings.Host, new OsPath(settings.DownloadPath))
+                    .FullPath;
+
+                if (!string.IsNullOrEmpty(parent)
+                    && _diskProvider.FolderExists(parent)
+                    && _diskProvider.FolderEmpty(parent)
+                    && !parent.Equals(downloadRoot, StringComparison.OrdinalIgnoreCase)
+                    && !parent.Equals(downloadRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.Info($"Removing empty parent directory: {parent}");
                     _diskProvider.DeleteFolder(parent, true);

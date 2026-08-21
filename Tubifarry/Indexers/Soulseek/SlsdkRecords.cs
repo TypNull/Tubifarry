@@ -97,8 +97,14 @@ namespace Tubifarry.Indexers.Soulseek
             {
                 int trackDiff = actualTrackCount - expectedTrackCount;
 
-                if (trackDiff < 0) // -1: ~500 pts, -2: ~60 pts, -3+: near 0
-                    score += (int)(2500 * Math.Exp(-Math.Pow(Math.Abs(trackDiff), 2) * 5));
+                if (trackDiff < 0) // MISSING TRACKS: +2500 perfect, linear to max +1500 at 1 missing, -2000 at 75%, flat -2000 below
+                {
+                    double ratio = actualTrackCount / (double)expectedTrackCount;
+                    if (ratio < 0.75)
+                        score -= 2000;
+                    else
+                        score += (int)(-2000 + (ratio - 0.75) / 0.25 * 3500);
+                }
                 else if (trackDiff == 0)  // PERFECT MATCH
                     score += 2500;
                 else   // EXTRA TRACKS: Less critical, just penalized: +1: ~1600 pts, +2: ~600 pts, +3: ~100 pts, +15: near 0
@@ -153,7 +159,8 @@ namespace Tubifarry.Indexers.Soulseek
         [property: JsonPropertyName("expandDirectory")] bool ExpandDirectory,
         [property: JsonPropertyName("mimimumFiles")] int MinimumFiles,
         [property: JsonPropertyName("maximumFiles")] int? MaximumFiles,
-        [property: JsonPropertyName("tracks")] List<string>? Tracks = null)
+        [property: JsonPropertyName("tracks")] List<string>? Tracks = null,
+        [property: JsonPropertyName("trackDurations")] List<int>? TrackDurations = null)
     {
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
         public static SlskdSearchData FromJson(string jsonString) => JsonSerializer.Deserialize<SlskdSearchData>(jsonString, _jsonOptions)!;

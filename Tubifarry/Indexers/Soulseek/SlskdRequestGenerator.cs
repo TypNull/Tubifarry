@@ -53,8 +53,10 @@ namespace Tubifarry.Indexers.Soulseek
             AlbumRelease? monitoredRelease = albumReleases?.FirstOrDefault(r => r.Monitored);
             int trackCount = monitoredRelease?.TrackCount
                 ?? (albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0);
-            List<string> tracks = (monitoredRelease ?? albumReleases?.FirstOrDefault(x => x.Tracks?.Value is { Count: > 0 }))
-                ?.Tracks?.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? [];
+            AlbumRelease? trackSource = monitoredRelease ?? albumReleases?.FirstOrDefault(x => x.Tracks?.Value is { Count: > 0 });
+            List<Track>? trackList = trackSource?.Tracks?.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).ToList();
+            List<string> tracks = trackList?.Select(x => x.Title).ToList() ?? [];
+            List<int> trackDurations = trackList?.Where(t => t.Duration > 0).Select(t => t.Duration).ToList() ?? [];
 
             _processedSearches.Clear();
 
@@ -67,6 +69,7 @@ namespace Tubifarry.Indexers.Soulseek
                 TrackCount: trackCount,
                 Aliases: searchCriteria.Artist?.Metadata.Value.Aliases ?? [],
                 Tracks: tracks,
+                TrackDurations: trackDurations,
                 Settings: Settings,
                 ProcessedSearches: _processedSearches,
                 SearchCriteria: searchCriteria);
@@ -83,8 +86,10 @@ namespace Tubifarry.Indexers.Soulseek
             AlbumRelease? monitoredRelease = albumReleases?.FirstOrDefault(r => r.Monitored);
             int trackCount = monitoredRelease?.TrackCount
                 ?? (albumReleases?.Any() == true ? albumReleases.Min(x => x.TrackCount) : 0);
-            List<string> tracks = (monitoredRelease ?? albumReleases?.FirstOrDefault(x => x.Tracks?.Value is { Count: > 0 }))
-                ?.Tracks?.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).Select(x => x.Title).ToList() ?? [];
+            AlbumRelease? trackSource = monitoredRelease ?? albumReleases?.FirstOrDefault(x => x.Tracks?.Value is { Count: > 0 });
+            List<Track>? trackList = trackSource?.Tracks?.Value?.Where(x => !string.IsNullOrEmpty(x.Title)).ToList();
+            List<string> tracks = trackList?.Select(x => x.Title).ToList() ?? [];
+            List<int> trackDurations = trackList?.Where(t => t.Duration > 0).Select(t => t.Duration).ToList() ?? [];
 
             _processedSearches.Clear();
 
@@ -97,6 +102,7 @@ namespace Tubifarry.Indexers.Soulseek
                 TrackCount: trackCount,
                 Aliases: searchCriteria.Artist?.Metadata.Value.Aliases ?? [],
                 Tracks: tracks,
+                TrackDurations: trackDurations,
                 Settings: Settings,
                 ProcessedSearches: _processedSearches,
                 SearchCriteria: searchCriteria);
@@ -314,7 +320,8 @@ namespace Tubifarry.Indexers.Soulseek
                 ExpandDirectory: query.ExpandDirectory,
                 MinimumFiles: minimumFiles,
                 MaximumFiles: maximumFiles,
-                Tracks: query.Tracks.Take(50).ToList()));
+                Tracks: query.Tracks.Take(50).ToList(),
+                TrackDurations: query.TrackDurations.Count > 0 ? [.. query.TrackDurations] : null));
 
             return request;
         }
@@ -403,32 +410,39 @@ namespace Tubifarry.Indexers.Soulseek
                 {
                     SlskdDirectoryApiResponse[]? directoryResponse = JsonSerializer.Deserialize<SlskdDirectoryApiResponse[]>(response.Content, _jsonOptions);
 
-                    if (directoryResponse?.Length > 0 && directoryResponse[0].Files?.Any() == true)
+                    if (directoryResponse == null || directoryResponse.Length == 0)
+                        return null;
+
+                    string originalExtension = originalTrack.Extension?.ToLowerInvariant() ?? "";
+
+                    List<SlskdFileData> directoryFiles = [.. directoryResponse
+                        .Where(d => d.Files?.Count > 0)
+                        .SelectMany(d => d.Files)
+                        .Where(f => AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(f.Filename)) != AudioFormat.Unknown)
+                        .Select(f =>
+                        {
+                            string fileExtension = Path.GetExtension(f.Filename)?.TrimStart('.').ToLowerInvariant() ?? "";
+                            bool sameExtension = fileExtension == originalExtension;
+
+                            return new SlskdFileData(
+                                Filename: $"{directoryPath}\\{f.Filename}",
+                                BitRate: sameExtension ? originalTrack.BitRate : null,
+                                BitDepth: sameExtension ? originalTrack.BitDepth : null,
+                                Size: f.Size,
+                                Length: sameExtension ? originalTrack.Length : null,
+                                Extension: fileExtension,
+                                SampleRate: sameExtension ? originalTrack.SampleRate : null,
+                                Code: f.Code,
+                                IsLocked: false
+                            );
+                        })];
+
+                    if (directoryFiles.Count != 0)
                     {
-                        string originalExtension = originalTrack.Extension?.ToLowerInvariant() ?? "";
-
-                        List<SlskdFileData> directoryFiles = directoryResponse[0].Files
-                            .Where(f => AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(f.Filename)) != AudioFormat.Unknown)
-                            .Select(f =>
-                            {
-                                string fileExtension = Path.GetExtension(f.Filename)?.TrimStart('.').ToLowerInvariant() ?? "";
-                                bool sameExtension = fileExtension == originalExtension;
-
-                                return new SlskdFileData(
-                                    Filename: $"{directoryPath}\\{f.Filename}",
-                                    BitRate: sameExtension ? originalTrack.BitRate : null,
-                                    BitDepth: sameExtension ? originalTrack.BitDepth : null,
-                                    Size: f.Size,
-                                    Length: sameExtension ? originalTrack.Length : null,
-                                    Extension: fileExtension,
-                                    SampleRate: sameExtension ? originalTrack.SampleRate : null,
-                                    Code: f.Code,
-                                    IsLocked: false
-                                );
-                            }).ToList();
-
-                        if (directoryFiles.Count != 0)
-                            return directoryFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)).First();
+                        List<IGrouping<string, SlskdFileData>> merged = SlskdTextProcessor.MergeDiscSubdirectories(
+                            directoryFiles.GroupBy(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename)));
+                        if (merged.Count > 0)
+                            return merged[0];
                     }
                 }
                 else
