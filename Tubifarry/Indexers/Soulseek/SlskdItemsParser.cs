@@ -1,5 +1,5 @@
 using FuzzySharp;
-using Newtonsoft.Json;
+using System.Text.Json;
 using NLog;
 using NzbDrone.Core.Indexers;
 using System.Collections.Concurrent;
@@ -225,7 +225,7 @@ namespace Tubifarry.Indexers.Soulseek
                 Priotity = priority,
                 ShowPriorityInTitle = settings?.ShowPriorityInTitle ?? false,
                 SourceTag = sourceTag,
-                CustomString = JsonConvert.SerializeObject(filesToDownload),
+                CustomString = JsonSerializer.Serialize(filesToDownload),
                 ExtraInfo = [edition, .. releaseTags.Where(t => !string.Equals(t, edition, StringComparison.OrdinalIgnoreCase)), $"👤 {folderData.Username} ", $"{(folderData.HasFreeUploadSlot ? "⚡" : "❌")} {folderData.UploadSpeed / 1024.0 / 1024.0:F2}MB/s ", folderData.QueueLength == 0 ? "" : $"📋 {folderData.QueueLength}"],
                 Duration = TotalDuration
             };

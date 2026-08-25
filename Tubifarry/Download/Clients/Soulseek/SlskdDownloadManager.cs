@@ -666,13 +666,16 @@ public class SlskdDownloadManager : ISlskdDownloadManager
                 .Where(h => h.EventType == DownloadHistoryEventType.DownloadGrabbed)
                 .OrderByDescending(h => h.Date))
             {
-                if (grab.Release?.Source == null)
+                if (grab.Release?.Source is not { Length: > 0 } source)
+                    continue;
+
+                if (source[0] != '[')
                     continue;
 
                 List<SlskdFileData> grabFiles;
                 try
                 {
-                    grabFiles = JsonSerializer.Deserialize<List<SlskdFileData>>(grab.Release.Source, _containmentJsonOptions) ?? [];
+                    grabFiles = JsonSerializer.Deserialize<List<SlskdFileData>>(source, _containmentJsonOptions) ?? [];
                 }
                 catch (JsonException)
                 {
