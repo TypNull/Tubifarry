@@ -55,8 +55,8 @@ namespace Tubifarry.Download.Clients.Invidious
         [FieldDefinition(2, Label = "Proxy Videos", Type = FieldType.Checkbox, HelpText = "Proxy video streams through Invidious instead of connecting directly to YouTube")]
         public bool ProxyVideos { get; set; } = true;
 
-        [FieldDefinition(3, Label = "ReEncode", Type = FieldType.Select, SelectOptions = typeof(ReEncodeOptions), HelpText = "Specify whether to re-encode audio files and how to handle FFmpeg")]
-        public int ReEncode { get; set; } = (int)ReEncodeOptions.Disabled;
+        [FieldDefinition(3, Label = "ReEncode", Type = FieldType.Select, SelectOptions = typeof(ReEncodeOptions), HelpText = "Specify whether to re-encode audio files and how to handle FFmpeg. Often required")]
+        public int ReEncode { get; set; } = (int)ReEncodeOptions.OnlyExtract;
 
         [FieldDefinition(4, Label = "Use ID3v2.3 Tags", HelpText = "Enable for better compatibility with older media players", Type = FieldType.Checkbox, Advanced = true)]
         public bool UseID3v2_3 { get; set; }
