@@ -782,13 +782,8 @@ namespace Tubifarry.Indexers.Soulseek
         private static partial Regex ArtistYearAlbumRegex();
 
         [GeneratedRegex(@"(?ix)\b(?<tag>
-            remaster(?:ed)?(?:\s*(?:19|20)\d{2})? | (?:19|20)\d{2}\s*remaster(?:ed)? |
-            (?:super\s+)?deluxe | \d{1,3}(?:th|st|nd|rd)\s+anniversary | anniversary |
-            expanded | limited | collector'?s | box\s?set |
-            live | unplugged | acoustic |
-            vinyl | sacd | dsd\d* | mfsl | mofi | mono |
-            24\s?[-_]?\s?bit(?:\s*/?\s*\d{2,3}(?:\.\d)?\s?khz)? | \d{2,3}(?:\.\d)?\s?khz |
-            japan(?:ese)? | instrumental | bonus\s+tracks?
+            box\s?set | mono |
+            24\s?[-_]?\s?bit(?:\s*/?\s*\d{2,3}(?:\.\d)?\s?khz)? | \d{2,3}(?:\.\d)?\s?khz
             )\b", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
         private static partial Regex ReleaseTagRegex();
 

@@ -772,8 +772,8 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         using JsonDocument doc = JsonDocument.Parse(source);
         return doc.RootElement.EnumerateArray()
             .Select(el => (
-                Filename: el.TryGetProperty("Filename", out JsonElement fn) ? fn.GetString() ?? "" : "",
-                Size: el.TryGetProperty("Size", out JsonElement sz) ? sz.GetInt64() : 0L
+                Filename: el.TryGetProperty("filename", out JsonElement fn) ? fn.GetString() ?? "" : "",
+                Size: el.TryGetProperty("size", out JsonElement sz) ? sz.GetInt64() : 0L
             ))
             .ToList();
     }
