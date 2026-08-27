@@ -417,15 +417,16 @@ namespace Tubifarry.Indexers.Soulseek
 
                     List<SlskdFileData> directoryFiles = [.. directoryResponse
                         .Where(d => d.Files?.Count > 0)
-                        .SelectMany(d => d.Files)
-                        .Where(f => AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(f.Filename)) != AudioFormat.Unknown)
-                        .Select(f =>
+                        .SelectMany(d => d.Files.Select(f => (Dir: string.IsNullOrEmpty(d.Name) ? directoryPath : d.Name, File: f)))
+                        .Where(x => AudioFormatHelper.GetAudioCodecFromExtension(Path.GetExtension(x.File.Filename)) != AudioFormat.Unknown)
+                        .Select(x =>
                         {
+                            SlskdDirectoryApiFile f = x.File;
                             string fileExtension = Path.GetExtension(f.Filename)?.TrimStart('.').ToLowerInvariant() ?? "";
                             bool sameExtension = fileExtension == originalExtension;
 
                             return new SlskdFileData(
-                                Filename: $"{directoryPath}\\{f.Filename}",
+                                Filename: $"{x.Dir}\\{f.Filename}",
                                 BitRate: sameExtension ? originalTrack.BitRate : null,
                                 BitDepth: sameExtension ? originalTrack.BitDepth : null,
                                 Size: f.Size,

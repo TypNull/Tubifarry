@@ -216,7 +216,8 @@ namespace Tubifarry.Indexers.Soulseek
     }
 
     public record SlskdDirectoryApiResponse(
-      [property: JsonPropertyName("files")] List<SlskdDirectoryApiFile> Files
+      [property: JsonPropertyName("files")] List<SlskdDirectoryApiFile> Files,
+      [property: JsonPropertyName("name")] string? Name = null
     );
 
     public record SlskdDirectoryApiFile(

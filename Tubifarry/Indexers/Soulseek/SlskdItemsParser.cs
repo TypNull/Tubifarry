@@ -45,7 +45,13 @@ namespace Tubifarry.Indexers.Soulseek
             "torrents", "albums", "album", "recordings",
             "my music", "mymusic", "new music", "saved music",
             "muziek", "musiques", "muzika",
-            "deezer", "deezloader", "spotify", "beets"
+            "deezer", "deezloader", "spotify", "beets",
+            "single", "singles", "ep", "eps", "lp", "lps",
+            "demo", "demos", "live", "remix", "remixes",
+            "bootleg", "bootlegs", "mixtape", "mixtapes",
+            "promo", "promos", "discography", "features",
+            "appearances", "extras", "other", "rarities",
+            "outtakes", "unreleased", "b-sides", "loosies"
         };
 
         private static readonly string[] _nonArtistStems =
@@ -244,10 +250,14 @@ namespace Tubifarry.Indexers.Soulseek
             Match? match = TryMatchRegex(lastComponent, ArtistAlbumYearRegex());
             if (match != null)
             {
-                return (
-                    match.Groups["artist"].Success ? match.Groups["artist"].Value.Trim() : null,
-                    match.Groups["album"].Success ? match.Groups["album"].Value.Trim() : null,
-                    match.Groups["year"].Success ? match.Groups["year"].Value.Trim() : null);
+                string? artist = match.Groups["artist"].Success ? match.Groups["artist"].Value.Trim() : null;
+                if (!IsYearString(artist))
+                {
+                    return (
+                        artist,
+                        match.Groups["album"].Success ? match.Groups["album"].Value.Trim() : null,
+                        match.Groups["year"].Success ? match.Groups["year"].Value.Trim() : null);
+                }
             }
 
             // Try year-artist-album pattern
@@ -299,11 +309,30 @@ namespace Tubifarry.Indexers.Soulseek
         private static string? GetArtistFromParentFolder(string[] pathComponents)
         {
             if (pathComponents.Length < 2) return null;
-            string parentFolder = pathComponents[^2];
-            if (IsNonArtistFolder(parentFolder))
-                return null;
 
-            return parentFolder;
+            for (int i = pathComponents.Length - 2; i >= 0; i--)
+            {
+                string folder = pathComponents[i];
+                if (IsNonArtistFolder(folder))
+                    continue;
+                return CleanArtistFolderName(folder);
+            }
+
+            return null;
+        }
+
+        private static string CleanArtistFolderName(string name)
+        {
+            string cleaned = TrailingParenthesizedRegex().Replace(name, "").Trim();
+            return cleaned.Length >= 2 ? cleaned : name;
+        }
+
+        private static bool IsYearString(string? value)
+        {
+            if (value is not { Length: 4 })
+                return false;
+            Match m = YearExtractionRegex().Match(value);
+            return m.Success && m.Index == 0 && m.Length == value.Length;
         }
 
         private static bool IsNonArtistFolder(string name)
@@ -319,6 +348,9 @@ namespace Tubifarry.Indexers.Soulseek
                 return true;
 
             if (IsQualityBucketFolder(name))
+                return true;
+
+            if (NumberedCategoryRegex().IsMatch(name))
                 return true;
 
             return false;
@@ -782,13 +814,8 @@ namespace Tubifarry.Indexers.Soulseek
         private static partial Regex ArtistYearAlbumRegex();
 
         [GeneratedRegex(@"(?ix)\b(?<tag>
-            remaster(?:ed)?(?:\s*(?:19|20)\d{2})? | (?:19|20)\d{2}\s*remaster(?:ed)? |
-            (?:super\s+)?deluxe | \d{1,3}(?:th|st|nd|rd)\s+anniversary | anniversary |
-            expanded | limited | collector'?s | box\s?set |
-            live | unplugged | acoustic |
-            vinyl | sacd | dsd\d* | mfsl | mofi | mono |
-            24\s?[-_]?\s?bit(?:\s*/?\s*\d{2,3}(?:\.\d)?\s?khz)? | \d{2,3}(?:\.\d)?\s?khz |
-            japan(?:ese)? | instrumental | bonus\s+tracks?
+            box\s?set | mono |
+            24\s?[-_]?\s?bit(?:\s*/?\s*\d{2,3}(?:\.\d)?\s?khz)? | \d{2,3}(?:\.\d)?\s?khz
             )\b", RegexOptions.IgnoreCase | RegexOptions.ExplicitCapture | RegexOptions.Compiled)]
         private static partial Regex ReleaseTagRegex();
 
@@ -836,5 +863,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         [GeneratedRegex(@"[._/]+", RegexOptions.Compiled)]
         private static partial Regex NormalizeCharactersRegex();
+
+        [GeneratedRegex(@"\s*\([^)]+\)\s*$", RegexOptions.Compiled)]
+        private static partial Regex TrailingParenthesizedRegex();
+
+        [GeneratedRegex(@"^\[\d+\]\s", RegexOptions.Compiled)]
+        private static partial Regex NumberedCategoryRegex();
     }
 }
