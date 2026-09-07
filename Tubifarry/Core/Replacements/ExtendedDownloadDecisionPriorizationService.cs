@@ -1,21 +1,18 @@
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.DecisionEngine;
+using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Delay;
 using NzbDrone.Core.Qualities;
 
 namespace Tubifarry.Core.Replacements;
 
-public class ExtendedDownloadDecisionPriorizationService : IPrioritizeDownloadDecision
+public class ExtendedDownloadDecisionPriorizationService(
+    IConfigService configService,
+    IDelayProfileService delayProfileService,
+    IQualityDefinitionService qualityDefinitionService,
+    IAlbumYearMatcher yearMatcher) : IPrioritizeDownloadDecision
 {
-    private readonly ExtendedDownloadDecisionComparer _comparer;
-
-    public ExtendedDownloadDecisionPriorizationService(
-        IConfigService configService,
-        IDelayProfileService delayProfileService,
-        IQualityDefinitionService qualityDefinitionService)
-    {
-        _comparer = new ExtendedDownloadDecisionComparer(configService, delayProfileService, qualityDefinitionService);
-    }
+    private readonly ExtendedDownloadDecisionComparer _comparer = new(configService, delayProfileService, qualityDefinitionService, yearMatcher);
 
     public List<DownloadDecision> PrioritizeDecisions(List<DownloadDecision> decisions)
     {
