@@ -1,6 +1,7 @@
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.DecisionEngine;
 using NzbDrone.Core.Indexers;
+using NzbDrone.Core.Music;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.Profiles.Delay;
 using NzbDrone.Core.Profiles.Qualities;
@@ -18,8 +19,9 @@ public sealed class ExtendedDownloadDecisionComparer : DownloadDecisionComparer,
     public ExtendedDownloadDecisionComparer(
         IConfigService configService,
         IDelayProfileService delayProfileService,
-        IQualityDefinitionService qualityDefinitionService)
-        : base(configService, delayProfileService, qualityDefinitionService)
+        IQualityDefinitionService qualityDefinitionService,
+        IAlbumYearMatcher yearMatcher)
+        : base(configService, delayProfileService, qualityDefinitionService, yearMatcher)
     {
         _configService = configService;
         _delayProfileService = delayProfileService;

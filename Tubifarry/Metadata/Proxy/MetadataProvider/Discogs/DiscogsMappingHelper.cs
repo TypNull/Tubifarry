@@ -517,7 +517,9 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
         private static List<DiscogsTrack> FilterTracklist(List<DiscogsTrack>? tracklist) => tracklist?
             .Where(t => !string.Equals(t.Type, "heading", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(t.Type, "index", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(t.Type, "index", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(t.Type, "video", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(t.Position, "video", StringComparison.OrdinalIgnoreCase))
             .ToList() ?? [];
 
         /// <summary>

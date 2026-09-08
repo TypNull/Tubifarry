@@ -160,25 +160,104 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
             Album? existingAlbum = _albumService.FindById(foreignAlbumId);
 
-            bool useMaster = foreignAlbumId.StartsWith('m');
-            _logger.Trace($"Using {(useMaster ? "master" : "release")} details for AlbumId: {foreignAlbumId}");
+            string resolvedAlbumId = foreignAlbumId;
+            string cleanId = RemoveIdentifier(foreignAlbumId);
 
-            DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
+            bool isDiscogsId =
+                (cleanId.StartsWith('m') || cleanId.StartsWith('r')) &&
+                cleanId.Length > 1 &&
+                int.TryParse(cleanId[1..], out _);
+
+            if (!isDiscogsId)
+            {
+                if (existingAlbum == null || string.IsNullOrWhiteSpace(existingAlbum.Title))
+                    throw new KeyNotFoundException(
+                        $"Unable to resolve non-Discogs album ID '{foreignAlbumId}' because the album was not found in Lidarr.");
+
+                string? artistName = existingAlbum.Artist?.Value?.Name;
+
+                _logger.Debug(
+                    $"Album ID '{foreignAlbumId}' is not a Discogs ID. Searching Discogs for '{existingAlbum.Title}' by '{artistName}'.");
+
+                List<DiscogsSearchItem> matches = await CachedSearchAsync(
+                    settings,
+                    existingAlbum.Title,
+                    item => item,
+                    "all",
+                    artistName);
+
+                DiscogsSearchItem? bestMatch = matches
+                    .Where(item =>
+                        string.Equals(item.Type, "master", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(item.Type, "release", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(item =>
+                    {
+                        string candidateTitle = item.Title ?? string.Empty;
+
+                        if (!string.IsNullOrWhiteSpace(artistName))
+                        {
+                            string prefix = artistName + " - ";
+                            if (candidateTitle.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                                candidateTitle = candidateTitle[prefix.Length..];
+                        }
+
+                        return Fuzz.Ratio(candidateTitle, existingAlbum.Title);
+                    })
+                    .FirstOrDefault();
+
+                if (bestMatch == null)
+                    throw new KeyNotFoundException(
+                        $"Unable to map album '{existingAlbum.Title}' [{foreignAlbumId}] to a Discogs release.");
+
+                bool matchedMaster =
+                    string.Equals(bestMatch.Type, "master", StringComparison.OrdinalIgnoreCase);
+
+                resolvedAlbumId =
+                    $"{(matchedMaster ? "m" : "r")}{bestMatch.Id}@discogs";
+
+                _logger.Debug(
+                    $"Mapped album '{existingAlbum.Title}' [{foreignAlbumId}] to Discogs {bestMatch.Type} ID {bestMatch.Id} ('{bestMatch.Title}').");
+            }
+
+            bool useMaster = RemoveIdentifier(resolvedAlbumId).StartsWith('m');
+            _logger.Trace(
+                $"Using {(useMaster ? "master" : "release")} details for AlbumId: {resolvedAlbumId}");
+
+            DiscogsApiService apiService = new(_httpClient, settings.UserAgent)
+            {
+                AuthToken = settings.AuthToken
+            };
 
             (Album mappedAlbum, object releaseForTracks) = useMaster
-                ? await GetMasterReleaseDetailsAsync(foreignAlbumId, apiService)
-                : await GetReleaseDetailsAsync(foreignAlbumId, apiService);
+                ? await GetMasterReleaseDetailsAsync(resolvedAlbumId, apiService)
+                : await GetReleaseDetailsAsync(resolvedAlbumId, apiService);
 
-            DiscogsArtist? discogsArtist = await GetPrimaryArtistAsync(foreignAlbumId, useMaster, existingAlbum);
+            DiscogsArtist? discogsArtist =
+                await GetPrimaryArtistAsync(resolvedAlbumId, useMaster, existingAlbum);
 
             Artist existingArtist = (existingAlbum?.Artist?.Value ?? (discogsArtist != null ? DiscogsMappingHelper.MapArtistFromDiscogsArtist(discogsArtist) : null))
-                ?? throw new ModelNotFoundException(typeof(Artist), 0);
+                  ?? throw new ModelNotFoundException(typeof(Artist), 0);
             _logger.Trace($"Processed artist information for ArtistId: {existingArtist.ForeignArtistId}");
             existingArtist.Albums ??= new LazyLoaded<List<Album>>([]);
 
             mappedAlbum.Artist = existingArtist;
             mappedAlbum.ArtistMetadata = existingArtist.Metadata;
             mappedAlbum.ArtistMetadataId = existingArtist.ArtistMetadataId;
+
+            // If Lidarr requested an existing non-Discogs album (for example a
+            // MusicBrainz UUID), preserve its matching-critical metadata and tracks.
+            // Discogs should supplement the discography, not replace metadata for
+            // albums already owned by another metadata source.
+            if (!isDiscogsId && existingAlbum != null)
+            {
+                _logger.Debug(
+                    $"Preserving existing metadata for non-Discogs AlbumId: {foreignAlbumId}; resolved Discogs match was {resolvedAlbumId}.");
+
+                return new Tuple<string, Album, List<ArtistMetadata>>(
+                    existingArtist.ForeignArtistId,
+                    existingAlbum,
+                    [existingArtist.Metadata.Value]);
+            }
 
             Album finalAlbum = DiscogsMappingHelper.MergeAlbums(existingAlbum!, mappedAlbum);
             AlbumRelease albumRelease = finalAlbum.AlbumReleases.Value[0];
@@ -226,19 +305,52 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
             _logger.Debug($"Fetching artist info for ID: {foreignArtistId}.");
             UpdateCache(settings);
 
-            string artistCacheKey = $"artist:{foreignArtistId}" + _identifier;
+            Artist? existingArtist = _artistService.FindById(foreignArtistId);
+
+            string cleanId = RemoveIdentifier(foreignArtistId);
+            if (cleanId.Length > 1 && !char.IsDigit(cleanId[0]))
+                cleanId = cleanId[1..];
+
+            int discogsArtistId;
+
+            if (!int.TryParse(cleanId, out discogsArtistId))
+            {
+                if (existingArtist == null || string.IsNullOrWhiteSpace(existingArtist.Name))
+                    throw new KeyNotFoundException($"Unable to resolve non-Discogs artist ID '{foreignArtistId}' because the artist was not found in Lidarr.");
+
+                _logger.Debug($"Artist ID '{foreignArtistId}' is not a Discogs ID. Searching Discogs for '{existingArtist.Name}'.");
+
+                List<DiscogsSearchItem> matches = await CachedSearchAsync(
+                    settings,
+                    existingArtist.Name,
+                    item => item,
+                    "artist",
+                    null);
+
+                DiscogsSearchItem? bestMatch = matches
+                    .OrderByDescending(item => Fuzz.Ratio(item.Title ?? string.Empty, existingArtist.Name))
+                    .FirstOrDefault();
+
+                if (bestMatch == null)
+                    throw new KeyNotFoundException($"Unable to map artist '{existingArtist.Name}' [{foreignArtistId}] to a Discogs artist.");
+
+                discogsArtistId = bestMatch.Id;
+
+                _logger.Debug($"Mapped artist '{existingArtist.Name}' [{foreignArtistId}] to Discogs artist ID {discogsArtistId} ('{bestMatch.Title}').");
+            }
+
+            string artistCacheKey = $"artist:{discogsArtistId}" + _identifier;
             DiscogsArtist? artist = await _cache.FetchAndCacheAsync<DiscogsArtist>(artistCacheKey, () =>
             {
                 DiscogsApiService apiService = new(_httpClient, settings.UserAgent) { AuthToken = settings.AuthToken };
-                string cleanId = RemoveIdentifier(foreignArtistId);
-                if (cleanId.Length > 1 && !char.IsDigit(cleanId[0]))
-                    cleanId = cleanId[1..];
-                return apiService.GetArtistAsync(int.Parse(cleanId))!;
+                return apiService.GetArtistAsync(discogsArtistId)!;
             });
 
-            Artist? existingArtist = _artistService.FindById(foreignArtistId);
-            existingArtist ??= DiscogsMappingHelper.MapArtistFromDiscogsArtist(artist!);
-            existingArtist.Albums = AlbumMapper.FilterAlbums(await FetchAlbumsForArtistAsync(settings, existingArtist, artist!.Id), metadataProfileId, _metadataProfileService);
+            if (artist == null)
+                throw new KeyNotFoundException($"Discogs artist ID {discogsArtistId} could not be retrieved.");
+
+            existingArtist ??= DiscogsMappingHelper.MapArtistFromDiscogsArtist(artist);
+            existingArtist.Albums = await FetchAlbumsForArtistAsync(settings, existingArtist, artist.Id);
             existingArtist.MetadataProfileId = metadataProfileId;
 
             _logger.Trace($"Processed artist: {artist.Name} (ID: {existingArtist.ForeignArtistId}).");
@@ -256,12 +368,60 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
                 return apiService.GetArtistReleasesAsync(foreignArtistId, null, 70);
             });
 
-            List<Album> albums = [];
+            // Discogs can return both a master and one or more individual
+            // releases for the same logical album. Exposing both to Lidarr
+            // creates duplicate Album rows that may be deleted while an import
+            // is still referencing them. Collapse exact-title duplicates here,
+            // preferring the master when one exists.
+            Dictionary<string, DiscogsArtistRelease> mainReleases = new(StringComparer.OrdinalIgnoreCase);
+
             foreach (DiscogsArtistRelease release in artistReleases)
             {
                 if (release == null || release.Role != "Main")
                     continue;
 
+                bool isCdrPromo =
+                    release.Format?.Contains("CDr", StringComparison.OrdinalIgnoreCase) == true &&
+                    release.Format.Contains("Promo", StringComparison.OrdinalIgnoreCase);
+
+                if (isCdrPromo)
+                {
+                    _logger.Debug(
+                        $"Skipping Discogs CDr promo release {release.Id} ('{release.Title}').");
+                    continue;
+                }
+
+                string titleKey = release.Title?.Trim() ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(titleKey))
+                    titleKey = $"{release.Type}:{release.Id}";
+
+                if (!mainReleases.TryGetValue(titleKey, out DiscogsArtistRelease? existing))
+                {
+                    mainReleases[titleKey] = release;
+                    continue;
+                }
+
+                bool existingIsMaster = string.Equals(existing.Type, "master", StringComparison.OrdinalIgnoreCase);
+                bool candidateIsMaster = string.Equals(release.Type, "master", StringComparison.OrdinalIgnoreCase);
+
+                if (!existingIsMaster && candidateIsMaster)
+                {
+                    _logger.Debug(
+                        $"Replacing duplicate Discogs release {existing.Id} with master {release.Id} for '{release.Title}'.");
+
+                    mainReleases[titleKey] = release;
+                }
+                else
+                {
+                    _logger.Debug(
+                        $"Skipping duplicate Discogs {release.Type} {release.Id} for '{release.Title}'; keeping {existing.Type} {existing.Id}.");
+                }
+            }
+
+            List<Album> albums = [];
+            foreach (DiscogsArtistRelease release in mainReleases.Values)
+            {
                 Album album = DiscogsMappingHelper.MapAlbumFromArtistRelease(release);
                 album.Artist = artist;
                 album.ArtistMetadata = artist.Metadata;
@@ -279,3 +439,4 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         private static string RemoveIdentifier(string input) => input.EndsWith(_identifier, StringComparison.OrdinalIgnoreCase) ? input.Remove(input.Length - _identifier.Length) : input;
     }
 }
+

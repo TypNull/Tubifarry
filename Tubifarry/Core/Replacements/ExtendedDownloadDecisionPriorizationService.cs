@@ -1,5 +1,6 @@
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.DecisionEngine;
+using NzbDrone.Core.Music;
 using NzbDrone.Core.Profiles.Delay;
 using NzbDrone.Core.Qualities;
 
@@ -12,9 +13,10 @@ public class ExtendedDownloadDecisionPriorizationService : IPrioritizeDownloadDe
     public ExtendedDownloadDecisionPriorizationService(
         IConfigService configService,
         IDelayProfileService delayProfileService,
-        IQualityDefinitionService qualityDefinitionService)
+        IQualityDefinitionService qualityDefinitionService,
+        IAlbumYearMatcher yearMatcher)
     {
-        _comparer = new ExtendedDownloadDecisionComparer(configService, delayProfileService, qualityDefinitionService);
+        _comparer = new ExtendedDownloadDecisionComparer(configService, delayProfileService, qualityDefinitionService, yearMatcher);
     }
 
     public List<DownloadDecision> PrioritizeDecisions(List<DownloadDecision> decisions)
