@@ -1,3 +1,59 @@
+# Tubifarry — Lidarr 3.1.5 Compatibility & Discogs Fixes Fork
+
+> [!IMPORTANT]
+> This fork of [TypNull/Tubifarry](https://github.com/TypNull/Tubifarry)
+> contains compatibility fixes for Lidarr 3.1.5, including restored Discogs
+> metadata handling for existing MusicBrainz-backed artists and albums.
+
+### Lidarr 3.1.5 compatibility
+
+Lidarr 3.1.5 changed the constructor dependencies for its download decision
+comparison logic.
+
+This fork updates Tubifarry's replacement download decision classes to support
+the newer signature by injecting and forwarding `IAlbumYearMatcher`.
+
+Affected classes:
+
+- `ExtendedDownloadDecisionComparer`
+- `ExtendedDownloadDecisionPriorizationService`
+
+This keeps Tubifarry's custom download prioritization compatible with
+Lidarr 3.1.5.
+
+### Discogs metadata compatibility
+
+This fork also improves how Tubifarry's Discogs metadata provider works with
+artists and albums that already exist in Lidarr using identifiers from another
+metadata source, such as MusicBrainz.
+
+Previously, the Discogs provider expected the identifiers passed to it to
+already be native Discogs IDs. When Lidarr supplied an existing MusicBrainz
+artist or album ID, Discogs metadata retrieval could fail.
+
+This fork adds resolution of non-Discogs identifiers:
+
+- Existing artists are located in Lidarr and searched for on Discogs by name.
+- Discogs artist search results are fuzzy-matched to the existing artist.
+- Existing albums are searched for using their title and artist.
+- Album search results are fuzzy-matched and resolved to a Discogs master or
+  release ID.
+- Existing Lidarr album metadata and tracks are preserved when Discogs is
+  supplementing an album owned by another metadata source.
+
+### Discogs discography cleanup
+
+The Discogs provider also includes several fixes to produce a cleaner
+discography for Lidarr:
+
+- Collapses duplicate Discogs master/release entries with the same title.
+- Prefers the Discogs master when both a master and individual release exist.
+- Skips CDr promo releases.
+- Filters Discogs `video` entries out of album tracklists.
+
+These changes help Discogs supplement an existing Lidarr library without
+creating duplicate albums or replacing matching-critical metadata.
+
 # Tubifarry for Lidarr 🎶
 ![Downloads](https://img.shields.io/github/downloads/TypNull/Tubifarry/total)  ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TypNull/Tubifarry)  ![GitHub last commit](https://img.shields.io/github/last-commit/TypNull/Tubifarry)  ![License](https://img.shields.io/github/license/TypNull/Tubifarry)  ![GitHub stars](https://img.shields.io/github/stars/TypNull/Tubifarry)
 
