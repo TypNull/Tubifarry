@@ -30,7 +30,7 @@
 		<PackageReference Include="FFMpegCore" Version="5.0.2" />
 		<PackageReference Include="SharpCompress" Version="0.50.4" />
 		<PackageReference Include="YamlDotNet" Version="18.1.0" />
-		<PackageReference Include="YouTubeMusicAPI" Version="3.0.10" />
+		<PackageReference Include="YouTubeMusicAPI" Version="3.0.11" />
 		<PackageReference Include="YouTubeSessionGenerator" Version="1.0.3" />
 	</ItemGroup>
 	
