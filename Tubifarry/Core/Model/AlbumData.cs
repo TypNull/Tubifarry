@@ -55,7 +55,7 @@ namespace Tubifarry.Core.Model
         /// </summary>
         public ReleaseInfo ToReleaseInfo() => new ShareInfo()
         {
-            Guid = Guid ?? $"{IndexerName}-{AlbumId}-{Codec}-{Bitrate}-{BitDepth}",
+            Guid = (Guid ?? $"{IndexerName}-{AlbumId}-{Codec}-{Bitrate}-{BitDepth}").Replace('\\', '/'),
             Artist = ArtistName,
             Album = AlbumName,
             DownloadUrl = AlbumId,
