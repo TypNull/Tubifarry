@@ -1,17 +1,14 @@
-# Tubifarry — Lidarr 3.1.5 Compatibility & Discogs Fixes Fork
-
 > [!IMPORTANT]
-> This fork of [TypNull/Tubifarry](https://github.com/TypNull/Tubifarry)
-> contains compatibility fixes for Lidarr 3.1.5, including restored Discogs
-> metadata handling for existing MusicBrainz-backed artists and albums.
+> Tubifarry includes compatibility updates for Lidarr 3.1.5 and improved
+> Discogs metadata handling for existing MusicBrainz-backed artists and albums.
 
 ### Lidarr 3.1.5 compatibility
 
-Lidarr 3.1.5 changed the constructor dependencies for its download decision
+Lidarr 3.1.5 changed the constructor dependencies used by its download decision
 comparison logic.
 
-This fork updates Tubifarry's replacement download decision classes to support
-the newer signature by injecting and forwarding `IAlbumYearMatcher`.
+Tubifarry's replacement download decision classes now support the newer
+signature by injecting and forwarding `IAlbumYearMatcher`.
 
 Affected classes:
 
@@ -23,15 +20,15 @@ Lidarr 3.1.5.
 
 ### Discogs metadata compatibility
 
-This fork also improves how Tubifarry's Discogs metadata provider works with
-artists and albums that already exist in Lidarr using identifiers from another
-metadata source, such as MusicBrainz.
+The Discogs metadata provider can now work with artists and albums that already
+exist in Lidarr using identifiers from another metadata source, such as
+MusicBrainz.
 
-Previously, the Discogs provider expected the identifiers passed to it to
-already be native Discogs IDs. When Lidarr supplied an existing MusicBrainz
-artist or album ID, Discogs metadata retrieval could fail.
+Previously, the Discogs provider expected identifiers passed to it to already
+be native Discogs IDs. When Lidarr supplied an existing MusicBrainz artist or
+album ID, Discogs metadata retrieval could fail.
 
-This fork adds resolution of non-Discogs identifiers:
+Non-Discogs identifiers are now resolved as follows:
 
 - Existing artists are located in Lidarr and searched for on Discogs by name.
 - Discogs artist search results are fuzzy-matched to the existing artist.
@@ -43,16 +40,18 @@ This fork adds resolution of non-Discogs identifiers:
 
 ### Discogs discography cleanup
 
-The Discogs provider also includes several fixes to produce a cleaner
-discography for Lidarr:
+The Discogs provider also applies several filters when constructing a Lidarr
+discography:
 
 - Collapses duplicate Discogs master/release entries with the same title.
 - Prefers the Discogs master when both a master and individual release exist.
 - Skips CDr promo releases.
-- Filters Discogs `video` entries out of album tracklists.
+- Excludes Discogs video entries from album tracklists, including enhanced-CD
+  entries represented with a `Video` track position.
 
-These changes help Discogs supplement an existing Lidarr library without
-creating duplicate albums or replacing matching-critical metadata.
+These changes allow Discogs to supplement an existing Lidarr library without
+creating duplicate albums, counting video content as audio tracks, or replacing
+matching-critical metadata.
 
 # Tubifarry for Lidarr 🎶
 ![Downloads](https://img.shields.io/github/downloads/TypNull/Tubifarry/total)  ![GitHub release (latest by date)](https://img.shields.io/github/v/release/TypNull/Tubifarry)  ![GitHub last commit](https://img.shields.io/github/last-commit/TypNull/Tubifarry)  ![License](https://img.shields.io/github/license/TypNull/Tubifarry)  ![GitHub stars](https://img.shields.io/github/stars/TypNull/Tubifarry)
