@@ -6,7 +6,8 @@ public record PlaylistItem(
     string ArtistName,
     string? AlbumTitle,
     string? TrackTitle = null,
-    string? ForeignRecordingId = null);
+    string? ForeignRecordingId = null,
+    string? PlaylistName = null);
 
 public record PlaylistSnapshot(
     string ListName,

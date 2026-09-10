@@ -25,11 +25,13 @@ public interface IPlaylistExportService
 
 public sealed partial class PlaylistExportService : IPlaylistExportService,
     IHandleAsync<ApplicationStartedEvent>,
+    IHandleAsync<CommandExecutedEvent>,
     IHandleAsync<ProviderAddedEvent<IImportList>>,
     IHandleAsync<ProviderUpdatedEvent<IImportList>>,
     IHandleAsync<ProviderDeletedEvent<IImportList>>
 {
     private const string SnapshotKey = "playlistExport.snapshots";
+    private const string LastGeneratedKey = "playlistExport.lastGenerated";
 
     private readonly IImportListFactory _importListFactory;
     private readonly IFetchAndParseImportList _fetchAndParse;
@@ -64,6 +66,29 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     }
 
     public void HandleAsync(ApplicationStartedEvent message) => RefreshSchema();
+
+    /// <summary>
+    /// Regenerates off the command heartbeat, the only periodic hook a plugin has.
+    /// </summary>
+    /// <remarks>
+    /// A plugin cannot register a scheduled task: TaskManager builds its list from a fixed
+    /// set of command types on startup and deletes any stored task outside it.
+    ///
+    /// CommandExecutedEvent rather than ImportListSyncCompleteEvent, which looks like the
+    /// natural hook but is not published when a sync has nothing to process, and a sync has
+    /// nothing to process whenever every list is inside its refresh interval. This one is
+    /// published from a finally for every command, so RefreshMonitoredDownloads alone gives
+    /// a tick a minute. The minimum interval is what makes that affordable, and it is
+    /// claimed before the work starts so two ticks cannot generate at once.
+    /// </remarks>
+    public void HandleAsync(CommandExecutedEvent message)
+    {
+        foreach (PlaylistExportNotification notification in _notificationFactory.Value
+            .GetAvailableProviders().OfType<PlaylistExportNotification>())
+        {
+            GeneratePlaylists((PlaylistExportSettings)notification.Definition.Settings);
+        }
+    }
     public void HandleAsync(ProviderAddedEvent<IImportList> message) => RefreshSchema();
     public void HandleAsync(ProviderUpdatedEvent<IImportList> message) => RefreshSchema();
 
@@ -97,7 +122,7 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     public void RefreshSchema()
     {
         List<IImportList> allLists = _importListFactory.GetAvailableProviders();
-        int order = 6;
+        int order = 7;
 
         List<FieldMapping> dynamicMappings = [];
         foreach (IImportList l in allLists)
@@ -164,6 +189,9 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
 
     public void GeneratePlaylists(PlaylistExportSettings settings)
     {
+        if (!DueForGeneration(settings))
+            return;
+
         string? outputPath = settings.AutoDetectOutputPath
             ? DetectCommonMusicPath()
             : settings.OutputPath;
@@ -206,15 +234,27 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 continue;
             }
 
-            if (!snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot))
+            PlaylistSnapshot? snapshot = GetOrRefreshSnapshot(listId, allLists, snapshots);
+            if (snapshot == null)
             {
-                _logger.Warn($"No snapshot for list {listId}: fetch has not run yet for this list.");
+                _logger.Warn($"No snapshot for list {listId}: the fetch returned nothing.");
                 continue;
             }
 
-            List<TrackFile> files = [];
+            // One file per source playlist. Items from a list that does not name a
+            // playlist all land under the list's own name, which is one file for the
+            // whole list, as before.
+            Dictionary<string, List<TrackFile>> byPlaylist = [];
+
             foreach (PlaylistItem item in snapshot.Items)
             {
+                string playlistName = string.IsNullOrWhiteSpace(item.PlaylistName)
+                    ? snapshot.ListName
+                    : item.PlaylistName;
+
+                if (!byPlaylist.TryGetValue(playlistName, out List<TrackFile>? files))
+                    byPlaylist[playlistName] = files = [];
+
                 bool useTrackLevel = trackMode != PlaylistTrackMode.AlbumDataOnly
                     && (item.TrackTitle != null || item.ForeignRecordingId != null);
 
@@ -249,8 +289,40 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 }
             }
 
-            WriteM3u8(outputPath, snapshot.ListName, files, settings.UseRelativePaths);
+            foreach ((string playlistName, List<TrackFile> files) in byPlaylist)
+                WriteM3u8(outputPath, playlistName, files, settings.UseRelativePaths);
         }
+    }
+
+    /// <summary>
+    /// Returns the stored snapshot for a list, fetching one first when it is absent or
+    /// older than the list's own refresh interval.
+    /// </summary>
+    /// <remarks>
+    /// Nothing else in the pipeline writes snapshots, and the export runs on album
+    /// import, which is not a fetch. Without this the store stays empty and no list
+    /// ever produces a file. The interval bounds it, so a burst of imports does not
+    /// become one upstream fetch per album.
+    /// </remarks>
+    private PlaylistSnapshot? GetOrRefreshSnapshot(
+        int listId,
+        List<IImportList> allLists,
+        Dictionary<int, PlaylistSnapshot> snapshots)
+    {
+        snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot);
+
+        IImportList? list = allLists.FirstOrDefault(l => l.Definition.Id == listId);
+        if (list == null)
+        {
+            _logger.Warn($"Import list ID {listId} not found");
+            return snapshot;
+        }
+
+        if (snapshot != null && DateTime.UtcNow - snapshot.FetchedAt < list.MinRefreshInterval)
+            return snapshot;
+
+        FetchAndStore(listId);
+        return GetSnapshots().GetValueOrDefault(listId) ?? snapshot;
     }
 
     private List<PlaylistItem> FetchAlbumLevelItems(IImportList list)
@@ -303,14 +375,27 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     private static string Normalize(string? s) =>
         s == null ? "" : NormalizeRegex().Replace(s.ToLowerInvariant(), "");
 
+    // No BOM: Encoding.UTF8 puts three bytes in front of #EXTM3U, so the first
+    // line stops matching the header a strict m3u reader looks for.
+    private static readonly UTF8Encoding _utf8NoBom = new(false);
+
     private void WriteM3u8(string outputPath, string listName, List<TrackFile> files, bool useRelative)
     {
+        List<TrackFile> present = files.Where(f => File.Exists(f.Path)).ToList();
+        if (present.Count == 0)
+        {
+            // A playlist whose tracks are all missing locally would otherwise be
+            // written as a header and imported as an empty playlist.
+            _logger.Debug($"Skipping '{listName}': no local files for any of its {files.Count} track(s)");
+            return;
+        }
+
         string filename = SanitizeFilename(listName) + ".m3u8";
         string fullPath = Path.Combine(outputPath, filename);
 
         List<string> lines = ["#EXTM3U", $"#PLAYLIST:{listName}"];
 
-        foreach (TrackFile tf in files.Where(f => File.Exists(f.Path)))
+        foreach (TrackFile tf in present)
         {
             string displayName = Path.GetFileNameWithoutExtension(tf.Path);
             string trackPath = useRelative
@@ -320,8 +405,8 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             lines.Add(trackPath);
         }
 
-        File.WriteAllLines(fullPath, lines, Encoding.UTF8);
-        _logger.Info($"Written {files.Count} track(s) to '{fullPath}'");
+        File.WriteAllLines(fullPath, lines, _utf8NoBom);
+        _logger.Info($"Written {present.Count} track(s) to '{fullPath}'");
     }
 
     private static string? FindCommonRoot(List<string> paths)
@@ -347,6 +432,19 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
 
         string root = string.Join(Path.DirectorySeparatorChar, common);
         return common[0].EndsWith(':') ? root + Path.DirectorySeparatorChar : root;
+    }
+
+    private bool DueForGeneration(PlaylistExportSettings settings)
+    {
+        long lastTicks = _pluginSettings.GetValue<long>(LastGeneratedKey);
+        DateTime last = lastTicks == 0 ? DateTime.MinValue : new DateTime(lastTicks, DateTimeKind.Utc);
+        TimeSpan interval = TimeSpan.FromHours(Math.Max(settings.MinimumInterval, 0));
+
+        if (DateTime.UtcNow - last < interval)
+            return false;
+
+        _pluginSettings.SetValue(LastGeneratedKey, DateTime.UtcNow.Ticks);
+        return true;
     }
 
     private Dictionary<int, PlaylistSnapshot> GetSnapshots() =>

@@ -34,6 +34,9 @@ public class PlaylistExportSettings : DynamicStateSettings
     [FieldDefinition(5, Label = "Track Mode", Type = FieldType.Select, SelectOptions = typeof(PlaylistTrackMode), HelpText = "Controls whether playlists are generated from album-level or track-level data.")]
     public int TrackMode { get; set; } = (int)PlaylistTrackMode.PreferTrackData;
 
+    [FieldDefinition(6, Label = "Minimum Interval", Type = FieldType.Textbox, Unit = "hours", Advanced = true, HelpText = "Shortest time between two generations. Generation compares every item of every selected list against the library, so it is not run on each import or each list sync.", Placeholder = "6")]
+    public double MinimumInterval { get; set; } = 6.0;
+
     public PlaylistTrackMode GetTrackMode() => (PlaylistTrackMode)TrackMode;
 
     public IEnumerable<int> GetSelectedListIds()
