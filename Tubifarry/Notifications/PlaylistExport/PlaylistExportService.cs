@@ -25,11 +25,13 @@ public interface IPlaylistExportService
 
 public sealed partial class PlaylistExportService : IPlaylistExportService,
     IHandleAsync<ApplicationStartedEvent>,
+    IHandleAsync<CommandExecutedEvent>,
     IHandleAsync<ProviderAddedEvent<IImportList>>,
     IHandleAsync<ProviderUpdatedEvent<IImportList>>,
     IHandleAsync<ProviderDeletedEvent<IImportList>>
 {
     private const string SnapshotKey = "playlistExport.snapshots";
+    private const string LastGeneratedKey = "playlistExport.lastGenerated";
 
     private readonly IImportListFactory _importListFactory;
     private readonly IFetchAndParseImportList _fetchAndParse;
@@ -64,6 +66,29 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     }
 
     public void HandleAsync(ApplicationStartedEvent message) => RefreshSchema();
+
+    /// <summary>
+    /// Regenerates off the command heartbeat, the only periodic hook a plugin has.
+    /// </summary>
+    /// <remarks>
+    /// A plugin cannot register a scheduled task: TaskManager builds its list from a fixed
+    /// set of command types on startup and deletes any stored task outside it.
+    ///
+    /// CommandExecutedEvent rather than ImportListSyncCompleteEvent, which looks like the
+    /// natural hook but is not published when a sync has nothing to process, and a sync has
+    /// nothing to process whenever every list is inside its refresh interval. This one is
+    /// published from a finally for every command, so RefreshMonitoredDownloads alone gives
+    /// a tick a minute. The minimum interval is what makes that affordable, and it is
+    /// claimed before the work starts so two ticks cannot generate at once.
+    /// </remarks>
+    public void HandleAsync(CommandExecutedEvent message)
+    {
+        foreach (PlaylistExportNotification notification in _notificationFactory.Value
+            .GetAvailableProviders().OfType<PlaylistExportNotification>())
+        {
+            GeneratePlaylists((PlaylistExportSettings)notification.Definition.Settings);
+        }
+    }
     public void HandleAsync(ProviderAddedEvent<IImportList> message) => RefreshSchema();
     public void HandleAsync(ProviderUpdatedEvent<IImportList> message) => RefreshSchema();
 
@@ -97,7 +122,7 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     public void RefreshSchema()
     {
         List<IImportList> allLists = _importListFactory.GetAvailableProviders();
-        int order = 6;
+        int order = 7;
 
         List<FieldMapping> dynamicMappings = [];
         foreach (IImportList l in allLists)
@@ -164,6 +189,9 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
 
     public void GeneratePlaylists(PlaylistExportSettings settings)
     {
+        if (!DueForGeneration(settings))
+            return;
+
         string? outputPath = settings.AutoDetectOutputPath
             ? DetectCommonMusicPath()
             : settings.OutputPath;
@@ -404,6 +432,19 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
 
         string root = string.Join(Path.DirectorySeparatorChar, common);
         return common[0].EndsWith(':') ? root + Path.DirectorySeparatorChar : root;
+    }
+
+    private bool DueForGeneration(PlaylistExportSettings settings)
+    {
+        long lastTicks = _pluginSettings.GetValue<long>(LastGeneratedKey);
+        DateTime last = lastTicks == 0 ? DateTime.MinValue : new DateTime(lastTicks, DateTimeKind.Utc);
+        TimeSpan interval = TimeSpan.FromHours(Math.Max(settings.MinimumInterval, 0));
+
+        if (DateTime.UtcNow - last < interval)
+            return false;
+
+        _pluginSettings.SetValue(LastGeneratedKey, DateTime.UtcNow.Ticks);
+        return true;
     }
 
     private Dictionary<int, PlaylistSnapshot> GetSnapshots() =>
