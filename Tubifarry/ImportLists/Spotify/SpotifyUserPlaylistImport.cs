@@ -209,7 +209,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
             {
                 Paging<PlaylistTrack> tracks = GetPlaylistTracksWithRetry(api, playlist.Id);
                 if (tracks != null)
-                    AppendTrackItems(api, tracks, result);
+                    AppendTrackItems(api, tracks, result, playlist.Name);
             }
 
             if (page.HasNextPage())
@@ -220,7 +220,7 @@ namespace NzbDrone.Core.ImportLists.Spotify
             }
         }
 
-        private void AppendTrackItems(SpotifyWebAPI api, Paging<PlaylistTrack> tracks, List<PlaylistItem> result)
+        private void AppendTrackItems(SpotifyWebAPI api, Paging<PlaylistTrack> tracks, List<PlaylistItem> result, string playlistName)
         {
             if (tracks.Items == null) return;
 
@@ -242,14 +242,15 @@ namespace NzbDrone.Core.ImportLists.Spotify
                     AlbumMusicBrainzId: null,
                     ArtistName: artistName,
                     AlbumTitle: album.Name,
-                    TrackTitle: trackTitle));
+                    TrackTitle: trackTitle,
+                    PlaylistName: playlistName));
             }
 
             if (tracks.HasNextPage())
             {
                 Paging<PlaylistTrack> next = GetNextPageWithRetry(api, tracks);
                 if (next != null)
-                    AppendTrackItems(api, next, result);
+                    AppendTrackItems(api, next, result, playlistName);
             }
         }
 

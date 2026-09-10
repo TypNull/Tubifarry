@@ -206,15 +206,27 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 continue;
             }
 
-            if (!snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot))
+            PlaylistSnapshot? snapshot = GetOrRefreshSnapshot(listId, allLists, snapshots);
+            if (snapshot == null)
             {
-                _logger.Warn($"No snapshot for list {listId}: fetch has not run yet for this list.");
+                _logger.Warn($"No snapshot for list {listId}: the fetch returned nothing.");
                 continue;
             }
 
-            List<TrackFile> files = [];
+            // One file per source playlist. Items from a list that does not name a
+            // playlist all land under the list's own name, which is one file for the
+            // whole list, as before.
+            Dictionary<string, List<TrackFile>> byPlaylist = [];
+
             foreach (PlaylistItem item in snapshot.Items)
             {
+                string playlistName = string.IsNullOrWhiteSpace(item.PlaylistName)
+                    ? snapshot.ListName
+                    : item.PlaylistName;
+
+                if (!byPlaylist.TryGetValue(playlistName, out List<TrackFile>? files))
+                    byPlaylist[playlistName] = files = [];
+
                 bool useTrackLevel = trackMode != PlaylistTrackMode.AlbumDataOnly
                     && (item.TrackTitle != null || item.ForeignRecordingId != null);
 
@@ -249,8 +261,40 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 }
             }
 
-            WriteM3u8(outputPath, snapshot.ListName, files, settings.UseRelativePaths);
+            foreach ((string playlistName, List<TrackFile> files) in byPlaylist)
+                WriteM3u8(outputPath, playlistName, files, settings.UseRelativePaths);
         }
+    }
+
+    /// <summary>
+    /// Returns the stored snapshot for a list, fetching one first when it is absent or
+    /// older than the list's own refresh interval.
+    /// </summary>
+    /// <remarks>
+    /// Nothing else in the pipeline writes snapshots, and the export runs on album
+    /// import, which is not a fetch. Without this the store stays empty and no list
+    /// ever produces a file. The interval bounds it, so a burst of imports does not
+    /// become one upstream fetch per album.
+    /// </remarks>
+    private PlaylistSnapshot? GetOrRefreshSnapshot(
+        int listId,
+        List<IImportList> allLists,
+        Dictionary<int, PlaylistSnapshot> snapshots)
+    {
+        snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot);
+
+        IImportList? list = allLists.FirstOrDefault(l => l.Definition.Id == listId);
+        if (list == null)
+        {
+            _logger.Warn($"Import list ID {listId} not found");
+            return snapshot;
+        }
+
+        if (snapshot != null && DateTime.UtcNow - snapshot.FetchedAt < list.MinRefreshInterval)
+            return snapshot;
+
+        FetchAndStore(listId);
+        return GetSnapshots().GetValueOrDefault(listId) ?? snapshot;
     }
 
     private List<PlaylistItem> FetchAlbumLevelItems(IImportList list)
@@ -303,14 +347,27 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     private static string Normalize(string? s) =>
         s == null ? "" : NormalizeRegex().Replace(s.ToLowerInvariant(), "");
 
+    // No BOM: Encoding.UTF8 puts three bytes in front of #EXTM3U, so the first
+    // line stops matching the header a strict m3u reader looks for.
+    private static readonly UTF8Encoding _utf8NoBom = new(false);
+
     private void WriteM3u8(string outputPath, string listName, List<TrackFile> files, bool useRelative)
     {
+        List<TrackFile> present = files.Where(f => File.Exists(f.Path)).ToList();
+        if (present.Count == 0)
+        {
+            // A playlist whose tracks are all missing locally would otherwise be
+            // written as a header and imported as an empty playlist.
+            _logger.Debug($"Skipping '{listName}': no local files for any of its {files.Count} track(s)");
+            return;
+        }
+
         string filename = SanitizeFilename(listName) + ".m3u8";
         string fullPath = Path.Combine(outputPath, filename);
 
         List<string> lines = ["#EXTM3U", $"#PLAYLIST:{listName}"];
 
-        foreach (TrackFile tf in files.Where(f => File.Exists(f.Path)))
+        foreach (TrackFile tf in present)
         {
             string displayName = Path.GetFileNameWithoutExtension(tf.Path);
             string trackPath = useRelative
@@ -320,8 +377,8 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             lines.Add(trackPath);
         }
 
-        File.WriteAllLines(fullPath, lines, Encoding.UTF8);
-        _logger.Info($"Written {files.Count} track(s) to '{fullPath}'");
+        File.WriteAllLines(fullPath, lines, _utf8NoBom);
+        _logger.Info($"Written {present.Count} track(s) to '{fullPath}'");
     }
 
     private static string? FindCommonRoot(List<string> paths)
