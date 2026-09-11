@@ -46,7 +46,12 @@ namespace Tubifarry.Indexers.Soulseek
             "kendrick lamar",
             "frank ocean",
             "minaj",
-            "linkin park"
+            "linkin park",
+            "paper kingdom",
+            "look outside your window",
+            "housezzz",
+            "from zero",
+            "bryan"
         };
 
         private static readonly string[][] BlockedTermWords = [.. BlockedSearchTerms

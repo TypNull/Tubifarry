@@ -27,6 +27,7 @@ public class SlskdDownloadItem
     public DownloadItemStatus? LastReportedStatus { get; set; }
     public string? ConfirmedSubdirectory { get; set; }
     public string? DerivedSubdirectory { get; set; }
+    public string? EnqueueDestination { get; set; }
     public string? BatchId { get; set; }
     public bool DiscMergeScheduled { get; set; }
     public bool FolderRenameScheduled { get; set; }

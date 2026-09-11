@@ -99,6 +99,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
                 _logger.Warn($"{result.Failed.Count} of {files.Count} files failed to enqueue for {username}: {string.Join("; ", result.Failed.Select(f => f.Message).Distinct())}");
 
             item.BatchId = result.BatchId;
+            item.EnqueueDestination = destination;
             if (destination != null && result.BatchId != null)
                 item.DerivedSubdirectory = destination;
             item.Username = username;
@@ -608,6 +609,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     private static string? GetMultiDiscDestination(IEnumerable<string> filenames)
     {
         HashSet<string> parents = filenames
+            .Select(f => f.Replace('/', '\\'))
             .Select(f => { int i = f.LastIndexOf('\\'); return i > 0 ? f[..i] : null; })
             .OfType<string>()
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
