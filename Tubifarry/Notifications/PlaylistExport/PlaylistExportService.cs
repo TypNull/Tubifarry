@@ -9,7 +9,6 @@ using NzbDrone.Core.Notifications;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.ThingiProvider.Events;
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using Tubifarry.Core.Model;
 using Tubifarry.Core.Utilities;
@@ -95,49 +94,6 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         RefreshSchema();
     }
 
-    /// <summary>
-    /// Converts a dynamic field value to a bool.
-    /// </summary>
-    /// <remarks>
-    /// Values arriving from a notification POST are JsonElement, which does not implement
-    /// IConvertible, so Convert.ToBoolean throws InvalidCastException and saving the connection
-    /// fails from both the UI and the API.
-    ///
-    /// The type cannot be matched with a pattern: plugins load in their own AssemblyLoadContext,
-    /// so the JsonElement the host passes in is a different Type instance from the one this
-    /// assembly sees, and "value is JsonElement" is false. Match on the type name and read the
-    /// textual form instead, which is "true" or "false" for a JSON boolean.
-    /// </remarks>
-    private static bool ToBoolean(object? value)
-    {
-        switch (value)
-        {
-            case null:
-                return false;
-            case bool b:
-                return b;
-            case string str:
-                return bool.TryParse(str, out bool fromString) && fromString;
-        }
-
-        if (value.GetType().FullName == "System.Text.Json.JsonElement")
-        {
-            string text = value.ToString() ?? string.Empty;
-            return bool.TryParse(text, out bool fromJson)
-                ? fromJson
-                : text.Length > 0 && text != "0" && text != "null";
-        }
-
-        try
-        {
-            return Convert.ToBoolean(value);
-        }
-        catch (InvalidCastException)
-        {
-            return false;
-        }
-    }
-
     public void RefreshSchema()
     {
         List<IImportList> allLists = _importListFactory.GetAvailableProviders();
@@ -161,7 +117,7 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 },
                 PropertyType = typeof(bool),
                 GetterFunc = m => ((PlaylistExportSettings)m).GetBoolState(key),
-                SetterFunc = (m, v) => ((PlaylistExportSettings)m).SetBoolState(key, ToBoolean(v)),
+                SetterFunc = (m, v) => ((PlaylistExportSettings)m).SetBoolState(key, v),
             });
         }
 
