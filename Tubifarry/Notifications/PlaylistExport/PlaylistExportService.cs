@@ -117,7 +117,7 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 },
                 PropertyType = typeof(bool),
                 GetterFunc = m => ((PlaylistExportSettings)m).GetBoolState(key),
-                SetterFunc = (m, v) => ((PlaylistExportSettings)m).SetBoolState(key, Convert.ToBoolean(v)),
+                SetterFunc = (m, v) => ((PlaylistExportSettings)m).SetBoolState(key, v),
             });
         }
 
