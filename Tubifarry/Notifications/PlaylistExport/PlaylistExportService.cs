@@ -75,6 +75,11 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         {
             SaveSnapshots(snapshots);
 
+            IEnumerable<string> playlistNames = deleted.Items
+                .Select(i => string.IsNullOrWhiteSpace(i.PlaylistName) ? deleted.ListName : i.PlaylistName)
+                .DefaultIfEmpty(deleted.ListName)
+                .Distinct();
+
             foreach (INotification n in _notificationFactory.Value.GetAvailableProviders()
                 .OfType<PlaylistExportNotification>())
             {
@@ -82,11 +87,14 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 if (!s.CleanupOnRemove || string.IsNullOrEmpty(s.OutputPath))
                     continue;
 
-                string m3u8Path = Path.Combine(s.OutputPath, $"{SanitizeFilename(deleted.ListName)}.m3u8");
-                if (File.Exists(m3u8Path))
+                foreach (string name in playlistNames)
                 {
-                    _logger.Debug($"Deleting {m3u8Path} (import list removed)");
-                    File.Delete(m3u8Path);
+                    string m3u8Path = Path.Combine(s.OutputPath, $"{SanitizeFilename(name)}.m3u8");
+                    if (File.Exists(m3u8Path))
+                    {
+                        _logger.Debug($"Deleting {m3u8Path} (import list removed)");
+                        File.Delete(m3u8Path);
+                    }
                 }
             }
         }
@@ -156,6 +164,12 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             : FetchAlbumLevelItems(list);
 
         Dictionary<int, PlaylistSnapshot> snapshots = GetSnapshots();
+        if (items.Count == 0 && snapshots.ContainsKey(listId))
+        {
+            _logger.Trace($"Fetch for '{list.Definition.Name}' returned nothing, keeping the previous snapshot");
+            return;
+        }
+
         snapshots[listId] = new PlaylistSnapshot(list.Definition.Name, items, DateTime.UtcNow);
         SaveSnapshots(snapshots);
 
@@ -206,15 +220,24 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 continue;
             }
 
-            if (!snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot))
+            PlaylistSnapshot? snapshot = GetOrRefreshSnapshot(listId, allLists, snapshots);
+            if (snapshot == null)
             {
-                _logger.Warn($"No snapshot for list {listId}: fetch has not run yet for this list.");
+                _logger.Debug($"No data for list {listId}, skipping");
                 continue;
             }
 
-            List<TrackFile> files = [];
+            Dictionary<string, List<TrackFile>> byPlaylist = [];
+
             foreach (PlaylistItem item in snapshot.Items)
             {
+                string playlistName = string.IsNullOrWhiteSpace(item.PlaylistName)
+                    ? snapshot.ListName
+                    : item.PlaylistName;
+
+                if (!byPlaylist.TryGetValue(playlistName, out List<TrackFile>? files))
+                    byPlaylist[playlistName] = files = [];
+
                 bool useTrackLevel = trackMode != PlaylistTrackMode.AlbumDataOnly
                     && (item.TrackTitle != null || item.ForeignRecordingId != null);
 
@@ -249,8 +272,30 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 }
             }
 
-            WriteM3u8(outputPath, snapshot.ListName, files, settings.UseRelativePaths);
+            foreach ((string playlistName, List<TrackFile> files) in byPlaylist)
+                WriteM3u8(outputPath, playlistName, files, settings.UseRelativePaths);
         }
+    }
+
+    private PlaylistSnapshot? GetOrRefreshSnapshot(
+        int listId,
+        List<IImportList> allLists,
+        Dictionary<int, PlaylistSnapshot> snapshots)
+    {
+        snapshots.TryGetValue(listId, out PlaylistSnapshot? snapshot);
+
+        IImportList? list = allLists.FirstOrDefault(l => l.Definition.Id == listId);
+        if (list == null)
+        {
+            _logger.Warn($"Import list ID {listId} not found");
+            return snapshot;
+        }
+
+        if (snapshot != null && DateTime.UtcNow - snapshot.FetchedAt < list.MinRefreshInterval)
+            return snapshot;
+
+        FetchAndStore(listId);
+        return GetSnapshots().GetValueOrDefault(listId) ?? snapshot;
     }
 
     private List<PlaylistItem> FetchAlbumLevelItems(IImportList list)
@@ -303,14 +348,23 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     private static string Normalize(string? s) =>
         s == null ? "" : NormalizeRegex().Replace(s.ToLowerInvariant(), "");
 
+    private static readonly UTF8Encoding _utf8NoBom = new(false);
+
     private void WriteM3u8(string outputPath, string listName, List<TrackFile> files, bool useRelative)
     {
+        List<TrackFile> present = files.Where(f => File.Exists(f.Path)).ToList();
+        if (present.Count == 0)
+        {
+            _logger.Trace($"Skipping '{listName}': none of its {files.Count} track(s) are present locally");
+            return;
+        }
+
         string filename = SanitizeFilename(listName) + ".m3u8";
         string fullPath = Path.Combine(outputPath, filename);
 
         List<string> lines = ["#EXTM3U", $"#PLAYLIST:{listName}"];
 
-        foreach (TrackFile tf in files.Where(f => File.Exists(f.Path)))
+        foreach (TrackFile tf in present)
         {
             string displayName = Path.GetFileNameWithoutExtension(tf.Path);
             string trackPath = useRelative
@@ -320,8 +374,8 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             lines.Add(trackPath);
         }
 
-        File.WriteAllLines(fullPath, lines, Encoding.UTF8);
-        _logger.Info($"Written {files.Count} track(s) to '{fullPath}'");
+        File.WriteAllLines(fullPath, lines, _utf8NoBom);
+        _logger.Info($"Written {present.Count} track(s) to '{fullPath}'");
     }
 
     private static string? FindCommonRoot(List<string> paths)
