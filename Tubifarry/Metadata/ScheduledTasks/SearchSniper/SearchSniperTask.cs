@@ -16,7 +16,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
     {
         private const int BatchSize = 100;
         private static readonly CacheService _cacheService = new();
-        private readonly IAlbumService _albumService;
         private readonly IArtistService _artistService;
         private readonly IQueueService _queueService;
         private readonly IManageCommandQueue _commandQueueManager;
@@ -25,7 +24,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
         private readonly Logger _logger;
 
         public SearchSniperTask(
-            IAlbumService albumService,
             IArtistService artistService,
             IQueueService queueService,
             IManageCommandQueue commandQueueManager,
@@ -34,7 +32,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             IEventAggregator eventAggregator,
             Logger logger)
         {
-            _albumService = albumService;
             _artistService = artistService;
             _queueService = queueService;
             _commandQueueManager = commandQueueManager;
@@ -156,7 +153,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             (int minId, int maxId) cutoffIdRange = (0, 0);
 
             if (ActiveSettings.SearchMissing)
-                missingIdRange = GetMissingAlbumsIdRange();
+                missingIdRange = _repositoryHelper.GetMissingAlbumsIdRange();
 
             if (ActiveSettings.SearchMissingTracks)
                 partialIdRange = _repositoryHelper.GetPartialAlbumsIdRange();
@@ -174,7 +171,7 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 _logger.Trace("Fetching missing albums (ID range: {0}-{1}, starting at ID: {2})...", missingIdRange.minId, missingIdRange.maxId, startId);
 
                 CollectFromSource(
-                    lastId => GetMissingAlbumsBatch(lastId),
+                    lastId => _repositoryHelper.GetMissingAlbumsBatch(lastId, BatchSize),
                     eligibleAlbums, queuedAlbumIds, candidateTarget, startId, missingIdRange.minId);
             }
 
@@ -310,58 +307,6 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             {
                 if (artistsByMetadataId.TryGetValue(album.ArtistMetadataId, out Artist? artist))
                     album.Artist = new LazyLoaded<Artist>(artist);
-            }
-        }
-
-        private List<Album> GetMissingAlbumsBatch(int lastId)
-        {
-            PagingSpec<Album> pagingSpec = new()
-            {
-                Page = 1,
-                PageSize = BatchSize,
-                SortDirection = SortDirection.Ascending,
-                SortKey = "Id"
-            };
-
-            pagingSpec.FilterExpressions.Add(v => v.Id > lastId);
-            pagingSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
-
-            return _albumService.AlbumsWithoutFiles(pagingSpec).Records;
-        }
-
-        private (int minId, int maxId) GetMissingAlbumsIdRange()
-        {
-            try
-            {
-                PagingSpec<Album> minSpec = new()
-                {
-                    Page = 1,
-                    PageSize = 1,
-                    SortDirection = SortDirection.Ascending,
-                    SortKey = "Id"
-                };
-                minSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
-                List<Album> minResult = _albumService.AlbumsWithoutFiles(minSpec).Records;
-
-                if (minResult.Count == 0)
-                    return (0, 0);
-
-                PagingSpec<Album> maxSpec = new()
-                {
-                    Page = 1,
-                    PageSize = 1,
-                    SortDirection = SortDirection.Descending,
-                    SortKey = "Id"
-                };
-                maxSpec.FilterExpressions.Add(v => v.Monitored == true && v.Artist.Value.Monitored == true);
-                List<Album> maxResult = _albumService.AlbumsWithoutFiles(maxSpec).Records;
-
-                return (minResult[0].Id, maxResult.Count > 0 ? maxResult[0].Id : minResult[0].Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error getting missing albums ID range");
-                return (0, 0);
             }
         }
 

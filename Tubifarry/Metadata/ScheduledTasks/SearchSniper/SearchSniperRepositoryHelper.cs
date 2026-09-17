@@ -133,6 +133,60 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 .Having("SUM(CASE WHEN \"Tracks\".\"TrackFileId\" > 0 THEN 1 ELSE 0 END) < COUNT(DISTINCT \"Tracks\".\"Id\")");
         }
 
+        private SqlBuilder BuildMissingAlbumsQuery()
+        {
+            return Builder()
+                .Join<Album, Artist>((a, ar) => a.ArtistMetadataId == ar.ArtistMetadataId)
+                .Join<Album, AlbumRelease>((a, r) => a.Id == r.AlbumId)
+                .Join<AlbumRelease, Track>((r, t) => r.Id == t.AlbumReleaseId)
+                .LeftJoin<Track, TrackFile>((t, f) => t.TrackFileId == f.Id)
+                .Where<Album>(a => a.Monitored == true)
+                .Where<Artist>(ar => ar.Monitored == true)
+                .Where<AlbumRelease>(r => r.Monitored == true)
+                .GroupBy<Album>(a => a.Id)
+                .GroupBy<Artist>(ar => ar.SortName)
+                .Having("SUM(CASE WHEN \"Tracks\".\"TrackFileId\" = 0 THEN 1 ELSE 0 END) > 0");
+        }
+
+        public List<Album> GetMissingAlbumsBatch(int lastId, int limit)
+        {
+            try
+            {
+                SqlBuilder builder = BuildMissingAlbumsQuery()
+                    .Where($@"""Albums"".""Id"" > {lastId}")
+                    .OrderBy($@"""Albums"".""Id"" ASC LIMIT {limit}");
+
+                return PopulateArtists(Query(builder));
+            }
+            catch
+            {
+                return [];
+            }
+        }
+
+        public (int minId, int maxId) GetMissingAlbumsIdRange()
+        {
+            try
+            {
+                SqlBuilder minBuilder = BuildMissingAlbumsQuery()
+                    .OrderBy($@"""Albums"".""Id"" ASC LIMIT 1");
+                List<Album> minResult = Query(minBuilder);
+
+                if (minResult.Count == 0)
+                    return (0, 0);
+
+                SqlBuilder maxBuilder = BuildMissingAlbumsQuery()
+                    .OrderBy($@"""Albums"".""Id"" DESC LIMIT 1");
+                List<Album> maxResult = Query(maxBuilder);
+
+                return (minResult[0].Id, maxResult.Count > 0 ? maxResult[0].Id : minResult[0].Id);
+            }
+            catch
+            {
+                return (0, 0);
+            }
+        }
+
         public static Dictionary<int, List<int>> BuildProfileCutoffs(IEnumerable<QualityProfile> qualityProfiles)
         {
             Dictionary<int, List<int>> profileCutoffs = [];
