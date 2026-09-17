@@ -75,6 +75,11 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         {
             SaveSnapshots(snapshots);
 
+            IEnumerable<string> playlistNames = deleted.Items
+                .Select(i => string.IsNullOrWhiteSpace(i.PlaylistName) ? deleted.ListName : i.PlaylistName)
+                .DefaultIfEmpty(deleted.ListName)
+                .Distinct();
+
             foreach (INotification n in _notificationFactory.Value.GetAvailableProviders()
                 .OfType<PlaylistExportNotification>())
             {
@@ -82,11 +87,14 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
                 if (!s.CleanupOnRemove || string.IsNullOrEmpty(s.OutputPath))
                     continue;
 
-                string m3u8Path = Path.Combine(s.OutputPath, $"{SanitizeFilename(deleted.ListName)}.m3u8");
-                if (File.Exists(m3u8Path))
+                foreach (string name in playlistNames)
                 {
-                    _logger.Debug($"Deleting {m3u8Path} (import list removed)");
-                    File.Delete(m3u8Path);
+                    string m3u8Path = Path.Combine(s.OutputPath, $"{SanitizeFilename(name)}.m3u8");
+                    if (File.Exists(m3u8Path))
+                    {
+                        _logger.Debug($"Deleting {m3u8Path} (import list removed)");
+                        File.Delete(m3u8Path);
+                    }
                 }
             }
         }
@@ -156,6 +164,12 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             : FetchAlbumLevelItems(list);
 
         Dictionary<int, PlaylistSnapshot> snapshots = GetSnapshots();
+        if (items.Count == 0 && snapshots.ContainsKey(listId))
+        {
+            _logger.Trace($"Fetch for '{list.Definition.Name}' returned nothing, keeping the previous snapshot");
+            return;
+        }
+
         snapshots[listId] = new PlaylistSnapshot(list.Definition.Name, items, DateTime.UtcNow);
         SaveSnapshots(snapshots);
 
@@ -209,13 +223,10 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
             PlaylistSnapshot? snapshot = GetOrRefreshSnapshot(listId, allLists, snapshots);
             if (snapshot == null)
             {
-                _logger.Warn($"No snapshot for list {listId}: the fetch returned nothing.");
+                _logger.Debug($"No data for list {listId}, skipping");
                 continue;
             }
 
-            // One file per source playlist. Items from a list that does not name a
-            // playlist all land under the list's own name, which is one file for the
-            // whole list, as before.
             Dictionary<string, List<TrackFile>> byPlaylist = [];
 
             foreach (PlaylistItem item in snapshot.Items)
@@ -266,16 +277,6 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         }
     }
 
-    /// <summary>
-    /// Returns the stored snapshot for a list, fetching one first when it is absent or
-    /// older than the list's own refresh interval.
-    /// </summary>
-    /// <remarks>
-    /// Nothing else in the pipeline writes snapshots, and the export runs on album
-    /// import, which is not a fetch. Without this the store stays empty and no list
-    /// ever produces a file. The interval bounds it, so a burst of imports does not
-    /// become one upstream fetch per album.
-    /// </remarks>
     private PlaylistSnapshot? GetOrRefreshSnapshot(
         int listId,
         List<IImportList> allLists,
@@ -347,8 +348,6 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
     private static string Normalize(string? s) =>
         s == null ? "" : NormalizeRegex().Replace(s.ToLowerInvariant(), "");
 
-    // No BOM: Encoding.UTF8 puts three bytes in front of #EXTM3U, so the first
-    // line stops matching the header a strict m3u reader looks for.
     private static readonly UTF8Encoding _utf8NoBom = new(false);
 
     private void WriteM3u8(string outputPath, string listName, List<TrackFile> files, bool useRelative)
@@ -356,9 +355,7 @@ public sealed partial class PlaylistExportService : IPlaylistExportService,
         List<TrackFile> present = files.Where(f => File.Exists(f.Path)).ToList();
         if (present.Count == 0)
         {
-            // A playlist whose tracks are all missing locally would otherwise be
-            // written as a header and imported as an empty playlist.
-            _logger.Debug($"Skipping '{listName}': no local files for any of its {files.Count} track(s)");
+            _logger.Trace($"Skipping '{listName}': none of its {files.Count} track(s) are present locally");
             return;
         }
 
