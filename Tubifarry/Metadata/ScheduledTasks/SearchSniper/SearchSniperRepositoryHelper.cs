@@ -164,6 +164,22 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             }
         }
 
+        public List<Album> GetRecentMissingAlbums(DateTime releasedAfter, DateTime releasedBefore, int limit)
+        {
+            try
+            {
+                SqlBuilder builder = BuildMissingAlbumsQuery()
+                    .Where<Album>(a => a.ReleaseDate >= releasedAfter && a.ReleaseDate <= releasedBefore)
+                    .OrderBy($@"""Albums"".""ReleaseDate"" DESC LIMIT {limit}");
+
+                return PopulateArtists(Query(builder));
+            }
+            catch
+            {
+                return [];
+            }
+        }
+
         public (int minId, int maxId) GetMissingAlbumsIdRange()
         {
             try

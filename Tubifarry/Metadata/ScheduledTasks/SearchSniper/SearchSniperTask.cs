@@ -116,19 +116,24 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             }
 
             int targetCount = ActiveSettings.RandomPicksPerInterval;
-            HashSet<int> queuedAlbumIds = GetQueuedAlbumIds();
+            HashSet<int> excludedAlbumIds = GetQueuedAlbumIds();
             int candidateTarget = Math.Min(targetCount * 10, 500);
 
-            List<Album> eligibleAlbums = CollectEligibleAlbums(queuedAlbumIds, candidateTarget);
+            List<Album> selectedAlbums = SelectRandomAlbums(CollectRecentAlbums(excludedAlbumIds, candidateTarget), targetCount);
 
-            if (eligibleAlbums.Count == 0)
+            if (selectedAlbums.Count < targetCount)
+            {
+                excludedAlbumIds.UnionWith(selectedAlbums.Select(a => a.Id));
+                List<Album> eligibleAlbums = CollectEligibleAlbums(excludedAlbumIds, candidateTarget);
+                selectedAlbums.AddRange(SelectRandomAlbums(eligibleAlbums, targetCount - selectedAlbums.Count));
+            }
+
+            if (selectedAlbums.Count == 0)
             {
                 message.SetCompletionMessage("Search Sniper completed. No eligible albums found.");
                 _logger.Info("No eligible albums found after filtering queued and cached albums");
                 return;
             }
-
-            List<Album> selectedAlbums = SelectRandomAlbums(eligibleAlbums, targetCount);
 
             foreach (Album album in selectedAlbums)
                 _logger.Trace("Selected: '{0}' by {1}", album.Title, album.Artist?.Value?.Name ?? "Unknown Artist");
@@ -141,6 +146,21 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 message.SetCompletionMessage($"Search Sniper completed. Queued {selectedAlbums.Count} album(s) for search");
                 _logger.Info("Queued {0} album(s) for search", selectedAlbums.Count);
             }
+        }
+
+        private List<Album> CollectRecentAlbums(HashSet<int> excludedAlbumIds, int candidateTarget)
+        {
+            if (!ActiveSettings.SearchMissing || ActiveSettings.PrioritizeRecentDays <= 0)
+                return [];
+
+            DateTime now = DateTime.UtcNow;
+            List<Album> recentAlbums = _repositoryHelper
+                .GetRecentMissingAlbums(now.AddDays(-ActiveSettings.PrioritizeRecentDays), now, candidateTarget)
+                .Where(a => !excludedAlbumIds.Contains(a.Id) && !IsAlbumCached(a))
+                .ToList();
+
+            _logger.Debug("Collected {0} recent album(s) released within the last {1} day(s)", recentAlbums.Count, ActiveSettings.PrioritizeRecentDays);
+            return recentAlbums;
         }
 
         private List<Album> CollectEligibleAlbums(HashSet<int> queuedAlbumIds, int candidateTarget)

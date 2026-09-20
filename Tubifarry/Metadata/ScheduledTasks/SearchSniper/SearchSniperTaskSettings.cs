@@ -36,6 +36,11 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
                 .GreaterThanOrEqualTo(0)
                 .WithMessage("Stop queue threshold must be 0 or greater.");
 
+            // Validate PrioritizeRecentDays
+            RuleFor(c => c.PrioritizeRecentDays)
+                .GreaterThanOrEqualTo(0)
+                .WithMessage("Prioritize recent releases must be 0 or greater.");
+
             // Validatw search options
             RuleFor(c => c)
                 .Must(settings => settings.SearchMissing || settings.SearchQualityCutoffNotMet || settings.SearchMissingTracks)
@@ -76,6 +81,9 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
         [FieldDefinition(10, Label = "Cutoff Not Met", Type = FieldType.Checkbox, HelpText = "Automatically search for albums where the current quality does not meet the quality cutoff.")]
         public bool SearchQualityCutoffNotMet { get; set; }
+
+        [FieldDefinition(11, Label = "Prioritize Recent Releases", Type = FieldType.Number, Unit = "days", Placeholder = "0", HelpText = "Prioritize missing albums released within the last X days before picking from the older backlog. Requires 'Missing' to be enabled. Set to 0 to disable.")]
+        public int PrioritizeRecentDays { get; set; }
 
         public string BaseUrl { get; set; } = string.Empty;
 
