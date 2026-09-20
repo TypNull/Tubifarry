@@ -52,7 +52,9 @@ public static partial class QueryNormalizer
 
         // Then strip punctuation but keep letters, digits, spaces, hyphens, ampersands
         result = PlusRegex().Replace(result, " ");
-        result = PunctuationRegex().Replace(result, "");
+        result = ElisionRegex().Replace(result, "");
+        result = DashRegex().Replace(result, "-");
+        result = PunctuationRegex().Replace(result, " ");
         result = WhitespaceRegex().Replace(result, " ").Trim();
 
         return result;
@@ -60,6 +62,12 @@ public static partial class QueryNormalizer
 
     [GeneratedRegex(@"[^\w\s\-&]", RegexOptions.Compiled)]
     private static partial Regex PunctuationRegex();
+
+    [GeneratedRegex(@"['‘’‚ʼ`´]")]
+    private static partial Regex ElisionRegex();
+
+    [GeneratedRegex(@"(?<=\w)[\p{Pd}−](?=\w)")]
+    private static partial Regex DashRegex();
 
     [GeneratedRegex(@"\+")]
     private static partial Regex PlusRegex();

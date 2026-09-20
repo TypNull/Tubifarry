@@ -154,7 +154,7 @@ public static partial class QueryAnalyzer
     [GeneratedRegex(@"\s+")]
     private static partial Regex CollapseWhitespaceRegex();
 
-    [GeneratedRegex(@"[^\w\s]", RegexOptions.Compiled)]
+    [GeneratedRegex(@"[^\w\s]|ʼ", RegexOptions.Compiled)]
     private static partial Regex PunctuationRegex();
 
     [GeneratedRegex(@"[àáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ]", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
