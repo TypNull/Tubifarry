@@ -1,9 +1,9 @@
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Http;
-using SharpCompress.Readers;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Core.FFmpeg
 {
@@ -30,7 +30,7 @@ namespace Tubifarry.Core.FFmpeg
             {
                 if (OperatingSystem.IsMacOS())
                     await DownloadArchivesAsync(GetMacOsArchiveUrls(), targetDirectory);
-                else if (OperatingSystem.IsLinux() && IsMuslLibc())
+                else if (OperatingSystem.IsLinux() && BinaryArchiveHelper.IsMuslLibc())
                     await DownloadArchivesAsync([GetStaticLinuxArchiveUrl()], targetDirectory);
                 else
                     await DownloadArchivesAsync([GetBtbNArchiveUrl()], targetDirectory);
@@ -49,12 +49,12 @@ namespace Tubifarry.Core.FFmpeg
         {
             foreach (string url in urls)
             {
-                string archivePath = Path.Combine(Path.GetTempPath(), Path.GetFileName(new Uri(url).AbsolutePath));
+                string archivePath = BinaryArchiveHelper.CreateTempArchivePath(url);
 
                 try
                 {
                     logger.Info("Downloading FFmpeg from {0}", url);
-                    await DownloadFileWithBrowserUserAgentAsync(url, archivePath);
+                    await BinaryArchiveHelper.DownloadAsync(httpClient, url, archivePath);
                     ExtractBinariesFromArchive(archivePath, targetDirectory);
                 }
                 finally
@@ -64,29 +64,6 @@ namespace Tubifarry.Core.FFmpeg
                 }
             }
         }
-
-        private async Task DownloadFileWithBrowserUserAgentAsync(string url, string destinationPath)
-        {
-            await using FileStream fileStream = new(destinationPath, FileMode.Create, FileAccess.ReadWrite);
-
-            HttpRequest request = new(url)
-            {
-                AllowAutoRedirect = true,
-                ResponseStream = fileStream,
-                RequestTimeout = TimeSpan.FromSeconds(300)
-            };
-            request.Headers.Add("User-Agent", Tubifarry.UserAgent);
-
-            HttpResponse response = await httpClient.GetAsync(request);
-
-            if (response.Headers.ContentType?.Contains("text/html") == true)
-                throw new HttpException(request, response, "Site responded with html content instead of an archive.");
-        }
-
-        private static bool IsMuslLibc() =>
-            RuntimeInformation.RuntimeIdentifier.Contains("musl", StringComparison.OrdinalIgnoreCase)
-            || File.Exists("/lib/ld-musl-x86_64.so.1")
-            || File.Exists("/lib/ld-musl-aarch64.so.1");
 
         private static string GetStaticLinuxArchiveUrl()
         {
@@ -119,28 +96,16 @@ namespace Tubifarry.Core.FFmpeg
 
         private static void ExtractBinariesFromArchive(string archivePath, string targetDirectory)
         {
-            using FileStream archiveStream = File.OpenRead(archivePath);
-            using IReader reader = ReaderFactory.OpenReader(archiveStream);
-
-            while (reader.MoveToNextEntry())
+            BinaryArchiveHelper.ExtractEntries(archivePath, entryKey =>
             {
-                if (reader.Entry.IsDirectory)
-                    continue;
-
-                string fileName = Path.GetFileName(reader.Entry.Key ?? string.Empty);
+                string fileName = Path.GetFileName(entryKey);
 
                 bool isBinary = BinaryNames.Contains(fileName, StringComparer.OrdinalIgnoreCase)
                     || (Path.GetExtension(fileName).Equals(".exe", StringComparison.OrdinalIgnoreCase)
                         && BinaryNames.Contains(Path.GetFileNameWithoutExtension(fileName), StringComparer.OrdinalIgnoreCase));
 
-                if (!isBinary)
-                    continue;
-
-                string destinationPath = Path.Combine(targetDirectory, fileName);
-                using FileStream destination = File.Create(destinationPath);
-                using Stream source = reader.OpenEntryStream();
-                source.CopyTo(destination);
-            }
+                return isBinary ? Path.Combine(targetDirectory, fileName) : null;
+            });
         }
 
         private void MarkBinariesExecutable(string targetDirectory)
