@@ -15,7 +15,7 @@ namespace Tubifarry.Metadata.Proxy
         public IEnumerable<ProviderDefinition> DefaultDefinitions => [];
         public ProviderDefinition? Definition { get; set; }
 
-        protected TSettings? Settings => Definition?.Settings == null ? default : (TSettings)Definition!.Settings;
+        protected TSettings? Settings => Definition?.Settings is TSettings settings ? settings : default;
 
         public virtual object RequestAction(string action, IDictionary<string, string> query) => default!;
 

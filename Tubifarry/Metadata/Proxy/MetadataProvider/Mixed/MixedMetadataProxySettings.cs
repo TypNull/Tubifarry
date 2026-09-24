@@ -32,18 +32,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
     {
         private static readonly MixedMetadataProxySettingsValidator Validator = new();
 
-        private readonly IEnumerable<KeyValuePair<string, string>> _priotities;
-        public static MixedMetadataProxySettings? Instance { get; private set; }
+        private List<KeyValuePair<string, string>> _priotities = [];
 
         public MixedMetadataProxySettings()
         {
-            _priotities = ProxyServiceStarter.ProxyService?.ActiveProxies?
-                .Where(x => x is ISupportMetadataMixing)
-                .Where(x => x.GetProxyMode() != ProxyMode.Internal)
-                .Select(x => new KeyValuePair<string, string>(x.Name, x is SkyHookMetadataProxy ? "0" : "50"))
-                .ToList() ?? Enumerable.Empty<KeyValuePair<string, string>>();
-            _customConversion = _priotities.ToList();
-            Instance = this;
             ArtistQueryTimeoutSeconds = 30;
             MaxThreshold = 15;
         }
@@ -51,20 +43,21 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         [FieldDefinition(1, Label = "Priority Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Define priority rules for proxies. Values must be between 0 and 50.")]
         public IEnumerable<KeyValuePair<string, string>> Priotities
         {
-            get => _customConversion;
+            get => [.. _priotities
+                .Concat(GetMixableProxies()
+                    .Where(x => !_priotities.Any(kvp => string.Equals(kvp.Key, x.Name, StringComparison.OrdinalIgnoreCase)))
+                    .Select(x => new KeyValuePair<string, string>(x.Name, x is SkyHookMetadataProxy ? "0" : "50")))
+                .OrderBy(x => x.Value)];
             set
             {
                 if (value != null)
-                {
-                    Dictionary<string, string> customDict = value.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-                    _customConversion = [.. _priotities
-                        .Select(kvp => new KeyValuePair<string, string>(kvp.Key, customDict.TryGetValue(kvp.Key, out string? customValue) ? customValue : kvp.Value))
-                        .OrderBy(x => x.Value)];
-                }
+                    _priotities = [.. value];
             }
         }
 
-        private IEnumerable<KeyValuePair<string, string>> _customConversion;
+        private static IEnumerable<IProxy> GetMixableProxies() =>
+            ProxyServiceStarter.ProxyService?.ActiveProxies?
+                .Where(x => x is ISupportMetadataMixing && x.GetProxyMode() != ProxyMode.Internal) ?? [];
 
         [FieldDefinition(2, Label = "Maximal usable threshold", Section = MetadataSectionType.Metadata, Type = FieldType.Number, HelpText = "The maximum threshold added to a lower priority proxy to still use for populating data.", Placeholder = "15")]
         public int MaxThreshold { get; set; }

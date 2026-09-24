@@ -26,7 +26,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
 
         public ProviderDefinition? Definition { get; set; }
 
-        protected virtual TSettings? Settings => Definition?.Settings == null ? default : (TSettings)Definition.Settings;
+        protected virtual TSettings? Settings => Definition?.Settings is TSettings settings ? settings : default;
 
         public abstract Type CommandType { get; }
 

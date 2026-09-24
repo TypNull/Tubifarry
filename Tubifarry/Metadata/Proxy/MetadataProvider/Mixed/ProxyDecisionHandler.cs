@@ -7,6 +7,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
     public class ProxyDecisionHandler<TResult>
     {
         private readonly MixedMetadataProxy _mixedProxy;
+        private readonly MixedMetadataProxySettings _settings;
         private readonly Func<IProxy, List<TResult>> _searchExecutor;
         private readonly Func<List<TResult>, TResult, bool> _containsItem;
         private readonly Func<bool> _isValidQuery;
@@ -14,9 +15,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private readonly Type _interfaceType;
         private readonly Logger _logger;
 
-        public ProxyDecisionHandler(MixedMetadataProxy mixedProxy, Func<IProxy, List<TResult>> searchExecutor, Func<List<TResult>, TResult, bool> containsItem, Func<bool>? isValidQuery, Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector, Type interfaceType)
+        public ProxyDecisionHandler(MixedMetadataProxy mixedProxy, MixedMetadataProxySettings settings, Func<IProxy, List<TResult>> searchExecutor, Func<List<TResult>, TResult, bool> containsItem, Func<bool>? isValidQuery, Func<ISupportMetadataMixing, MetadataSupportLevel> supportSelector, Type interfaceType)
         {
             _mixedProxy = mixedProxy;
+            _settings = settings;
             _searchExecutor = searchExecutor;
             _containsItem = containsItem;
             _isValidQuery = isValidQuery ?? (() => true);
@@ -30,7 +32,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             List<TResult> aggregatedItems = [];
             int bestPriority = int.MaxValue;
 
-            foreach (ProxyCandidate candidate in _mixedProxy.GetCandidateProxies(_supportSelector, _interfaceType))
+            foreach (ProxyCandidate candidate in _mixedProxy.GetCandidateProxies(_settings, _supportSelector, _interfaceType))
             {
                 if (bestPriority == int.MaxValue)
                 {
@@ -38,7 +40,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
                 }
                 else
                 {
-                    int threshold = _mixedProxy.CalculateThreshold(candidate.Proxy.Name, aggregatedItems.Count);
+                    int threshold = _mixedProxy.CalculateThreshold(_settings, candidate.Proxy.Name, aggregatedItems.Count);
                     if (candidate.Priority > bestPriority + threshold)
                     {
                         _logger.Debug($"Stopping aggregation due to threshold. Candidate proxy {candidate.Proxy.Name} with priority {candidate.Priority} exceeds threshold (threshold={threshold}).");
@@ -58,7 +60,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
                 bool queryValid = _isValidQuery();
                 bool success = !queryValid || newCount > 0;
-                _mixedProxy._adaptiveThreshold.UpdateMetrics(candidate.Proxy.Name, sw.Elapsed.TotalMilliseconds, newCount, success);
+                _mixedProxy.UpdateMetrics(_settings, candidate.Proxy.Name, sw.Elapsed.TotalMilliseconds, newCount, success);
 
                 if (newCount == 0 && aggregatedItems.Count != 0)
                 {

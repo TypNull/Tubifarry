@@ -1,4 +1,6 @@
-﻿using System.Text.Json;
+﻿using NLog;
+using NzbDrone.Common.Instrumentation;
+using System.Text.Json;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 {
@@ -14,31 +16,78 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
     public class AdaptiveThresholdManager : IProvideAdaptiveThreshold, IDisposable
     {
         private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
+        private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(AdaptiveThresholdManager));
+        private const string DefaultFileName = "adaptive_weights.json";
 
+        private string? _requestedPath;
         private string? _configFilePath;
+        private bool _saveFailureLogged;
         private bool _disposed;
         private System.Timers.Timer? _saveTimer;
         private bool _isDirty;
+        private bool _processExitRegistered;
         private readonly object _lock = new();
 
         public AdaptiveThresholdConfig Config { get; private set; } = new();
 
         public void LoadConfig(string? configPath)
         {
-            if (string.IsNullOrWhiteSpace(configPath) || configPath == _configFilePath)
-                return;
-            _configFilePath = configPath;
-            if (!File.Exists(_configFilePath))
-                return;
-            try
+            lock (_lock)
             {
-                Config = JsonSerializer.Deserialize<AdaptiveThresholdConfig>(File.ReadAllText(_configFilePath)) ?? new AdaptiveThresholdConfig();
+                if (_disposed)
+                    return;
+
+                string? requestedPath = string.IsNullOrWhiteSpace(configPath) ? null : configPath;
+                if (requestedPath == _requestedPath)
+                    return;
+
+                _requestedPath = requestedPath;
+                string? newPath = requestedPath == null ? null : ResolveConfigPath(requestedPath);
+                if (newPath == _configFilePath)
+                    return;
+
+                SaveConfig();
+                _saveTimer?.Dispose();
+                _saveTimer = null;
+                _configFilePath = newPath;
+                _saveFailureLogged = false;
+                Config = new AdaptiveThresholdConfig();
+                _isDirty = false;
+
+                if (_configFilePath == null)
+                    return;
+
+                if (File.Exists(_configFilePath))
+                {
+                    try
+                    {
+                        Config = JsonSerializer.Deserialize<AdaptiveThresholdConfig>(File.ReadAllText(_configFilePath)) ?? new AdaptiveThresholdConfig();
+                        _isDirty = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn(ex, $"Failed to load adaptive threshold config from {_configFilePath}, keeping a backup at {_configFilePath}.bak");
+                        try
+                        {
+                            File.Copy(_configFilePath, _configFilePath + ".bak", true);
+                        }
+                        catch (Exception copyEx)
+                        {
+                            _logger.Debug(copyEx, $"Failed to back up adaptive threshold config {_configFilePath}");
+                        }
+                    }
+                }
+
                 _saveTimer = new System.Timers.Timer(300000) { AutoReset = true };
-                _saveTimer.Elapsed += (s, e) => { if (_isDirty) SaveConfig(); };
+                _saveTimer.Elapsed += (s, e) => SaveConfig();
                 _saveTimer.Start();
-                AppDomain.CurrentDomain.ProcessExit += (s, e) => SaveConfig();
+
+                if (!_processExitRegistered)
+                {
+                    AppDomain.CurrentDomain.ProcessExit += (s, e) => SaveConfig();
+                    _processExitRegistered = true;
+                }
             }
-            catch { }
         }
 
         private void SaveConfig()
@@ -46,11 +95,30 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
             lock (_lock)
             {
                 if (!_isDirty || _configFilePath == null) return;
-                string json = JsonSerializer.Serialize(Config, _jsonOptions);
-                File.WriteAllText(_configFilePath, json);
-                _isDirty = false;
+                try
+                {
+                    File.WriteAllText(_configFilePath, JsonSerializer.Serialize(Config, _jsonOptions));
+                    _isDirty = false;
+                }
+                catch (Exception ex)
+                {
+                    if (_saveFailureLogged)
+                    {
+                        _logger.Debug(ex, $"Failed to save adaptive threshold config to {_configFilePath}");
+                    }
+                    else
+                    {
+                        _logger.Warn(ex, $"Failed to save adaptive threshold config to {_configFilePath}");
+                        _saveFailureLogged = true;
+                    }
+                }
             }
         }
+
+        private static string ResolveConfigPath(string path) =>
+            Directory.Exists(path) || path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
+                ? Path.Combine(path, DefaultFileName)
+                : path;
 
         /// <summary>
         /// Applies exponential decay to the stored metrics based on the time elapsed since the last update.
@@ -78,22 +146,25 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         /// <returns>The computed dynamic threshold.</returns>
         public int GetDynamicThreshold(string proxyName, int aggregatedCount)
         {
-            int baseThreshold = aggregatedCount < 10 ? Config.BaseThresholdLowCount : aggregatedCount < 50 ? Config.BaseThresholdMediumCount : Config.BaseThresholdHighCount;
+            lock (_lock)
+            {
+                int baseThreshold = aggregatedCount < 10 ? Config.BaseThresholdLowCount : aggregatedCount < 50 ? Config.BaseThresholdMediumCount : Config.BaseThresholdHighCount;
 
-            if (!Config.ProxyMetrics.TryGetValue(proxyName, out ProxyMetrics? metrics) || metrics.Calls < Config.MinCallsForReliableMetrics)
-                return baseThreshold;
+                if (!Config.ProxyMetrics.TryGetValue(proxyName, out ProxyMetrics? metrics) || metrics.Calls < Config.MinCallsForReliableMetrics)
+                    return baseThreshold;
 
-            DecayMetrics(metrics);
+                DecayMetrics(metrics);
 
-            double failureRatio = metrics.Calls > 0 ? metrics.Failures / metrics.Calls : 0.0;
-            double qualityAdjustment = 1.0 - metrics.QualityScore;
-            double performanceAdjustment = 1.0 - metrics.PerformanceScore;
+                double failureRatio = metrics.Calls > 0 ? metrics.Failures / metrics.Calls : 0.0;
+                double qualityAdjustment = 1.0 - metrics.QualityScore;
+                double performanceAdjustment = 1.0 - metrics.PerformanceScore;
 
-            // Weights can be tuned; here we use a weighted sum.
-            double adjustment = (0.5 * qualityAdjustment) + (0.3 * performanceAdjustment) + (0.2 * failureRatio);
-            int maxAdjustment = Config.MaxThresholdCount - baseThreshold;
-            int dynamicThreshold = baseThreshold + (int)Math.Round(adjustment * maxAdjustment);
-            return dynamicThreshold < 1 ? 1 : dynamicThreshold;
+                // Weights can be tuned; here we use a weighted sum.
+                double adjustment = (0.5 * qualityAdjustment) + (0.3 * performanceAdjustment) + (0.2 * failureRatio);
+                int maxAdjustment = Config.MaxThresholdCount - baseThreshold;
+                int dynamicThreshold = baseThreshold + (int)Math.Round(adjustment * maxAdjustment);
+                return dynamicThreshold < 1 ? 1 : dynamicThreshold;
+            }
         }
 
         /// <summary>
@@ -147,18 +218,16 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            lock (_lock)
             {
+                if (_disposed)
+                    return;
+
                 if (disposing)
                 {
                     SaveConfig();
-                    if (_saveTimer != null)
-                    {
-                        _saveTimer.Stop();
-                        _saveTimer.Elapsed -= (s, e) => { if (_isDirty) SaveConfig(); };
-                        _saveTimer.Dispose();
-                        _saveTimer = null;
-                    }
+                    _saveTimer?.Dispose();
+                    _saveTimer = null;
                 }
                 _disposed = true;
             }

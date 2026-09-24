@@ -20,7 +20,7 @@ namespace Tubifarry.Metadata.Lyrics
             ? (int)TimeSpan.FromDays(ActiveSettings.UpdateInterval).TotalMinutes
             : 0;
 
-        private LyricsEnhancerSettings ActiveSettings => Settings ?? LyricsEnhancerSettings.Instance!;
+        private LyricsEnhancerSettings ActiveSettings => Settings ?? new();
 
         public void Execute(LyricsUpdateCommand message) => _service.Execute(message, ActiveSettings);
 

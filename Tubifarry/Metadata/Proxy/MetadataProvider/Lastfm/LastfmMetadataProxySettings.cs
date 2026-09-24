@@ -109,11 +109,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
 
 #endif
 
-
-        public LastfmMetadataProxySettings() => Instance = this;
-
-        public static LastfmMetadataProxySettings? Instance { get; private set; }
-
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

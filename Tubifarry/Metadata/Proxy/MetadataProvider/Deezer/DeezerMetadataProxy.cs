@@ -19,7 +19,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         private readonly Logger _logger;
 
         public override string Name => "Deezer";
-        private DeezerMetadataProxySettings ActiveSettings => Settings ?? DeezerMetadataProxySettings.Instance!;
+        private DeezerMetadataProxySettings ActiveSettings => Settings ?? new();
 
         public DeezerMetadataProxy(IDeezerProxy deezerProxy, Logger logger)
         {

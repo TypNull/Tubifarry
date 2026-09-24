@@ -49,9 +49,9 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
             "Enable this metadata provider to start automatic searches.",
             ProviderMessageType.Info);
 
-        private SearchSniperTaskSettings ActiveSettings => Settings ?? SearchSniperTaskSettings.Instance!;
+        private SearchSniperTaskSettings ActiveSettings => Settings ?? new();
 
-        public override int IntervalMinutes => SearchSniperTaskSettings.Instance!.RefreshInterval;
+        public override int IntervalMinutes => ActiveSettings.RefreshInterval;
 
         public override CommandPriority Priority => CommandPriority.Low;
 
@@ -98,6 +98,8 @@ namespace Tubifarry.Metadata.ScheduledTasks.SearchSniper
 
         private void RunSearch(SearchSniperCommand message)
         {
+            InitializeCache();
+
             if (!ActiveSettings.SearchMissing && !ActiveSettings.SearchMissingTracks && !ActiveSettings.SearchQualityCutoffNotMet)
             {
                 _logger.Warn("No search options enabled. Please enable at least one search criteria.");

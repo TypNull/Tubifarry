@@ -30,6 +30,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
     }
 
     public class ScheduledTaskService(
+        IEnumerable<IProvideScheduledTask> _taskProviders,
         IScheduledTaskRepository _scheduledTaskRepository,
         IMetadataFactory _metadataFactory,
         ICacheManager _cacheManager,
@@ -45,8 +46,12 @@ namespace Tubifarry.Metadata.ScheduledTasks
         {
             _logger.Trace("Initializing scheduled task system");
 
-            IEnumerable<IProvideScheduledTask> taskProviders = _metadataFactory.GetAvailableProviders()
-                .OfType<IProvideScheduledTask>()
+            List<MetadataDefinition> definitions = _metadataFactory.All();
+
+            foreach (IProvider provider in _taskProviders.OfType<IProvider>())
+                provider.Definition = definitions.Find(x => string.Equals(x.Implementation, provider.GetType().Name, StringComparison.InvariantCultureIgnoreCase));
+
+            IEnumerable<IProvideScheduledTask> taskProviders = _taskProviders
                 .Where(ValidateTaskProvider)
                 .DistinctBy(x => x.CommandType.FullName)
                 .ToArray();
@@ -54,18 +59,22 @@ namespace Tubifarry.Metadata.ScheduledTasks
             TaskProviders = taskProviders;
 
             foreach (IProvideScheduledTask provider in taskProviders.Where(x => (x as IProvider)?.Definition?.Enable == true))
+            {
+                if ((provider as IProvider)?.Definition?.Settings?.Validate().IsValid != true)
+                {
+                    _logger.Debug($"Skipping scheduled task {(provider as IProvider)?.Name}: settings are invalid");
+                    continue;
+                }
+
                 EnableTask(provider);
+            }
             _logger.Debug($"Initialized scheduled task system: {_activeTaskProviders.Count} active tasks, {TaskProviders.Count()} total task providers");
         }
 
         public void Handle(ProviderUpdatedEvent<IMetadata> message)
         {
-            if (TaskProviders.FirstOrDefault(x =>
-            (x as IMetadata)?.Definition?.ImplementationName == message.Definition.ImplementationName)
-                is not IProvideScheduledTask taskProvider)
-            {
+            if (ApplyDefinition(message.Definition) is not IProvideScheduledTask taskProvider)
                 return;
-            }
 
             _logger.Trace($"Provider updated event for: {(taskProvider as IProvider)?.Name}, Enabled: {message.Definition.Enable}");
 
@@ -80,8 +89,7 @@ namespace Tubifarry.Metadata.ScheduledTasks
             if (message.Definition.Implementation == null)
                 return;
 
-            IProvideScheduledTask? taskProvider = TaskProviders.FirstOrDefault(x =>
-                (x as IProvider)?.Definition?.ImplementationName == message.Definition.ImplementationName);
+            IProvideScheduledTask? taskProvider = ApplyDefinition(message.Definition);
 
             if (taskProvider != null && message.Definition.Enable)
                 EnableTask(taskProvider);
@@ -89,11 +97,24 @@ namespace Tubifarry.Metadata.ScheduledTasks
 
         public void Handle(ProviderDeletedEvent<IMetadata> message)
         {
-            IProvideScheduledTask? taskProvider = _activeTaskProviders.FirstOrDefault(x =>
+            IProvideScheduledTask? taskProvider = TaskProviders.FirstOrDefault(x =>
                 (x as IProvider)?.Definition?.Id == message.ProviderId);
 
-            if (taskProvider != null)
-                DisableTask(taskProvider);
+            if (taskProvider == null)
+                return;
+
+            DisableTask(taskProvider);
+            ((IProvider)taskProvider).Definition = null;
+        }
+
+        private IProvideScheduledTask? ApplyDefinition(ProviderDefinition definition)
+        {
+            IProvideScheduledTask? taskProvider = TaskProviders.FirstOrDefault(x => string.Equals(x.GetType().Name, definition.Implementation, StringComparison.InvariantCultureIgnoreCase));
+
+            if (taskProvider is IProvider provider)
+                provider.Definition = definition;
+
+            return taskProvider;
         }
 
         public void EnableTask(IProvideScheduledTask provider)

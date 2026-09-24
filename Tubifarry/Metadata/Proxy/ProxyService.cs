@@ -4,6 +4,7 @@ using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.ThingiProvider;
 using NzbDrone.Core.ThingiProvider.Events;
+using System.Collections.Immutable;
 
 namespace Tubifarry.Metadata.Proxy
 {
@@ -23,15 +24,16 @@ namespace Tubifarry.Metadata.Proxy
         void SetActiveProxy(Type originalInterfaceType, IProxy proxy);
     }
 
-    public class ProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>
+    public class ProxyService : IProxyService, IHandle<ProviderUpdatedEvent<IMetadata>>, IHandle<ProviderAddedEvent<IMetadata>>, IHandle<ProviderDeletedEvent<IMetadata>>
     {
         private readonly IMetadataFactory _metadataFactory;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
+        private readonly object _lock = new();
 
         private readonly Dictionary<Type, List<IProxy>> _interfaceToProxyMap = [];
         private readonly Dictionary<Type, IProxy> _activeProxyForInterface = [];
-        private readonly List<IProxy> _activeProxies = [];
+        private ImmutableList<IProxy> _activeProxies = [];
         private readonly HashSet<IProxy> _defaultProxies = [];
 
         public IEnumerable<IProxy> Proxies { get; private set; } = [];
@@ -47,54 +49,92 @@ namespace Tubifarry.Metadata.Proxy
 
         public void RegisterProxy(IProxy proxy)
         {
-            IEnumerable<(Type OriginalInterface, int Priority)> declaredInterfaces = proxy.GetType().GetDeclaredInterfaces();
-            foreach ((Type originalInterface, int priority) in declaredInterfaces)
-                AddProxyToInterfaceMapping(proxy, originalInterface, priority);
-            _interfaceToProxyMap.Keys.ToList().ForEach(UpdateActiveProxyForInterface);
+            lock (_lock)
+            {
+                IEnumerable<(Type OriginalInterface, int Priority)> declaredInterfaces = proxy.GetType().GetDeclaredInterfaces();
+                foreach ((Type originalInterface, int priority) in declaredInterfaces)
+                    AddProxyToInterfaceMapping(proxy, originalInterface, priority);
+                _interfaceToProxyMap.Keys.ToList().ForEach(UpdateActiveProxyForInterface);
+            }
         }
 
         public void UnregisterProxy(IProxy proxy)
         {
-            foreach (Type? interfaceType in _interfaceToProxyMap.Keys)
-                RemoveProxyFromInterfaceMapping(proxy, interfaceType);
-            _defaultProxies.Remove(proxy);
-            _logger.Trace($"Unregistered proxy {proxy.Name}");
+            lock (_lock)
+            {
+                foreach (Type? interfaceType in _interfaceToProxyMap.Keys.ToList())
+                    RemoveProxyFromInterfaceMapping(proxy, interfaceType);
+                _defaultProxies.Remove(proxy);
+                _logger.Trace($"Unregistered proxy {proxy.Name}");
+            }
         }
 
-        public IProxy? GetActiveProxyForInterface(Type originalInterfaceType) =>
-            _activeProxyForInterface.GetValueOrDefault(originalInterfaceType) ?? TrySetDefaultProxy(originalInterfaceType);
+        public IProxy? GetActiveProxyForInterface(Type originalInterfaceType)
+        {
+            lock (_lock)
+                return _activeProxyForInterface.GetValueOrDefault(originalInterfaceType) ?? TrySetDefaultProxy(originalInterfaceType);
+        }
 
         public void SetActiveProxy(Type originalInterfaceType, IProxy proxy)
         {
-            if (!IsProxyRegisteredForInterface(proxy, originalInterfaceType))
-                throw new InvalidOperationException($"Proxy {proxy.Name} is not registered for interface {originalInterfaceType.Name}");
+            lock (_lock)
+            {
+                if (!IsProxyRegisteredForInterface(proxy, originalInterfaceType))
+                    throw new InvalidOperationException($"Proxy {proxy.Name} is not registered for interface {originalInterfaceType.Name}");
 
-            _activeProxyForInterface[originalInterfaceType] = proxy;
-            _logger.Trace($"Set active proxy for {originalInterfaceType.Name} to {proxy.Name}");
+                _activeProxyForInterface[originalInterfaceType] = proxy;
+                _logger.Trace($"Set active proxy for {originalInterfaceType.Name} to {proxy.Name}");
+            }
         }
 
-        public void Handle(ProviderUpdatedEvent<IMetadata> message)
-        {
-            if (Proxies.OfType<IProvider>().FirstOrDefault(x => x.Definition?.ImplementationName == message.Definition.ImplementationName) is not IProxy updatedProxy)
-                return;
+        public void Handle(ProviderUpdatedEvent<IMetadata> message) => ApplyDefinition(message.Definition);
 
-            ((IProvider)updatedProxy).Definition = message.Definition;
-            if (message.Definition.Enable)
-                EnableProxy(updatedProxy);
-            else
-                DisableProxy(updatedProxy);
+        public void Handle(ProviderAddedEvent<IMetadata> message) => ApplyDefinition(message.Definition);
+
+        public void Handle(ProviderDeletedEvent<IMetadata> message)
+        {
+            lock (_lock)
+            {
+                if (Proxies.FirstOrDefault(x => (x as IProvider)?.Definition?.Id == message.ProviderId) is not IProxy deletedProxy)
+                    return;
+
+                DisableProxy(deletedProxy);
+                ((IProvider)deletedProxy).Definition = null;
+            }
+        }
+
+        private void ApplyDefinition(ProviderDefinition definition)
+        {
+            lock (_lock)
+            {
+                if (Proxies.FirstOrDefault(x => string.Equals(x.GetType().Name, definition.Implementation, StringComparison.InvariantCultureIgnoreCase)) is not IProvider provider)
+                    return;
+
+                provider.Definition = definition;
+                if (definition.Enable)
+                    EnableProxy((IProxy)provider);
+                else
+                    DisableProxy((IProxy)provider);
+            }
         }
 
         public void InitializeProxies()
         {
             _logger.Trace("Initializing proxy system");
 
-            IEnumerable<IProxy> metadataProxies = _metadataFactory.All().Select(def => _metadataFactory.GetInstance(def)).OfType<IProxy>();
-            Proxies = Proxies.Where(p => p is not IMetadata).Concat(metadataProxies).Where(ValidateProxy).DistinctBy(x => x.GetType()).ToArray();
-            ActivateEnabledProxies();
-            EnsureDefaultProxies();
+            List<MetadataDefinition> definitions = _metadataFactory.All();
 
-            _logger.Info($"Initialized proxy system: {_activeProxies.Count} active proxies, {_interfaceToProxyMap.Count} interface mappings");
+            lock (_lock)
+            {
+                foreach (IProvider provider in Proxies.OfType<IProvider>())
+                    provider.Definition = definitions.Find(x => string.Equals(x.Implementation, provider.GetType().Name, StringComparison.InvariantCultureIgnoreCase));
+
+                Proxies = Proxies.Where(ValidateProxy).DistinctBy(x => x.GetType()).ToArray();
+                ActivateEnabledProxies();
+                EnsureDefaultProxies();
+
+                _logger.Info($"Initialized proxy system: {_activeProxies.Count} active proxies, {_interfaceToProxyMap.Count} interface mappings");
+            }
         }
 
         private void AddProxyToInterfaceMapping(IProxy proxy, Type originalInterface, int priority)
@@ -236,7 +276,7 @@ namespace Tubifarry.Metadata.Proxy
         {
             if (_activeProxies.Contains(proxy)) return;
 
-            _activeProxies.Add(proxy);
+            _activeProxies = _activeProxies.Add(proxy);
             RemoveSupersededDefaultProxies(proxy);
             RegisterProxy(proxy);
             _eventAggregator.PublishEvent(new ProxyStatusChangedEvent(proxy, ProxyStatusAction.Enabled));
@@ -250,7 +290,7 @@ namespace Tubifarry.Metadata.Proxy
                 IProxy? currentDefault = _defaultProxies.FirstOrDefault(d => d.GetType().IsProxyForInterface(interfaceType));
                 if (currentDefault != null)
                 {
-                    _activeProxies.Remove(currentDefault);
+                    _activeProxies = _activeProxies.Remove(currentDefault);
                     _defaultProxies.Remove(currentDefault);
                     _logger.Trace($"Removed superseded default proxy: {currentDefault.Name}");
                 }
@@ -262,7 +302,7 @@ namespace Tubifarry.Metadata.Proxy
             if (!_activeProxies.Contains(proxy))
                 return;
 
-            _activeProxies.Remove(proxy);
+            _activeProxies = _activeProxies.Remove(proxy);
             _defaultProxies.Remove(proxy);
             UnregisterProxy(proxy);
 
@@ -294,7 +334,7 @@ namespace Tubifarry.Metadata.Proxy
                 int interfaceCount = proxy.GetType().GetDeclaredInterfaces().Count();
 
                 _logger.Trace($"Activating proxy: {proxy.Name} (Mode: {mode}, Interfaces: {interfaceCount})");
-                _activeProxies.Add(proxy);
+                EnsureProxyIsActive(proxy);
                 RegisterProxy(proxy);
             }
         }
@@ -333,7 +373,7 @@ namespace Tubifarry.Metadata.Proxy
         private void EnsureProxyIsActive(IProxy proxy)
         {
             if (!_activeProxies.Contains(proxy))
-                _activeProxies.Add(proxy);
+                _activeProxies = _activeProxies.Add(proxy);
         }
 
         private IProxy? FindHighestPriorityProxyForInterface(Type originalInterface) =>

@@ -50,7 +50,6 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
             ApiKey = new LastFmUserSettings().ApiKey;
             ResultLimit = 10;
             FetchImages = true;
-            Instance = this;
         }
 
         [FieldDefinition(0, Label = "Last.fm API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Your Last.fm API key for fetching similar artists", Privacy = PrivacyLevel.ApiKey)]
@@ -67,8 +66,6 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
 
         [FieldDefinition(4, Label = "Cache Directory", Type = FieldType.Path, HelpText = "Directory to store cached data (only used for Permanent caching)")]
         public string CacheDirectory { get; set; } = string.Empty;
-
-        public static SimilarArtistsProxySettings? Instance { get; private set; }
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }

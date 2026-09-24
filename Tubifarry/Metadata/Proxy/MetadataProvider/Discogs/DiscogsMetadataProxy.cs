@@ -19,7 +19,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
         private readonly Logger _logger;
 
         public override string Name => "Discogs";
-        private DiscogsMetadataProxySettings ActiveSettings => Settings ?? DiscogsMetadataProxySettings.Instance!;
+        private DiscogsMetadataProxySettings ActiveSettings => Settings ?? new();
 
         public DiscogsMetadataProxy(DiscogsProxy discogsProxy, Logger logger)
         {

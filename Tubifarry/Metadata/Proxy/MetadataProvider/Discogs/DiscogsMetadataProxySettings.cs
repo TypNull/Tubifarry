@@ -67,10 +67,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Discogs
 
         public string BaseUrl => "https://api.discogs.com";
 
-        public DiscogsMetadataProxySettings() => Instance = this;
-
-        public static DiscogsMetadataProxySettings? Instance { get; private set; }
-
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }

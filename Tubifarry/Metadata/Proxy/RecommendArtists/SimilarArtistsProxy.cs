@@ -48,7 +48,7 @@ namespace Tubifarry.Metadata.Proxy.RecommendArtists
             }
 
             return _lastFmService
-                .GetSimilarArtistsWithMetadata(targetArtistIdentifier, Settings!)
+                .GetSimilarArtistsWithMetadata(targetArtistIdentifier, Settings ?? new())
                 .Cast<object>()
                 .ToList();
         }

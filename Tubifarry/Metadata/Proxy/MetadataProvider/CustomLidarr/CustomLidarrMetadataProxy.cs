@@ -24,7 +24,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
         private readonly ILidarrCloudRequestBuilder _defaultRequestFactory;
 
         public override string Name => "Lidarr Custom";
-        private static CustomLidarrMetadataProxySettings ActiveSettings => CustomLidarrMetadataProxySettings.Instance!;
+        private CustomLidarrMetadataProxySettings ActiveSettings => Settings ?? new();
 
         public CustomLidarrMetadataProxy(IConfigService configService, ILidarrCloudRequestBuilder defaultRequestBuilder, ICustomLidarrProxy customLidarrProxy)
         {

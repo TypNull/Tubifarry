@@ -19,7 +19,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         private readonly Logger _logger = logger;
 
         public override string Name => "Last.fm";
-        private LastfmMetadataProxySettings ActiveSettings => Settings ?? LastfmMetadataProxySettings.Instance!;
+        private LastfmMetadataProxySettings ActiveSettings => Settings ?? new();
 
         public List<Album> SearchForNewAlbum(string title, string artist) => _lastfmProxy.SearchNewAlbum(ActiveSettings, title, artist);
 

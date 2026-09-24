@@ -100,10 +100,6 @@ namespace Tubifarry.Metadata.Lyrics
         [FieldDefinition(16, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
         public int UpdateInterval { get; set; } = 7;
 
-        public LyricsEnhancerSettings() => Instance = this;
-
-        public static LyricsEnhancerSettings? Instance { get; private set; }
-
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 

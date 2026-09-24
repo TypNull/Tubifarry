@@ -44,10 +44,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.CustomLidarr
         [FieldDefinition(99, Label = "Warning", Type = FieldType.Checkbox, HelpText = "Use at your own risk. This feature could void your Servarr support.")]
         public bool UseAtOwnRisk { get; set; }
 
-        public CustomLidarrMetadataProxySettings() => Instance = this;
-
-        public static CustomLidarrMetadataProxySettings? Instance { get; private set; }
-
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
     }
 }
