@@ -76,6 +76,8 @@ namespace Tubifarry.Indexers.Lucida
             Dictionary<string, List<ServiceCountry>> services;
             try
             {
+                if (LucidaServiceHelper.IsFetchCompleted(baseUrl) && !LucidaServiceHelper.HasAvailableServices(baseUrl))
+                    LucidaServiceHelper.ClearCache(baseUrl);
                 services = await LucidaServiceHelper.GetServicesAsync(baseUrl, _httpClient, _logger);
                 if (services.Count == 0)
                 {
@@ -116,6 +118,21 @@ namespace Tubifarry.Indexers.Lucida
         }
 
         public override IParseIndexerResponse GetParser() => _parser;
+
+        protected override async Task<IndexerResponse> FetchIndexerResponse(IndexerRequest request)
+        {
+            IndexerResponse response = await base.FetchIndexerResponse(request);
+            for (int attempt = 1; attempt < LucidaRetryPolicy.MaxAttempts && InvalidCountryRegex().IsMatch(response.Content); attempt++)
+            {
+                _logger.Debug("Lucida server rejected the country, retrying ({0}/{1})", attempt, LucidaRetryPolicy.MaxAttempts - 1);
+                await LucidaRetryPolicy.DelayAsync(attempt);
+                response = await base.FetchIndexerResponse(request);
+            }
+            return response;
+        }
+
+        [GeneratedRegex(@"success:\s*false,\s*error:\s*""Invalid country")]
+        private static partial Regex InvalidCountryRegex();
 
         [GeneratedRegex("<title>.*?(Lucida|Music).*?</title>", RegexOptions.IgnoreCase, "de-DE")]
         private static partial Regex LucidaHeaderRegex();

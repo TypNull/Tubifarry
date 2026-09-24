@@ -18,6 +18,12 @@ namespace Tubifarry.Indexers.Lucida
         private static readonly ConcurrentDictionary<string, Task<Dictionary<string, List<ServiceCountry>>>> _cache
             = new(StringComparer.OrdinalIgnoreCase);
 
+        private static readonly ConcurrentDictionary<string, DateTime> _refreshAfter
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly TimeSpan EmptyResultCacheDuration = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan PartialResultCacheDuration = TimeSpan.FromMinutes(30);
+
         // Known services that Lucida supports
         private static readonly IReadOnlyDictionary<string, string> _knownServices = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -50,8 +56,17 @@ namespace Tubifarry.Indexers.Lucida
             Logger logger)
         {
             baseUrl = baseUrl.TrimEnd('/');
-            return _cache.GetOrAdd(baseUrl, _ => FetchServicesAsync(baseUrl, httpClient, logger));
+            Task<Dictionary<string, List<ServiceCountry>>> task = _cache.GetOrAdd(baseUrl, _ => FetchServicesAsync(baseUrl, httpClient, logger));
+            if (task.IsCompleted && (!task.IsCompletedSuccessfully || (task.Result.Count < _knownServices.Count && DateTime.UtcNow >= _refreshAfter.GetValueOrDefault(baseUrl))))
+            {
+                _cache.TryRemove(new KeyValuePair<string, Task<Dictionary<string, List<ServiceCountry>>>>(baseUrl, task));
+                task = _cache.GetOrAdd(baseUrl, _ => FetchServicesAsync(baseUrl, httpClient, logger));
+            }
+            return task;
         }
+
+        public static bool IsFetchCompleted(string baseUrl) =>
+            _cache.TryGetValue(baseUrl.TrimEnd('/'), out Task<Dictionary<string, List<ServiceCountry>>>? task) && task.IsCompleted;
 
         /// <summary>
         /// Check if services are available for a specific Lucida instance
@@ -119,32 +134,51 @@ namespace Tubifarry.Indexers.Lucida
                     string url = $"{baseUrl}/api/load?url=%2Fapi%2Fcountries%3Fservice%3D{service}";
                     logger.Trace("Fetching countries for service {Service}: {Url}", service, url);
 
-                    try
+                    for (int attempt = 0; attempt < LucidaRetryPolicy.MaxAttempts; attempt++)
                     {
-                        HttpRequest req = new(url);
-                        req.Headers["User-Agent"] = Tubifarry.UserAgent;
-                        HttpResponse response = await httpClient.ExecuteAsync(req);
-                        if (response.StatusCode != HttpStatusCode.OK)
-                        {
-                            logger.Warn("Failed to get countries for service {Service}: {StatusCode}", service, response.StatusCode);
-                            return true;
-                        }
+                        if (attempt > 0)
+                            await LucidaRetryPolicy.DelayAsync(attempt);
 
-                        CountryResponse? payload = JsonSerializer.Deserialize<CountryResponse>(response.Content, _jsonOptions);
-                        if (payload?.Success == true && payload.Countries?.Count > 0)
+                        try
                         {
-                            result[service] = payload.Countries;
-                            logger.Trace("Found {Count} countries for service {Service}", payload.Countries.Count, service);
+                            HttpRequest req = new(url);
+                            req.Headers["User-Agent"] = Tubifarry.UserAgent;
+                            HttpResponse response = await httpClient.ExecuteAsync(req);
+                            if (response.StatusCode != HttpStatusCode.OK)
+                            {
+                                logger.Warn("Failed to get countries for service {Service}: {StatusCode}", service, response.StatusCode);
+                                continue;
+                            }
+
+                            CountryResponse? payload = JsonSerializer.Deserialize<CountryResponse>(response.Content, _jsonOptions);
+                            if (payload?.Success == true && payload.Countries?.Count > 0)
+                            {
+                                lock (result)
+                                    result[service] = payload.Countries;
+                                logger.Trace("Found {Count} countries for service {Service}", payload.Countries.Count, service);
+                                break;
+                            }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error(ex, "Error fetching countries for service {Service}", service);
+                        catch (Exception ex) when (!LucidaRetryPolicy.IsTransient(ex))
+                        {
+                            logger.Error(ex, "Error fetching countries for service {Service}", service);
+                            break;
+                        }
+                        catch (Exception ex) when (!LucidaRetryPolicy.IsLastAttempt(attempt))
+                        {
+                            logger.Debug(ex, "Error fetching countries for service {Service}, retrying ({Attempt}/{MaxRetries})", service, attempt + 1, LucidaRetryPolicy.MaxAttempts - 1);
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.Error(ex, "Error fetching countries for service {Service}", service);
+                        }
                     }
                     return true;
                 }));
             }
             await container.Task;
+            if (result.Count < _knownServices.Count)
+                _refreshAfter[baseUrl] = DateTime.UtcNow.Add(result.Count == 0 ? EmptyResultCacheDuration : PartialResultCacheDuration);
             return result;
         }
     }

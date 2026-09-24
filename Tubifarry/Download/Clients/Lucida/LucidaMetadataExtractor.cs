@@ -38,13 +38,28 @@ public static partial class LucidaMetadataExtractor
             _logger.Debug($"Native API metadata failed, falling back to HTML: {ex.Message}");
         }
 
-        if (album is not { IsValid: true })
+        for (int attempt = 0; attempt < LucidaRetryPolicy.MaxAttempts && album is not { IsValid: true }; attempt++)
         {
+            if (attempt > 0)
+            {
+                _logger.Debug($"Retrying HTML metadata extraction ({attempt}/{LucidaRetryPolicy.MaxAttempts - 1})");
+                await LucidaRetryPolicy.DelayAsync(attempt);
+            }
+
             try
             {
                 album = await ExtractViaHtmlAsync(httpClient, url);
                 if (album is { IsValid: true })
                     _logger.Debug($"HTML extraction returned valid album: {album.Title} ({album.Tracks.Count} tracks)");
+            }
+            catch (Exception ex) when (!LucidaRetryPolicy.IsTransient(ex))
+            {
+                _logger.Warn($"HTML metadata extraction failed for {url}: {ex.Message}");
+                break;
+            }
+            catch (Exception ex) when (!LucidaRetryPolicy.IsLastAttempt(attempt))
+            {
+                _logger.Warn(ex, "HTML metadata extraction failed for {0}, retrying", url);
             }
             catch (Exception ex)
             {
@@ -140,20 +155,24 @@ public static partial class LucidaMetadataExtractor
         _logger.Trace($"Fetching HTML page: {pageUrl}");
 
         string html;
+        HttpStatusCode statusCode;
         try
         {
             using HttpResponseMessage response = await httpClient.GetAsync(pageUrl);
             html = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.Debug($"HTML page returned HTTP {(int)response.StatusCode}");
-                return null;
-            }
+            statusCode = response.StatusCode;
         }
         catch (Exception ex)
         {
             _logger.Debug($"HTML page fetch failed: {ex.Message}");
+            return null;
+        }
+
+        if ((int)statusCode is < 200 or > 299)
+        {
+            _logger.Debug($"HTML page returned HTTP {(int)statusCode}");
+            if (!LucidaRetryPolicy.IsTransient(statusCode))
+                throw new HttpRequestException($"HTML page returned HTTP {(int)statusCode}", null, statusCode);
             return null;
         }
 
@@ -368,9 +387,7 @@ public static partial class LucidaMetadataExtractor
     {
         try
         {
-            Engine engine = new(opts => opts
-                .TimeoutInterval(TimeSpan.FromSeconds(5))
-                .LimitMemory(50_000_000));
+            Engine engine = LucidaJintEngine.Create();
 
             engine.Execute($@"
                 var __data = {jsonArray};

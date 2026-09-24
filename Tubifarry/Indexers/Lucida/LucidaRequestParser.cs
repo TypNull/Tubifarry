@@ -92,7 +92,7 @@ namespace Tubifarry.Indexers.Lucida
 
         private static (List<LucidaAlbum>? Albums, List<LucidaTrack>? Tracks) ExtractWithJintToRecords(string jsData)
         {
-            Engine engine = new();
+            Engine engine = LucidaJintEngine.Create();
             engine.Execute($@"
                     var data = {jsData};
 

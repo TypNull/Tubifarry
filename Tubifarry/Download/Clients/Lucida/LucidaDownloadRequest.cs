@@ -95,6 +95,9 @@ namespace Tubifarry.Download.Clients.Lucida
         private async Task ProcessAlbumAsync(string downloadUrl, CancellationToken token)
         {
             LucidaAlbumModel album = await LucidaMetadataExtractor.ExtractAlbumMetadataAsync(_httpClient, downloadUrl);
+            if (album.Tracks.Count == 0)
+                throw new Exception($"No tracks found for album: {downloadUrl}");
+
             _expectedTrackCount = album.Tracks.Count;
             _logger.Trace($"Found {album.Tracks.Count} tracks in album: {album.Title}");
 
@@ -228,6 +231,7 @@ namespace Tubifarry.Download.Clients.Lucida
                 }
                 catch (LucidaRateLimitException)
                 {
+                    _rateLimiter.ReleaseWorker(worker);
                     _rateLimiter.MarkWorkerRateLimited(worker);
                     _logger.Debug($"Worker '{worker}' rate limited, trying different worker");
                 }
@@ -262,6 +266,7 @@ namespace Tubifarry.Download.Clients.Lucida
                 }
                 catch (LucidaRateLimitException)
                 {
+                    _rateLimiter.ReleaseWorker(worker);
                     _rateLimiter.MarkWorkerRateLimited(worker);
                     _logger.Debug($"Worker '{worker}' still rate limited after wait");
                 }
@@ -318,6 +323,9 @@ namespace Tubifarry.Download.Clients.Lucida
                     };
                 }
 
+                if (downloadResponse?.Error?.Contains("Service account is unavailable or disabled", StringComparison.OrdinalIgnoreCase) == true)
+                    throw new LucidaRateLimitException($"Account unavailable on worker '{forcedWorker}': {downloadResponse.Error}", forcedWorker);
+
                 string errorInfo = downloadResponse != null
                     ? $"Success: {downloadResponse.Success}, Handoff: {downloadResponse.Handoff}, Server: {downloadResponse.Server}, Name: {downloadResponse.Name}, Error: {downloadResponse.Error}"
                     : "Failed to deserialize response";
@@ -351,6 +359,7 @@ namespace Tubifarry.Download.Clients.Lucida
                     return false;
 
                 bool acquiredSlot = false;
+                string? serverError = null;
                 try
                 {
                     if (_rateLimiter is not null)
@@ -374,7 +383,9 @@ namespace Tubifarry.Download.Clients.Lucida
                             return true;
 
                         if (!string.IsNullOrEmpty(status?.Error) && status.Error != "Request not found." && status.Error != "No such request")
-                            throw new Exception($"Server error: {status.Error}");
+                            serverError = status.Error;
+                        else if (status?.Success == true && status.Status == "error")
+                            serverError = status.Message ?? "unknown error";
 
                         if (!string.IsNullOrEmpty(status?.Status))
                             _logger.Trace($"Poll {attempt}: status={status.Status}");
@@ -405,6 +416,9 @@ namespace Tubifarry.Download.Clients.Lucida
                     if (acquiredSlot)
                         _rateLimiter?.ReleasePollingSlot(serverName);
                 }
+
+                if (serverError != null)
+                    throw new Exception($"Server error: {serverError}");
 
                 await Task.Delay(delayMs, token);
                 delayMs = Math.Min(delayMs * 2, 6000);
