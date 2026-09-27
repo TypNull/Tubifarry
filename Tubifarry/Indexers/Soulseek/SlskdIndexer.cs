@@ -66,8 +66,11 @@ namespace Tubifarry.Indexers.Soulseek
         {
             try
             {
-                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application")
-                    .SetHeader("X-API-KEY", Settings.ApiKey).Build();
+                HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application");
+                if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                    builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+                HttpRequest request = builder.Build();
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
                 HttpResponse response = await _httpClient.ExecuteAsync(request);

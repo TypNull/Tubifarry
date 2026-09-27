@@ -324,9 +324,11 @@ namespace Tubifarry.Indexers.Soulseek
         {
             try
             {
-                HttpRequest request = new HttpRequestBuilder($"{settings.BaseUrl}/api/v0/searches/{searchId}")
-                    .SetHeader("X-API-KEY", settings.ApiKey)
-                    .Build();
+                HttpRequestBuilder builder = new HttpRequestBuilder($"{settings.BaseUrl}/api/v0/searches/{searchId}");
+                if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+                    builder.SetHeader("X-API-KEY", settings.ApiKey);
+
+                HttpRequest request = builder.Build();
                 request.Method = HttpMethod.Delete;
                 await _httpClient.ExecuteAsync(request);
             }
