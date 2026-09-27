@@ -91,7 +91,6 @@ namespace Tubifarry.Download.Clients.YouTube
                     }
 
                     AddTrackDownloadRequest(albumInfo, trackInfo, highestAudioStreamInfo, token);
-                    await _trackContainer.Task;
                 }
                 catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
