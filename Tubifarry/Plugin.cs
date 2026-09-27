@@ -107,9 +107,7 @@ namespace Tubifarry
 #endif
 
 #if CI
-            AvailableVersion = _pluginService.Value.GetRemotePlugin(GithubUrl).Version;
-            if (AvailableVersion > InstalledVersion)
-                _commandQueueManager.Push(new InstallPluginCommand() { GithubUrl = GithubUrl });
+            CheckForUpdate();
 #endif
             foreach (string extension in LyricsHelper.AdditionalCoreExtensions)
             {
@@ -141,6 +139,19 @@ namespace Tubifarry
                 _logger.Debug($"Average runtime between restarts is {AverageRuntime.TotalDays:F2} days");
             }
         }
+
+#if CI
+        private void CheckForUpdate()
+        {
+            RemotePlugin? remote = _pluginService.Value.GetRemotePlugin(GithubUrl);
+            if (remote == null)
+                return;
+
+            AvailableVersion = remote.Version;
+            if (AvailableVersion > InstalledVersion)
+                _commandQueueManager.Push(new InstallPluginCommand() { GithubUrl = GithubUrl });
+        }
+#endif
 
 #if !MASTER_BRANCH
         public void Handle(ApplicationShutdownRequested message)
