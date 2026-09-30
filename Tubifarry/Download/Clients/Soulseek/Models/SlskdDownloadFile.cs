@@ -21,7 +21,8 @@ public record SlskdDownloadFile(
     double PercentComplete,
     TimeSpan RemainingTime,
     TimeSpan? EndedAt,
-    int? PlaceInQueue = null
+    int? PlaceInQueue = null,
+    string? BatchId = null
 )
 {
     public static IEnumerable<SlskdDownloadFile> GetFiles(JsonElement filesElement)
@@ -54,7 +55,8 @@ public record SlskdDownloadFile(
         PercentComplete: file.TryGetProperty("percentComplete", out JsonElement percentComplete) ? percentComplete.GetDouble() : 0.0,
         RemainingTime: file.TryGetProperty("remainingTime", out JsonElement remainingTime) && TimeSpan.TryParse(remainingTime.GetString(), out TimeSpan rt) ? rt : TimeSpan.Zero,
         EndedAt: file.TryGetProperty("endedAt", out JsonElement endedAt) && TimeSpan.TryParse(endedAt.GetString(), out TimeSpan ea) ? ea : null,
-        PlaceInQueue: file.TryGetProperty("placeInQueue", out JsonElement placeInQueue) && placeInQueue.ValueKind != JsonValueKind.Null ? placeInQueue.GetInt32() : null
+        PlaceInQueue: file.TryGetProperty("placeInQueue", out JsonElement placeInQueue) && placeInQueue.ValueKind != JsonValueKind.Null ? placeInQueue.GetInt32() : null,
+        BatchId: file.TryGetProperty("batchId", out JsonElement batchId) && batchId.ValueKind == JsonValueKind.String ? batchId.GetString() : null
     );
 
     public SlskdFileData ToSlskdFileData()

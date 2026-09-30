@@ -18,11 +18,14 @@ public class SlskdEventRecord
     public string Data { get; set; } = string.Empty;
 }
 
+public record SlskdBatch(string? Destination);
+
 public interface ISlskdApiClient
 {
     Task<SlskdEnqueueResult> EnqueueDownloadAsync(SlskdProviderSettings settings, string username, IEnumerable<(string Filename, long Size)> files, string? externalId = null, string? destination = null);
     Task<List<SlskdUserTransfers>> GetAllTransfersAsync(SlskdProviderSettings settings, bool includeRemoved = false);
     Task<SlskdUserTransfers?> GetUserTransfersAsync(SlskdProviderSettings settings, string username);
+    Task<SlskdBatch?> GetBatchAsync(SlskdProviderSettings settings, string batchId);
     Task<SlskdDownloadFile?> GetTransferAsync(SlskdProviderSettings settings, string username, string fileId);
     Task<int?> GetQueuePositionAsync(SlskdProviderSettings settings, string username, string fileId);
     Task DeleteTransferAsync(SlskdProviderSettings settings, string username, string fileId, bool remove = false);

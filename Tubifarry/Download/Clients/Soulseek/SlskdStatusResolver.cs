@@ -140,7 +140,8 @@ public static class SlskdStatusResolver
         {
             status = item.PostProcessTasks.Any(t => !t.IsCompleted)
                 ? DownloadItemStatus.Downloading
-                : DownloadItemStatus.Completed;
+                : item.PostProcessError != null ? DownloadItemStatus.Failed : DownloadItemStatus.Completed;
+            message = item.PostProcessError;
         }
         else if (anyPaused)
         {

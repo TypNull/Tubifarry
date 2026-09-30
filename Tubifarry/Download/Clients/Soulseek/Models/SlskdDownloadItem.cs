@@ -3,6 +3,7 @@ using NzbDrone.Common.Disk;
 using NzbDrone.Common.Instrumentation;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Parser.Model;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Tubifarry.Indexers.Soulseek;
 
@@ -29,8 +30,12 @@ public class SlskdDownloadItem
     public string? DerivedSubdirectory { get; set; }
     public string? EnqueueDestination { get; set; }
     public string? BatchId { get; set; }
+    public DateTime GrabbedAt { get; set; }
+    public ConcurrentDictionary<string, string> LocalFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
     public bool DiscMergeScheduled { get; set; }
     public bool FolderRenameScheduled { get; set; }
+    public bool FolderProcessingDisabled { get; set; }
+    public string? PostProcessError { get; set; }
     public IReadOnlyDictionary<string, SlskdFileState> FileStates => _previousFileStates;
 
     public SlskdDownloadDirectory? SlskdDownloadDirectory
@@ -60,6 +65,8 @@ public class SlskdDownloadItem
         byte[] bytes = System.Text.Encoding.UTF8.GetBytes(combined);
         return BitConverter.ToString(System.Security.Cryptography.MD5.HashData(bytes)).Replace("-", "").ToLowerInvariant();
     }
+
+    public static string GetUsername(string downloadUrl) => Uri.UnescapeDataString(downloadUrl.TrimEnd('/').Split('/')[^1]);
 
     private void CompareFileStates(SlskdDownloadDirectory? newDirectory)
     {
@@ -98,17 +105,13 @@ public class SlskdDownloadItem
 
     public OsPath GetFullFolderPath(OsPath downloadPath)
     {
-        string subdirectory = ConfirmedSubdirectory
-            ?? DerivedSubdirectory
-            ?? SlskdDownloadDirectory?.Directory
-                .Replace('\\', '/')
-                .TrimEnd('/')
-                .Split('/')
-                .LastOrDefault()
-            ?? string.Empty;
+        string? subdirectory = ConfirmedSubdirectory ?? DerivedSubdirectory;
+        if (subdirectory?.Length == 0)
+            return downloadPath;
 
-        return subdirectory.Length == 0
-            ? downloadPath
-            : downloadPath + new OsPath(subdirectory);
+        string leaf = SlskdDownloadDirectory?.Directory is string directory ? SlskdFolderNaming.GetLeaf(directory) : string.Empty;
+        return SlskdFolderNaming.Combine(downloadPath, subdirectory)
+            ?? SlskdFolderNaming.Combine(downloadPath, leaf.Length > 0 ? leaf : null)
+            ?? downloadPath + new OsPath(ID);
     }
 }

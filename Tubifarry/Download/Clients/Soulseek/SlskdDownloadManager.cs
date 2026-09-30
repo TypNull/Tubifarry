@@ -31,24 +31,23 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     private readonly ConcurrentDictionary<int, DateTime> _lastEventPollTimes = new();
     // Timestamp of the newest event already processed per definition ID.
     private readonly ConcurrentDictionary<int, DateTime> _lastEventTimestamps = new();
-    // Negative cache of per-directory hashes that could not be matched to any grab history
-    private readonly ConcurrentDictionary<string, DateTime> _unmatchedDirectoryHashes = new();
     // Latest settings snapshot per definition ID: used by event-triggered retry callbacks
     private readonly ConcurrentDictionary<int, SlskdProviderSettings> _settingsCache = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
     private readonly ISlskdApiClient _apiClient;
-    private readonly IDownloadHistoryService _downloadHistoryService;
     private readonly IDownloadHistoryRepository _downloadHistoryRepository;
     private readonly ISlskdItemsParser _slskdItemsParser;
-    private readonly IRemotePathMappingService _remotePathMappingService;
-    private readonly IDiskProvider _diskProvider;
     private readonly ISentryHelper _sentry;
     private readonly Logger _logger;
     private readonly SlskdRetryHandler _retryHandler;
+    private readonly SlskdGrabMatcher _grabMatcher;
+    private readonly SlskdFolderPostProcessor _folderPostProcessor;
+    private readonly SlskdBatchRestorer _batchRestorer;
+    private readonly SlskdTransferCleaner _transferCleaner;
 
     public SlskdDownloadManager(
         ISlskdApiClient apiClient,
-        IDownloadHistoryService downloadHistoryService,
         IDownloadHistoryRepository downloadHistoryRepository,
         ISlskdItemsParser slskdItemsParser,
         IRemotePathMappingService remotePathMappingService,
@@ -57,21 +56,23 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         Logger logger)
     {
         _apiClient = apiClient;
-        _downloadHistoryService = downloadHistoryService;
         _downloadHistoryRepository = downloadHistoryRepository;
         _slskdItemsParser = slskdItemsParser;
-        _remotePathMappingService = remotePathMappingService;
-        _diskProvider = diskProvider;
         _sentry = sentry;
         _logger = logger;
         _retryHandler = new SlskdRetryHandler(apiClient, sentry, NzbDroneLogger.GetLogger(typeof(SlskdRetryHandler)));
+        _grabMatcher = new SlskdGrabMatcher(NzbDroneLogger.GetLogger(typeof(SlskdGrabMatcher)));
+        SlskdLocalFiles localFiles = new(remotePathMappingService, diskProvider);
+        _folderPostProcessor = new SlskdFolderPostProcessor(localFiles, diskProvider, NzbDroneLogger.GetLogger(typeof(SlskdFolderPostProcessor)));
+        _batchRestorer = new SlskdBatchRestorer(apiClient, NzbDroneLogger.GetLogger(typeof(SlskdBatchRestorer)));
+        _transferCleaner = new SlskdTransferCleaner(apiClient, localFiles, remotePathMappingService, diskProvider, NzbDroneLogger.GetLogger(typeof(SlskdTransferCleaner)));
     }
 
     public async Task<string> DownloadAsync(RemoteAlbum remoteAlbum, int definitionId, SlskdProviderSettings settings)
     {
         _settingsCache[definitionId] = settings;
 
-        SlskdDownloadItem item = new(remoteAlbum.Release);
+        SlskdDownloadItem item = new(remoteAlbum.Release) { ID = Guid.NewGuid().ToString("N"), GrabbedAt = DateTime.UtcNow };
         _logger.Trace($"Download initiated: {remoteAlbum.Release.Title} | Files: {item.FileData.Count}");
 
         ISpan? span = _sentry.StartSpan("slskd.download", remoteAlbum.Release.Title);
@@ -81,13 +82,9 @@ public class SlskdDownloadManager : ISlskdDownloadManager
 
         try
         {
-            string username = ExtractUsernameFromPath(remoteAlbum.Release.DownloadUrl);
-            List<(string Filename, long Size)> files = ParseFilesFromSource(remoteAlbum.Release.Source);
-            string? destination = GetMultiDiscDestination(files.Select(f => f.Filename));
-
-            string? sourceLeaf = destination ?? GetSingleParentLeaf(files.Select(f => f.Filename));
-            if (sourceLeaf != null && GetArtistPrefixedName(sourceLeaf, remoteAlbum.Release.Artist) is string prefixed)
-                destination = prefixed;
+            string username = SlskdDownloadItem.GetUsername(remoteAlbum.Release.DownloadUrl);
+            List<(string Filename, long Size)> files = item.FileData.Select(f => (f.Filename ?? string.Empty, f.Size)).ToList();
+            string? destination = SlskdFolderNaming.GetDownloadDestination(files.Select(f => f.Filename), remoteAlbum.Release.Artist, remoteAlbum.Release.Album);
 
             SlskdEnqueueResult result = await _apiClient.EnqueueDownloadAsync(settings, username, files, externalId: item.ID, destination: destination);
 
@@ -176,66 +173,61 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         if (item == null)
             return;
 
-        string? directory = item.SlskdDownloadDirectory?.Directory;
-        string localPath = GetLocalFolderPath(item, settings);
+        List<SlskdDownloadItem> otherItems = GetItemsForDef(definitionId).Where(i => !ReferenceEquals(i, item)).ToList();
 
-        _ = RemoveItemFilesAsync(item, settings);
+        _grabMatcher.MarkRemoved(item);
         RemoveItemFromDict(definitionId, clientItem.DownloadId);
-
-        if (settings.CleanStaleDirectories && !string.IsNullOrEmpty(directory))
-            _ = CleanStaleDirectoriesAsync(directory, localPath, settings);
+        _ = _transferCleaner.RemoveAsync(item, otherItems, settings);
     }
 
     private async Task RefreshAsync(int definitionId, SlskdProviderSettings settings)
     {
-        HashSet<string> activeUsernames = GetActiveUsernames(definitionId);
-
-        TimeSpan transferInterval = activeUsernames.Count > 0 ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(30);
-
-        DateTime now = DateTime.UtcNow;
-
-        DateTime lastTransfer = _lastTransferPollTimes.GetOrAdd(definitionId, DateTime.MinValue);
-        if (now - lastTransfer >= transferInterval)
+        await _refreshLock.WaitAsync();
+        try
         {
-            await PollTransfersAsync(definitionId, settings, activeUsernames);
-            _lastTransferPollTimes[definitionId] = DateTime.UtcNow;
+            HashSet<string> activeUsernames = GetActiveUsernames(definitionId);
+
+            TimeSpan transferInterval = activeUsernames.Count > 0 ? TimeSpan.FromSeconds(3) : TimeSpan.FromSeconds(30);
+
+            DateTime now = DateTime.UtcNow;
+
+            DateTime lastTransfer = _lastTransferPollTimes.GetOrAdd(definitionId, DateTime.MinValue);
+            if (now - lastTransfer >= transferInterval)
+            {
+                await PollTransfersAsync(definitionId, settings, activeUsernames);
+                _lastTransferPollTimes[definitionId] = DateTime.UtcNow;
+            }
+
+            DateTime lastEvent = _lastEventPollTimes.GetOrAdd(definitionId, DateTime.MinValue);
+            if (now - lastEvent >= TimeSpan.FromSeconds(5))
+            {
+                await PollEventsAsync(definitionId, settings);
+                _lastEventPollTimes[definitionId] = DateTime.UtcNow;
+            }
         }
-
-        DateTime lastEvent = _lastEventPollTimes.GetOrAdd(definitionId, DateTime.MinValue);
-        if (now - lastEvent >= TimeSpan.FromSeconds(5))
+        finally
         {
-            await PollEventsAsync(definitionId, settings);
-            _lastEventPollTimes[definitionId] = DateTime.UtcNow;
+            _refreshLock.Release();
         }
     }
 
     private async Task PollTransfersAsync(int definitionId, SlskdProviderSettings settings, HashSet<string> activeUsernames)
     {
-        ConcurrentDictionary<string, bool> currentIdSet = new();
-        SlskdDestinationConfig? destinationConfig = settings.GetDestinationConfig();
+        List<SlskdUserTransfers> transfers = !settings.Inclusive && activeUsernames.Count > 0
+            ? (await Task.WhenAll(activeUsernames.Select(username => _apiClient.GetUserTransfersAsync(settings, username)))).OfType<SlskdUserTransfers>().ToList()
+            : await _apiClient.GetAllTransfersAsync(settings);
 
-        if (!settings.Inclusive && activeUsernames.Count > 0)
-        {
-            await Task.WhenAll(activeUsernames.Select(async username =>
-            {
-                SlskdUserTransfers? userTransfers = await _apiClient.GetUserTransfersAsync(settings, username);
-                if (userTransfers != null)
-                    ProcessUserTransfers(definitionId, settings, userTransfers, currentIdSet, destinationConfig);
-            }));
-        }
-        else
-        {
-            List<SlskdUserTransfers> all = await _apiClient.GetAllTransfersAsync(settings);
-            foreach (SlskdUserTransfers user in all)
-                ProcessUserTransfers(definitionId, settings, user, currentIdSet, destinationConfig);
-        }
+        HashSet<string> currentIdSet = [];
+        SlskdGrabHistory history = CreateGrabHistory(definitionId);
+        foreach (SlskdUserTransfers userTransfers in transfers)
+            await ProcessUserTransfersAsync(definitionId, settings, userTransfers, history, currentIdSet);
 
         _logger.Debug($"[def={definitionId}] Polled {activeUsernames.Count} users | Tracked: {currentIdSet.Count}");
 
         if (settings.Inclusive)
         {
             foreach (SlskdDownloadItem item in GetItemsForDef(definitionId)
-                .Where(i => !currentIdSet.ContainsKey(i.ID) && i.ReleaseInfo.DownloadProtocol == null)
+                .Where(i => !currentIdSet.Contains(i.ID) && i.ReleaseInfo.DownloadProtocol == null)
                 .ToList())
             {
                 _logger.Trace($"[def={definitionId}] Pruning inclusive item {item.ID} (gone from Slskd)");
@@ -244,110 +236,85 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         }
     }
 
-    private void ProcessUserTransfers(
+    private async Task ProcessUserTransfersAsync(
         int definitionId,
         SlskdProviderSettings settings,
         SlskdUserTransfers userTransfers,
-        ConcurrentDictionary<string, bool> currentIdSet,
-        SlskdDestinationConfig? destinationConfig)
+        SlskdGrabHistory history,
+        HashSet<string> currentIdSet)
     {
-        foreach (SlskdDownloadDirectory dir in userTransfers.Directories)
-        {
-            string hash = SlskdDownloadItem.GetStableMD5Id(dir.Files?.Select(f => f.Filename) ?? []);
-            currentIdSet.TryAdd(hash, true);
+        SlskdDestinationConfig? destinationConfig = settings.GetDestinationConfig();
+        List<SlskdTransferGroup> groups = _grabMatcher.Assign(userTransfers.Username, userTransfers.Directories, GetItemsForDef(definitionId).ToList(), history);
 
-            SlskdDownloadItem? item = GetItem(definitionId, hash) ?? FindItemContainingFiles(definitionId, userTransfers.Username, dir);
-            if (item == null)
-            {
-                _logger.Trace($"[def={definitionId}] Unknown item {hash}: checking history");
-                DownloadHistory? history = _downloadHistoryService.GetLatestGrab(hash)
-                    ?? FindGrabByContainment(hash, userTransfers.Username, dir);
-
-                if (history != null)
-                    item = new SlskdDownloadItem(history.Release);
-                else if (settings.Inclusive)
-                    item = new SlskdDownloadItem(CreateReleaseInfoFromDirectory(userTransfers.Username, dir));
-
-                if (item == null)
-                    continue;
-
-                SubscribeStateChanges(item, definitionId);
-                AddItem(definitionId, item);
-            }
-
-            currentIdSet.TryAdd(item.ID, true);
-            item.Username ??= userTransfers.Username;
-            item.SlskdDownloadDirectory = dir;
-
-            if (item.DerivedSubdirectory == null && destinationConfig?.UsesDefaultPattern == false &&
-                dir.Files?.FirstOrDefault()?.Filename is { Length: > 0 } firstFile)
-            {
-                item.DerivedSubdirectory = SlskdPathResolver.ResolveSubdirectory(
-                    destinationConfig,
-                    userTransfers.Username,
-                    firstFile,
-                    item.BatchId,
-                    item.BatchId != null ? item.ID : null);
-            }
-
-            MergeSplitDiscFolders(item, settings);
-            NormalizeAlbumFolderName(item, settings);
-        }
-    }
-
-    private void MergeSplitDiscFolders(SlskdDownloadItem item, SlskdProviderSettings settings)
-    {
-        if (item.BatchId != null || item.DiscMergeScheduled || item.FileStates.Count == 0 ||
-            item.FileStates.Values.Any(fs => fs.GetStatus() != DownloadItemStatus.Completed))
-            return;
-
-        List<string> parents = item.FileData
-            .Select(f => f.Filename.Replace('/', '\\'))
-            .Select(f => f.LastIndexOf('\\') is int i && i > 0 ? f[..i] : null)
-            .OfType<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (parents.Count < 2)
-            return;
-
-        HashSet<string> albums = parents.Select(SlskdTextProcessor.GetMergedDirectoryKey).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (albums.Count != 1 || albums.SetEquals(parents))
-            return;
-
-        item.DiscMergeScheduled = true;
-        string album = albums.Single().Split('\\', '/').Last();
-        OsPath root = _remotePathMappingService.RemapRemoteToLocal(settings.Host, new OsPath(settings.DownloadPath));
-        OsPath albumPath = root + new OsPath(album);
-
-        item.PostProcessTasks.Add(Task.Run(() =>
+        foreach (SlskdTransferGroup group in groups)
         {
             try
             {
-                if (!_diskProvider.FolderExists(albumPath.FullPath))
-                    _diskProvider.CreateFolder(albumPath.FullPath);
-
-                foreach (string leaf in parents.Select(p => p.Split('\\', '/').Last()).Distinct(StringComparer.OrdinalIgnoreCase).Where(l => !l.Equals(album, StringComparison.OrdinalIgnoreCase)))
-                {
-                    OsPath discPath = root + new OsPath(leaf);
-                    if (!_diskProvider.FolderExists(discPath.FullPath))
-                        continue;
-                    foreach (string file in _diskProvider.GetFiles(discPath.FullPath, true))
-                    {
-                        OsPath target = albumPath + new OsPath(Path.GetFileName(file));
-                        if (!_diskProvider.FileExists(target.FullPath))
-                            _diskProvider.MoveFile(file, target.FullPath);
-                    }
-                    if (_diskProvider.FolderEmpty(discPath.FullPath))
-                        _diskProvider.DeleteFolder(discPath.FullPath, true);
-                }
-                item.ConfirmedSubdirectory = album;
+                await ProcessGroupAsync(definitionId, settings, userTransfers.Username, group, currentIdSet, destinationConfig);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Disc merge failed for {item.ID}; leaving files in place");
+                _logger.Warn(ex, $"[def={definitionId}] Processing slskd transfers in '{group.Directory.Directory}' from {userTransfers.Username} failed");
             }
-        }));
+        }
+    }
+
+    private async Task ProcessGroupAsync(
+        int definitionId,
+        SlskdProviderSettings settings,
+        string username,
+        SlskdTransferGroup group,
+        HashSet<string> currentIdSet,
+        SlskdDestinationConfig? destinationConfig)
+    {
+        SlskdDownloadDirectory dir = group.Directory;
+        currentIdSet.Add(SlskdDownloadItem.GetStableMD5Id(dir.Files?.Select(f => f.Filename) ?? []));
+
+        SlskdDownloadItem? item = group.Owner ?? TrackUnownedGroup(definitionId, username, group, settings.Inclusive);
+        if (item == null)
+            return;
+
+        currentIdSet.Add(item.ID);
+        item.Username ??= username;
+
+        if (item.BatchId == null && SlskdBatchRestorer.GetMainBatchId(dir) is string batchId)
+            await _batchRestorer.RestoreAsync(item, batchId, settings);
+
+        if (item.DerivedSubdirectory == null && destinationConfig?.UsesDefaultPattern == false &&
+            dir.Files?.FirstOrDefault()?.Filename is { Length: > 0 } firstFile)
+        {
+            item.DerivedSubdirectory = SlskdPathResolver.ResolveSubdirectory(
+                destinationConfig,
+                username,
+                firstFile,
+                item.BatchId,
+                item.BatchId != null ? item.ID : null);
+        }
+
+        item.SlskdDownloadDirectory = dir;
+        _folderPostProcessor.Process(item, settings);
+    }
+
+    private SlskdDownloadItem? TrackUnownedGroup(int definitionId, string username, SlskdTransferGroup group, bool inclusive)
+    {
+        if (group.Grab != null && GetItem(definitionId, group.Grab.DownloadId) is SlskdDownloadItem existing)
+            return existing;
+
+        if (group.Grab != null && _grabMatcher.IsRemoved(group.Grab.DownloadId))
+            return null;
+
+        SlskdDownloadItem? item = group.Grab != null
+            ? new SlskdDownloadItem(group.Grab.Release) { ID = group.Grab.DownloadId, GrabbedAt = group.Grab.Date }
+            : inclusive ? new SlskdDownloadItem(CreateReleaseInfoFromDirectory(username, group.Directory)) : null;
+
+        if (item == null)
+            return null;
+
+        item.FolderProcessingDisabled = group.Grab != null && IsGrabFinished(group.Grab.DownloadId);
+        _logger.Debug($"[def={definitionId}] Tracking {item.ID} ({item.ReleaseInfo.Title}) from {group.Directory.Files?.Count ?? 0} slskd transfers of {username}{(item.FolderProcessingDisabled ? "; already finished, folder processing disabled" : "")}");
+        SubscribeStateChanges(item, definitionId);
+        AddItem(definitionId, item);
+        return item;
     }
 
     private async Task PollEventsAsync(int definitionId, SlskdProviderSettings settings)
@@ -390,40 +357,39 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         if (record.Type == SlskdEventTypes.DownloadDirectoryComplete)
         {
             using JsonDocument doc = JsonDocument.Parse(record.Data);
-            string remoteDir = doc.RootElement.TryGetProperty("remoteDirectoryName", out JsonElement rdn) ? rdn.GetString() ?? "" : "";
-            string username = doc.RootElement.TryGetProperty("username", out JsonElement un) ? un.GetString() ?? "" : "";
-            string? localDir = doc.RootElement.TryGetProperty("localDirectoryName", out JsonElement ldn) ? ldn.GetString() : null;
+            string remoteDir = GetString(doc.RootElement, "remoteDirectoryName") ?? "";
+            string username = GetString(doc.RootElement, "username") ?? "";
+            string? localDir = GetString(doc.RootElement, "localDirectoryName");
 
-            SlskdDownloadItem? item = GetItemsForDef(definitionId)
-                .FirstOrDefault(i => (i.Username == null || string.Equals(i.Username, username, StringComparison.OrdinalIgnoreCase)) &&
-                                     (string.Equals(i.SlskdDownloadDirectory?.Directory, remoteDir, StringComparison.OrdinalIgnoreCase) ||
-                                      ItemContainsRemoteDirectory(i, remoteDir)));
+            List<SlskdDownloadItem> items = GetItemsForDef(definitionId)
+                .Where(i => (i.Username == null || string.Equals(i.Username, username, StringComparison.OrdinalIgnoreCase)) &&
+                            (string.Equals(i.SlskdDownloadDirectory?.Directory, remoteDir, StringComparison.OrdinalIgnoreCase) ||
+                             ItemContainsRemoteDirectory(i, remoteDir)))
+                .ToList();
 
+            SlskdDownloadItem? item = items.FirstOrDefault();
             if (item != null)
             {
-                item.ConfirmedSubdirectory ??= SlskdPathResolver.MakeRelativeToDownloads(settings.DownloadPath, localDir);
+                if (items.Count == 1)
+                    item.ConfirmedSubdirectory ??= SlskdPathResolver.MakeRelativeToDownloads(settings.DownloadPath, localDir);
 
                 _logger.Trace($"[def={definitionId}] Event DownloadDirectoryComplete: {remoteDir} by {username} -> {item.ConfirmedSubdirectory ?? "<unresolved>"}");
 
                 SlskdUserTransfers? userTransfers = await _apiClient.GetUserTransfersAsync(settings, username);
                 if (userTransfers != null)
-                    ProcessUserTransfers(definitionId, settings, userTransfers, new ConcurrentDictionary<string, bool>(), settings.GetDestinationConfig());
+                    await ProcessUserTransfersAsync(definitionId, settings, userTransfers, CreateGrabHistory(definitionId), []);
             }
         }
         else if (record.Type == SlskdEventTypes.DownloadFileComplete)
         {
             using JsonDocument doc = JsonDocument.Parse(record.Data);
 
-            string remoteFilename = doc.RootElement.TryGetProperty("remoteFilename", out JsonElement rfn) ? rfn.GetString() ?? "" : "";
-            string? localFilename = doc.RootElement.TryGetProperty("localFilename", out JsonElement lfn) ? lfn.GetString() : null;
-            string username = "";
-
-            if (doc.RootElement.TryGetProperty("transfer", out JsonElement transferEl))
-            {
-                username = transferEl.TryGetProperty("username", out JsonElement un) ? un.GetString() ?? "" : "";
-                if (remoteFilename.Length == 0)
-                    remoteFilename = transferEl.TryGetProperty("filename", out JsonElement fn) ? fn.GetString() ?? "" : "";
-            }
+            JsonElement transferEl = doc.RootElement.TryGetProperty("transfer", out JsonElement transfer) ? transfer : default;
+            string remoteFilename = GetString(doc.RootElement, "remoteFilename") is { Length: > 0 } rfn ? rfn : GetString(transferEl, "filename") ?? "";
+            string? localFilename = GetString(doc.RootElement, "localFilename");
+            string username = GetString(transferEl, "username") ?? "";
+            string? batchId = GetString(transferEl, "batchId");
+            DateTime requestedAt = DateTime.TryParse(GetString(transferEl, "requestedAt"), out DateTime parsed) ? parsed : DateTime.MinValue;
 
             _logger.Trace($"[def={definitionId}] Event DownloadFileComplete: {Path.GetFileName(remoteFilename)} by {username}");
 
@@ -435,9 +401,9 @@ public class SlskdDownloadManager : ISlskdDownloadManager
             if (subdirectory == null)
                 return;
 
-            SlskdDownloadItem? item = GetItemsForDef(definitionId)
-                .FirstOrDefault(i => (i.Username == null || username.Length == 0 || string.Equals(i.Username, username, StringComparison.OrdinalIgnoreCase)) &&
-                                     i.FileData.Any(f => string.Equals(f.Filename, remoteFilename, StringComparison.OrdinalIgnoreCase)));
+            SlskdDownloadItem? item = _grabMatcher.FindOwner(GetItemsForDef(definitionId), username, remoteFilename, batchId, requestedAt);
+            if (item != null)
+                SlskdLocalFiles.Record(item, settings, remoteFilename, localFilename);
 
             if (item != null && item.ConfirmedSubdirectory == null)
             {
@@ -447,18 +413,32 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         }
     }
 
+    private bool IsGrabFinished(string downloadId)
+    {
+        try
+        {
+            return _downloadHistoryRepository.FindByDownloadId(downloadId)
+                .Any(h => h.EventType is DownloadHistoryEventType.DownloadImported or DownloadHistoryEventType.DownloadFailed or DownloadHistoryEventType.DownloadIgnored);
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug(ex, $"Reading download history for {downloadId} failed");
+            return false;
+        }
+    }
+
+    private static string? GetString(JsonElement element, string name) =>
+        element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
     private static bool ItemContainsRemoteDirectory(SlskdDownloadItem item, string remoteDir)
     {
         if (string.IsNullOrEmpty(remoteDir))
             return false;
 
         string normalized = remoteDir.Replace('/', '\\').TrimEnd('\\');
-        return item.FileData.Any(f =>
-        {
-            string file = f.Filename.Replace('/', '\\');
-            int i = file.LastIndexOf('\\');
-            return i > 0 && string.Equals(file[..i], normalized, StringComparison.OrdinalIgnoreCase);
-        });
+        return item.FileData.Any(f => string.Equals(SlskdFolderNaming.GetParentDirectory(f.Filename), normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     private void EmitCompletionSpan(SlskdDownloadItem item, SlskdStatusResolver.DownloadStatus resolved)
@@ -494,264 +474,6 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         };
     }
 
-    private async Task RemoveItemFilesAsync(SlskdDownloadItem item, SlskdProviderSettings settings)
-    {
-        List<SlskdDownloadFile> files = item.SlskdDownloadDirectory?.Files ?? [];
-        if (files.Count == 0 || item.Username == null)
-            return;
-
-        await Task.WhenAll(files.Select(async file =>
-        {
-            if (SlskdFileState.GetStatus(file.State) != DownloadItemStatus.Completed)
-            {
-                await _apiClient.DeleteTransferAsync(settings, item.Username, file.Id);
-                await Task.Delay(1000);
-            }
-            await _apiClient.DeleteTransferAsync(settings, item.Username, file.Id, remove: true);
-
-            try
-            {
-                string fileName = Path.GetFileName(file.Filename.Replace('\\', '/'));
-                string localFilePath = Path.Combine(GetLocalFolderPath(item, settings), fileName);
-
-                if (_diskProvider.FileExists(localFilePath))
-                {
-                    _diskProvider.DeleteFile(localFilePath);
-                    _logger.Debug($"Deleted local file: {localFilePath}");
-                }
-                else
-                {
-                    _logger.Trace($"Local file not found or path not accessible, skipping deletion: {Path.GetFileName(file.Filename)}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Trace(ex, $"Could not access local file for {Path.GetFileName(file.Filename)}: {ex.Message}");
-            }
-
-            _logger.Trace($"Removed transfer {file.Id}");
-        }));
-    }
-
-    private static string? GetSingleParentLeaf(IEnumerable<string> filenames)
-    {
-        List<string> parents = filenames
-            .Select(f => { int i = f.Replace('/', '\\').LastIndexOf('\\'); return i > 0 ? f.Replace('/', '\\')[..i] : null; })
-            .OfType<string>()
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return parents.Count == 1 ? parents[0].Split('\\').Last() : null;
-    }
-
-    private static string? GetArtistPrefixedName(string leaf, string? artist)
-    {
-        if (string.IsNullOrWhiteSpace(artist) || string.IsNullOrWhiteSpace(leaf))
-            return null;
-
-        static string Normalize(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-
-        string normLeaf = Normalize(leaf);
-        string normArtist = Normalize(artist);
-        if (normArtist.Length < 3 || normLeaf.Contains(normArtist))
-            return null;
-
-        string sanitizedArtist = string.Concat(artist.Split(Path.GetInvalidFileNameChars())).Trim();
-        return sanitizedArtist.Length == 0 ? null : $"{sanitizedArtist} - {leaf}";
-    }
-
-    private void NormalizeAlbumFolderName(SlskdDownloadItem item, SlskdProviderSettings settings)
-    {
-        if (item.BatchId != null || item.DiscMergeScheduled || item.FolderRenameScheduled ||
-            item.ConfirmedSubdirectory != null || item.DerivedSubdirectory != null ||
-            item.FileStates.Count == 0 ||
-            item.FileStates.Values.Any(fs => fs.GetStatus() != DownloadItemStatus.Completed))
-            return;
-
-        string? leaf = item.SlskdDownloadDirectory?.Directory?
-            .Replace('/', '\\').TrimEnd('\\').Split('\\').LastOrDefault();
-        if (string.IsNullOrEmpty(leaf))
-            return;
-
-        string? renamed = GetArtistPrefixedName(leaf, item.ReleaseInfo.Artist);
-        if (renamed == null)
-            return;
-
-        item.FolderRenameScheduled = true;
-        OsPath root = _remotePathMappingService.RemapRemoteToLocal(settings.Host, new OsPath(settings.DownloadPath));
-        OsPath source = root + new OsPath(leaf);
-        OsPath target = root + new OsPath(renamed);
-
-        item.PostProcessTasks.Add(Task.Run(() =>
-        {
-            try
-            {
-                if (_diskProvider.FolderExists(target.FullPath) && _diskProvider.GetFiles(target.FullPath, false).Any())
-                {
-                    item.ConfirmedSubdirectory = renamed;
-                    return;
-                }
-
-                if (!_diskProvider.FolderExists(source.FullPath))
-                    return;
-
-                _diskProvider.MoveFolder(source.FullPath, target.FullPath);
-                item.ConfirmedSubdirectory = renamed;
-                _logger.Debug($"Normalized download folder: '{leaf}' -> '{renamed}'");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Folder normalization failed for {item.ID}; leaving folder in place");
-            }
-        }));
-    }
-
-    private static string? GetMultiDiscDestination(IEnumerable<string> filenames)
-    {
-        HashSet<string> parents = filenames
-            .Select(f => f.Replace('/', '\\'))
-            .Select(f => { int i = f.LastIndexOf('\\'); return i > 0 ? f[..i] : null; })
-            .OfType<string>()
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (parents.Count < 2)
-            return null;
-
-        HashSet<string> merged = parents
-            .Select(SlskdTextProcessor.GetMergedDirectoryKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        if (merged.Count != 1)
-            return null;
-
-        string parent = merged.Single();
-        int index = parent.LastIndexOfAny(['\\', '/']);
-        string name = index >= 0 ? parent[(index + 1)..] : parent;
-
-        foreach (char c in Path.GetInvalidFileNameChars())
-            name = name.Replace(c, '_');
-
-        return string.IsNullOrWhiteSpace(name) ? null : name;
-    }
-
-    private SlskdDownloadItem? FindItemContainingFiles(int definitionId, string username, SlskdDownloadDirectory dir)
-    {
-        List<string> filenames = dir.Files?.Select(f => f.Filename).OfType<string>().ToList() ?? [];
-        if (filenames.Count == 0)
-            return null;
-
-        return GetItemsForDef(definitionId).FirstOrDefault(item =>
-            (item.Username == null || string.Equals(item.Username, username, StringComparison.OrdinalIgnoreCase)) &&
-            item.FileData.Count >= filenames.Count &&
-            filenames.All(f => item.FileData.Any(d => string.Equals(d.Filename, f, StringComparison.OrdinalIgnoreCase))));
-    }
-
-    private string GetLocalFolderPath(SlskdDownloadItem item, SlskdProviderSettings settings) =>
-        _remotePathMappingService
-            .RemapRemoteToLocal(settings.Host, item.GetFullFolderPath(new OsPath(settings.DownloadPath)))
-            .FullPath;
-
-    private DownloadHistory? FindGrabByContainment(string hash, string username, SlskdDownloadDirectory dir)
-    {
-        List<string> filenames = dir.Files?.Select(f => f.Filename).OfType<string>().ToList() ?? [];
-        if (filenames.Count == 0)
-            return null;
-
-        // Negative cache: don't rescan the history table on every poll cycle.
-        if (_unmatchedDirectoryHashes.TryGetValue(hash, out DateTime lastAttempt) &&
-            DateTime.UtcNow - lastAttempt < TimeSpan.FromMinutes(10))
-            return null;
-
-        try
-        {
-            foreach (DownloadHistory grab in _downloadHistoryRepository.All()
-                .Where(h => h.EventType == DownloadHistoryEventType.DownloadGrabbed)
-                .OrderByDescending(h => h.Date))
-            {
-                if (grab.Release?.Source is not { Length: > 0 } source)
-                    continue;
-
-                if (source[0] != '[')
-                    continue;
-
-                List<SlskdFileData> grabFiles;
-                try
-                {
-                    grabFiles = JsonSerializer.Deserialize<List<SlskdFileData>>(source, _containmentJsonOptions) ?? [];
-                }
-                catch (JsonException)
-                {
-                    continue;
-                }
-
-                if (grabFiles.Count < filenames.Count)
-                    continue;
-
-                if (!string.IsNullOrEmpty(grab.Release.DownloadUrl) &&
-                    !string.Equals(ExtractUsernameFromPath(grab.Release.DownloadUrl), username, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                if (filenames.All(f => grabFiles.Any(g => string.Equals(g.Filename, f, StringComparison.OrdinalIgnoreCase))))
-                {
-                    _logger.Debug($"Matched slskd directory {hash} to grab {grab.DownloadId} by file containment");
-                    return grab;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn(ex, $"Containment matching against grab history failed for {hash}");
-        }
-
-        _unmatchedDirectoryHashes[hash] = DateTime.UtcNow;
-        return null;
-    }
-
-    private static readonly JsonSerializerOptions _containmentJsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-    private async Task CleanStaleDirectoriesAsync(string directoryPath, string localPath, SlskdProviderSettings settings)
-    {
-        try
-        {
-            await Task.Delay(1000);
-
-            List<SlskdUserTransfers> all = await _apiClient.GetAllTransfersAsync(settings);
-            bool hasRemaining = all.SelectMany(u => u.Directories)
-                .Any(d => d.Directory.Equals(directoryPath, StringComparison.OrdinalIgnoreCase));
-
-            if (hasRemaining)
-            {
-                _logger.Trace($"Directory {directoryPath} still has active downloads: skipping cleanup");
-                return;
-            }
-
-            if (_diskProvider.FolderExists(localPath))
-            {
-                _logger.Debug($"Removing stale directory: {localPath}");
-                _diskProvider.DeleteFolder(localPath, true);
-
-                string? parent = Path.GetDirectoryName(localPath);
-                string downloadRoot = _remotePathMappingService
-                    .RemapRemoteToLocal(settings.Host, new OsPath(settings.DownloadPath))
-                    .FullPath;
-
-                if (!string.IsNullOrEmpty(parent)
-                    && _diskProvider.FolderExists(parent)
-                    && _diskProvider.FolderEmpty(parent)
-                    && !parent.Equals(downloadRoot, StringComparison.OrdinalIgnoreCase)
-                    && !parent.Equals(downloadRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger.Info($"Removing empty parent directory: {parent}");
-                    _diskProvider.DeleteFolder(parent, true);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, $"Error cleaning stale directories for path: {directoryPath}");
-        }
-    }
-
     private ReleaseInfo CreateReleaseInfoFromDirectory(string username, SlskdDownloadDirectory dir)
     {
         SlskdFolderData folderData = dir.CreateFolderData(username, _slskdItemsParser);
@@ -763,22 +485,8 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         return release;
     }
 
-    private static string ExtractUsernameFromPath(string path)
-    {
-        string[] parts = path.TrimEnd('/').Split('/');
-        return Uri.UnescapeDataString(parts[^1]);
-    }
-
-    private static List<(string Filename, long Size)> ParseFilesFromSource(string source)
-    {
-        using JsonDocument doc = JsonDocument.Parse(source);
-        return doc.RootElement.EnumerateArray()
-            .Select(el => (
-                Filename: el.TryGetProperty("filename", out JsonElement fn) ? fn.GetString() ?? "" : "",
-                Size: el.TryGetProperty("size", out JsonElement sz) ? sz.GetInt64() : 0L
-            ))
-            .ToList();
-    }
+    private SlskdGrabHistory CreateGrabHistory(int definitionId) =>
+        new(_downloadHistoryRepository, definitionId, NzbDroneLogger.GetLogger(typeof(SlskdGrabHistory)));
 
     private SlskdDownloadItem? GetItem(int definitionId, string id) =>
         _downloadMappings.TryGetValue(new DownloadKey<int, string>(definitionId, id), out SlskdDownloadItem? item)

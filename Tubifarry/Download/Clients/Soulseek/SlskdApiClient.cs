@@ -135,11 +135,10 @@ public class SlskdApiClient(IHttpClient httpClient) : ISlskdApiClient
 
     public async Task<SlskdUserTransfers?> GetUserTransfersAsync(SlskdProviderSettings settings, string username)
     {
-        HttpResponse response = await httpClient.ExecuteAsync(
-            BuildRequest(settings, $"/api/v0/transfers/downloads/{Uri.EscapeDataString(username)}"));
+        HttpRequest request = BuildRequest(settings, $"/api/v0/transfers/downloads/{Uri.EscapeDataString(username)}");
+        request.SuppressHttpError = true;
+        HttpResponse response = await httpClient.ExecuteAsync(request);
 
-        if (response.StatusCode == HttpStatusCode.NotFound)
-            return null;
         if (response.StatusCode != HttpStatusCode.OK)
             return null;
 
@@ -151,6 +150,26 @@ public class SlskdApiClient(IHttpClient httpClient) : ISlskdApiClient
             Username = username,
             Directories = SlskdDownloadDirectory.GetDirectories(dirsEl).ToList()
         };
+    }
+
+    public async Task<SlskdBatch?> GetBatchAsync(SlskdProviderSettings settings, string batchId)
+    {
+        HttpRequest request = BuildRequest(settings, $"/api/v0/transfers/downloads/batches/{Uri.EscapeDataString(batchId)}");
+        request.SuppressHttpError = true;
+        HttpResponse response = await httpClient.ExecuteAsync(request);
+
+        if (response.StatusCode != HttpStatusCode.OK || string.IsNullOrWhiteSpace(response.Content))
+            return null;
+
+        using JsonDocument doc = JsonDocument.Parse(response.Content);
+        string? destination = doc.RootElement.TryGetProperty("options", out JsonElement options) &&
+            options.ValueKind == JsonValueKind.Object &&
+            options.TryGetProperty("destination", out JsonElement dest) &&
+            dest.ValueKind == JsonValueKind.String
+                ? dest.GetString()
+                : null;
+
+        return new SlskdBatch(string.IsNullOrWhiteSpace(destination) ? null : destination);
     }
 
     public async Task<SlskdDownloadFile?> GetTransferAsync(SlskdProviderSettings settings, string username, string fileId)

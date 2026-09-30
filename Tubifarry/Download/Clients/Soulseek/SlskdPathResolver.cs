@@ -34,7 +34,7 @@ public static partial class SlskdPathResolver
             tokens.TryGetValue(match.Groups[1].Value, out string? value) ? value : match.Value);
 
         string[] segments = SplitSegments(destination);
-        if (segments.Any(s => s is "." or ".."))
+        if (!segments.All(SlskdFolderNaming.IsSafeSegment))
             return null;
 
         return string.Join('/', segments);
@@ -51,10 +51,13 @@ public static partial class SlskdPathResolver
         if (path.Equals(root, StringComparison.OrdinalIgnoreCase))
             return string.Empty;
 
-        return path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
+        return OnlySafeSegments(path.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase)
             ? path[(root.Length + 1)..]
-            : null;
+            : null);
     }
+
+    private static string? OnlySafeSegments(string? relative) =>
+        relative != null && SplitSegments(relative).All(SlskdFolderNaming.IsSafeSegment) ? relative : null;
 
     private static string Normalize(string path) => path.Replace('\\', '/');
 

@@ -171,7 +171,7 @@ namespace Tubifarry.Indexers.Soulseek
                     _searchLimiter?.Dispose();
                     _currentLimit = Settings.ConcurrentSearchLimit;
                     _searchLimiter = new SemaphoreSlim(Settings.ConcurrentSearchLimit, Settings.ConcurrentSearchLimit);
-                    _logger.Warn($"Search limiter initialized: {_currentLimit} concurrent");
+                    _logger.Debug($"Search limiter initialized: {_currentLimit} concurrent");
                 }
                 return _searchLimiter;
             }
@@ -416,6 +416,7 @@ namespace Tubifarry.Indexers.Soulseek
                     .Build();
 
                 request.SetContent(JsonSerializer.Serialize(new { directory = directoryPath }));
+                request.SuppressHttpError = true;
 
                 HttpResponse response = await _client.ExecuteAsync(request);
 

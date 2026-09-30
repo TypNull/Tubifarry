@@ -1,8 +1,8 @@
 using NLog;
 using NzbDrone.Core.Download;
-using System.Text.Json;
 using Tubifarry.Core.Telemetry;
 using Tubifarry.Download.Clients.Soulseek.Models;
+using Tubifarry.Indexers.Soulseek;
 
 namespace Tubifarry.Download.Clients.Soulseek;
 
@@ -46,22 +46,16 @@ public class SlskdRetryHandler(ISlskdApiClient apiClient, ISentryHelper sentry, 
 
         try
         {
-            using JsonDocument doc = JsonDocument.Parse(item.ReleaseInfo.Source);
-            JsonElement matchingEl = doc.RootElement.EnumerateArray()
-                .FirstOrDefault(x =>
-                    x.TryGetProperty("Filename", out JsonElement fn) &&
-                    fn.GetString() == fileState.File.Filename);
-
-            if (matchingEl.ValueKind == JsonValueKind.Undefined)
+            SlskdFileData? fileData = item.FileData.FirstOrDefault(f => f.Filename == fileState.File.Filename);
+            if (fileData == null)
             {
                 _sentry.FinishSpan(span, SpanStatus.NotFound);
                 return;
             }
 
-            long size = matchingEl.TryGetProperty("Size", out JsonElement sz) ? sz.GetInt64() : 0L;
-            string username = item.Username ?? ExtractUsernameFromPath(item.ReleaseInfo.DownloadUrl);
+            string username = item.Username ?? SlskdDownloadItem.GetUsername(item.ReleaseInfo.DownloadUrl);
 
-            await _apiClient.EnqueueDownloadAsync(settings, username, [(fileState.File.Filename, size)], externalId: item.ID, destination: item.EnqueueDestination);
+            await _apiClient.EnqueueDownloadAsync(settings, username, [(fileState.File.Filename, fileData.Size)], externalId: item.ID, destination: item.EnqueueDestination);
             _logger.Trace($"Retry enqueued: {Path.GetFileName(fileState.File.Filename)}");
             _sentry.FinishSpan(span, SpanStatus.Ok);
         }
@@ -74,11 +68,5 @@ public class SlskdRetryHandler(ISlskdApiClient apiClient, ISentryHelper sentry, 
         {
             fileState.IncrementAttempt();
         }
-    }
-
-    private static string ExtractUsernameFromPath(string path)
-    {
-        string[] parts = path.TrimEnd('/').Split('/');
-        return Uri.UnescapeDataString(parts[^1]);
     }
 }

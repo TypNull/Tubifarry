@@ -861,7 +861,7 @@ namespace Tubifarry.Indexers.Soulseek
         [GeneratedRegex(@"[^\w\s$-]", RegexOptions.Compiled)]
         private static partial Regex RemoveNonAlphanumericRegex();
 
-        [GeneratedRegex(@"[._/]+", RegexOptions.Compiled)]
+        [GeneratedRegex(@"[._/\\]+", RegexOptions.Compiled)]
         private static partial Regex NormalizeCharactersRegex();
 
         [GeneratedRegex(@"\s*\([^)]+\)\s*$", RegexOptions.Compiled)]
