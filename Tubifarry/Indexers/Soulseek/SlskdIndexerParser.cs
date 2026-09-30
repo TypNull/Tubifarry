@@ -110,9 +110,7 @@ namespace Tubifarry.Indexers.Soulseek
                         if (searchTextData.MinimumFiles > 0 || searchTextData.MaximumFiles.HasValue)
                         {
                             bool filterActive = (TrackCountFilterType)Settings.TrackCountFilter != TrackCountFilterType.Disabled;
-                            int fileCount = filterActive
-                                ? finalGroup.Count(f => AudioFormatHelper.GetAudioCodecFromExtension(f.Extension ?? Path.GetExtension(f.Filename) ?? "") != AudioFormat.Unknown)
-                                : finalGroup.Count();
+                            int fileCount = filterActive ? finalGroup.Count(IsAudioFile) : finalGroup.Count();
 
                             if (fileCount < searchTextData.MinimumFiles)
                             {
@@ -125,9 +123,17 @@ namespace Tubifarry.Indexers.Soulseek
                                 _logger.Trace($"Filtered (too many): {directoryGroup.Key} ({fileCount}/{searchTextData.MaximumFiles} {(filterActive ? "audio tracks" : "files")})");
                                 continue;
                             }
+
+                            if ((TrackCountFilterType)Settings.TrackCountFilter == TrackCountFilterType.Exact && searchTextData.TrackCounts is { Count: > 0 } editionCounts && !editionCounts.Contains(fileCount))
+                            {
+                                _logger.Trace($"Filtered (no edition has {fileCount} tracks): {directoryGroup.Key} ({string.Join("/", editionCounts)})");
+                                continue;
+                            }
                         }
 
-                        AlbumData albumData = _itemsParser.CreateAlbumData(searchResponse.Id, finalGroup, searchTextData, folderData, Settings, searchTextData.MinimumFiles);
+                        List<SlskdFileData> folderFiles = [.. finalGroup];
+                        int expectedTrackCount = GetClosestEditionTrackCount(searchTextData.TrackCounts, folderFiles.Count(IsAudioFile));
+                        AlbumData albumData = _itemsParser.CreateAlbumData(searchResponse.Id, finalGroup, searchTextData, folderData with { Files = folderFiles }, Settings, expectedTrackCount);
                         albumDatas.Add(albumData);
                     }
                 }
@@ -163,7 +169,7 @@ namespace Tubifarry.Indexers.Soulseek
             _logger.Trace($"Expanding directory for: {folderData.Username}:{directoryGroup.Key}");
 
             SlskdRequestGenerator? requestGenerator = _indexer.GetExtendedRequestGenerator() as SlskdRequestGenerator;
-            IGrouping<string, SlskdFileData>? expandedGroup = requestGenerator?.ExpandDirectory(folderData.Username, directoryGroup.Key, originalTrack).GetAwaiter().GetResult();
+            IGrouping<string, SlskdFileData>? expandedGroup = requestGenerator == null ? null : ExpandSourceDirectories(requestGenerator, folderData.Username, directoryGroup, originalTrack);
 
             if (expandedGroup != null)
             {
@@ -176,6 +182,34 @@ namespace Tubifarry.Indexers.Soulseek
             }
             return null;
         }
+
+        private static IGrouping<string, SlskdFileData>? ExpandSourceDirectories(SlskdRequestGenerator requestGenerator, string username, IGrouping<string, SlskdFileData> directoryGroup, SlskdFileData originalTrack)
+        {
+            List<string> sourceDirectories = directoryGroup
+                .Select(f => SlskdTextProcessor.GetDirectoryFromFilename(f.Filename))
+                .Where(d => !string.IsNullOrEmpty(d))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            List<SlskdFileData> files = [];
+            foreach (string directory in sourceDirectories)
+            {
+                IGrouping<string, SlskdFileData>? expanded = requestGenerator.ExpandDirectory(username, directory, originalTrack).GetAwaiter().GetResult();
+                if (expanded == null)
+                    return null;
+                files.AddRange(expanded);
+            }
+
+            return files.Count == 0 ? null : files.GroupBy(_ => directoryGroup.Key).First();
+        }
+
+        private static bool IsAudioFile(SlskdFileData file) =>
+            AudioFormatHelper.GetAudioCodecFromExtension(file.Extension ?? Path.GetExtension(file.Filename) ?? "") != AudioFormat.Unknown;
+
+        private static int GetClosestEditionTrackCount(List<int>? editionTrackCounts, int audioTracks) =>
+            editionTrackCounts is { Count: > 0 } && audioTracks > 0
+                ? editionTrackCounts.OrderBy(count => Math.Abs(count - audioTracks)).ThenBy(count => count).First()
+                : 0;
 
         public void RemoveSearch(string searchId, bool delay = false)
         {

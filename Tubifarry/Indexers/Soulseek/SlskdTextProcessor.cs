@@ -177,21 +177,52 @@ namespace Tubifarry.Indexers.Soulseek
                 yield return album.Replace(romanMatch.Value, arabicNumber.ToString());
         }
 
-        public static string GetMergedDirectoryKey(string directory)
+        public static string GetMergedDirectoryKey(string directory) =>
+            GetDiscParentKey(directory) ?? GetSiblingDiscKey(directory) ?? directory;
+
+        public static List<IGrouping<string, SlskdFileData>> MergeDiscSubdirectories(IEnumerable<IGrouping<string, SlskdFileData>> directoryGroups)
+        {
+            List<IGrouping<string, SlskdFileData>> groups = [.. directoryGroups];
+            HashSet<string> sharedSiblingKeys = groups
+                .Select(group => GetSiblingDiscKey(group.Key))
+                .OfType<string>()
+                .GroupBy(key => key)
+                .Where(keys => keys.Count() > 1)
+                .Select(keys => keys.Key)
+                .ToHashSet();
+
+            return groups
+                .SelectMany(group => group.Select(file => (Key: GetGroupKey(group.Key, sharedSiblingKeys), File: file)))
+                .GroupBy(x => x.Key, x => x.File)
+                .ToList();
+        }
+
+        private static string GetGroupKey(string directory, HashSet<string> sharedSiblingKeys) =>
+            GetDiscParentKey(directory)
+            ?? (GetSiblingDiscKey(directory) is string siblingKey && sharedSiblingKeys.Contains(siblingKey) ? siblingKey : directory);
+
+        private static string? GetDiscParentKey(string directory)
         {
             int separatorIndex = directory.LastIndexOfAny(['\\', '/']);
             if (separatorIndex <= 0)
-                return directory;
+                return null;
 
-            string lastSegment = directory[(separatorIndex + 1)..].Trim();
-            return DiscFolderRegex().IsMatch(lastSegment) ? directory[..separatorIndex] : directory;
+            return DiscFolderRegex().IsMatch(directory[(separatorIndex + 1)..].Trim()) ? directory[..separatorIndex] : null;
         }
 
-        public static List<IGrouping<string, SlskdFileData>> MergeDiscSubdirectories(IEnumerable<IGrouping<string, SlskdFileData>> directoryGroups) =>
-            directoryGroups
-                .SelectMany(group => group.Select(file => (Key: GetMergedDirectoryKey(group.Key), File: file)))
-                .GroupBy(x => x.Key, x => x.File)
-                .ToList();
+        private static string? GetSiblingDiscKey(string directory)
+        {
+            int separatorIndex = directory.LastIndexOfAny(['\\', '/']);
+            if (separatorIndex <= 0)
+                return null;
+
+            Match match = SiblingDiscFolderRegex().Match(directory[(separatorIndex + 1)..].Trim());
+            if (!match.Success)
+                return null;
+
+            string album = match.Groups["album"].Value.TrimEnd(' ', '-', '_', '.', ',', '–', '(', '[', '{');
+            return album.Any(char.IsLetterOrDigit) ? directory[..(separatorIndex + 1)] + album : null;
+        }
 
         public static string RemoveBlockedTerms(string searchText)
         {
@@ -325,6 +356,9 @@ namespace Tubifarry.Indexers.Soulseek
 
         [GeneratedRegex(@"^(cd|disc|disk|dvd)\s*[-_. ]?\s*\d{1,2}$", RegexOptions.IgnoreCase)]
         private static partial Regex DiscFolderRegex();
+
+        [GeneratedRegex(@"^(?<album>.*?\S)\s*(?:[-_–]\s*)?[\(\[\{]?\s*(?:cd|disc|disk)\s*[-_.#]?\s*\d{1,2}(?:\s*(?:of|/)\s*\d{1,2})?\s*[\)\]\}]?$", RegexOptions.IgnoreCase)]
+        private static partial Regex SiblingDiscFolderRegex();
 
         [GeneratedRegex(@"[\(\[\{].*?[\)\]\}]")]
         private static partial Regex BracketedContentRegex();

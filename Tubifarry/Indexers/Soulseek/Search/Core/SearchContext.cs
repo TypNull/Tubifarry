@@ -24,6 +24,7 @@ public sealed record SearchContext
     public string? Year { get; init; }
     public bool Interactive { get; init; }
     public int TrackCount { get; init; }
+    public IReadOnlyList<int> TrackCounts { get; init; } = [];
     public PrimaryAlbumType PrimaryType { get; init; }
     public IReadOnlyList<string> Aliases { get; init; }
     public IReadOnlyList<string> Tracks { get; init; }
@@ -89,6 +90,7 @@ public sealed record SearchQuery
     public bool Interactive { get; init; }
     public bool ExpandDirectory { get; init; }
     public int TrackCount { get; init; }
+    public IReadOnlyList<int> TrackCounts { get; init; } = [];
     public IReadOnlyList<string> Tracks { get; init; } = [];
     public IReadOnlyList<int> TrackDurations { get; init; } = [];
     public string? SearchText { get; init; }
@@ -100,6 +102,7 @@ public sealed record SearchQuery
         Interactive = context.Interactive,
         ExpandDirectory = !string.IsNullOrEmpty(context.SearchArtist) && !string.IsNullOrEmpty(context.SearchAlbum),
         TrackCount = context.TrackCount,
+        TrackCounts = context.TrackCounts,
         Tracks = context.Tracks,
         TrackDurations = context.TrackDurations,
         SearchText = null
