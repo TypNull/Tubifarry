@@ -49,8 +49,11 @@ namespace Tubifarry.Indexers.Soulseek
         {
             try
             {
-                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application")
-                    .SetHeader("X-API-KEY", Settings.ApiKey).Build();
+                HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/application");
+                if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                    builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+                HttpRequest request = builder.Build();
                 request.AllowAutoRedirect = true;
                 request.RequestTimeout = TimeSpan.FromSeconds(30);
                 HttpResponse response = await _httpClient.ExecuteAsync(request);
@@ -75,6 +78,12 @@ namespace Tubifarry.Indexers.Soulseek
                     return PermissionTester.TestReadWritePermissions(Path.GetDirectoryName(Settings.IgnoreListPath)!, _logger)!;
                 }
                 return null!;
+            }
+            catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return new ValidationFailure("ApiKey", string.IsNullOrWhiteSpace(Settings.ApiKey)
+                    ? "API Key is required."
+                    : "API Key is wrong.");
             }
             catch (HttpException ex)
             {

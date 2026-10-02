@@ -281,11 +281,14 @@ namespace Tubifarry.Indexers.Soulseek
 
         private HttpRequest CreateSearchRequest(SlskdSearchRequestBody searchData)
         {
-            HttpRequest searchRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches")
-                .SetHeader("X-API-KEY", Settings.ApiKey)
+            HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches")
                 .SetHeader("Content-Type", "application/json")
-                .Post()
-                .Build();
+                .Post();
+
+            if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+            HttpRequest searchRequest = builder.Build();
 
             searchRequest.SetContent(JsonSerializer.Serialize(searchData));
             return searchRequest;
@@ -299,10 +302,12 @@ namespace Tubifarry.Indexers.Soulseek
 
         private HttpRequest CreateResultRequest(string searchId, SearchQuery query)
         {
-            HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
-                .AddQueryParam("includeResponses", true)
-                .SetHeader("X-API-KEY", Settings.ApiKey)
-                .Build();
+            HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
+                .AddQueryParam("includeResponses", true);
+            if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+            HttpRequest request = builder.Build();
 
             TrackCountFilterType filterType = (TrackCountFilterType)Settings.TrackCountFilter;
 
@@ -370,8 +375,11 @@ namespace Tubifarry.Indexers.Soulseek
 
         private async Task<JsonNode?> GetSearchResultsAsync(string searchId)
         {
-            HttpRequest searchResultsRequest = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}")
-                     .SetHeader("X-API-KEY", Settings.ApiKey).Build();
+            HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/searches/{searchId}");
+            if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+            HttpRequest searchResultsRequest = builder.Build();
 
             HttpResponse response = await _client.ExecuteAsync(searchResultsRequest);
 
@@ -409,11 +417,14 @@ namespace Tubifarry.Indexers.Soulseek
         {
             try
             {
-                HttpRequest request = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/users/{Uri.EscapeDataString(username)}/directory")
-                    .SetHeader("X-API-KEY", Settings.ApiKey)
+                HttpRequestBuilder builder = new HttpRequestBuilder($"{Settings.BaseUrl}/api/v0/users/{Uri.EscapeDataString(username)}/directory")
                     .SetHeader("Content-Type", "application/json")
-                    .Post()
-                    .Build();
+                    .Post();
+
+                if (!string.IsNullOrWhiteSpace(Settings.ApiKey))
+                    builder.SetHeader("X-API-KEY", Settings.ApiKey);
+
+                HttpRequest request = builder.Build();
 
                 request.SetContent(JsonSerializer.Serialize(new { directory = directoryPath }));
                 request.SuppressHttpError = true;

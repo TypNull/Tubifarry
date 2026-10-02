@@ -17,11 +17,6 @@ namespace Tubifarry.Download.Clients.Soulseek
                 .Must(url => !url.EndsWith('/'))
                 .WithMessage("Base URL must not end with a slash ('/').");
 
-            // API Key validation
-            RuleFor(c => c.ApiKey)
-                .NotEmpty()
-                .WithMessage("API Key is required.");
-
             // Timeout validation (only if it has a value)
             RuleFor(c => c.Timeout)
                 .GreaterThanOrEqualTo(0.1)

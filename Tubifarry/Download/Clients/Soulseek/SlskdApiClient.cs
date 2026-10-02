@@ -270,6 +270,12 @@ public class SlskdApiClient(IHttpClient httpClient) : ISlskdApiClient
 
             return null;
         }
+        catch (HttpException ex) when (ex.Response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return new ValidationFailure("ApiKey", string.IsNullOrWhiteSpace(settings.ApiKey)
+                ? "API Key is required."
+                : "API Key is wrong.");
+        }
         catch (HttpException ex)
         {
             return new ValidationFailure("BaseUrl", $"Unable to connect to Slskd: {ex.Message}");
@@ -316,8 +322,10 @@ public class SlskdApiClient(IHttpClient httpClient) : ISlskdApiClient
         HttpMethod? method = null, string? content = null)
     {
         HttpRequestBuilder builder = new HttpRequestBuilder($"{settings.BaseUrl}{endpoint}")
-            .SetHeader("X-API-KEY", settings.ApiKey)
             .SetHeader("Accept", "application/json");
+
+        if (!string.IsNullOrWhiteSpace(settings.ApiKey))
+            builder.SetHeader("X-API-KEY", settings.ApiKey);
 
         if (method != null)
             builder.Method = method;

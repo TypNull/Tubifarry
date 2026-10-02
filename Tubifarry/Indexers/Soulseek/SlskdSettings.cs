@@ -22,11 +22,6 @@ namespace Tubifarry.Indexers.Soulseek
                 .Must(url => string.IsNullOrEmpty(url) || (Uri.IsWellFormedUriString(url, UriKind.Absolute) && !url.EndsWith('/')))
                 .WithMessage("External URL must be a valid URL and must not end with a slash ('/').");
 
-            // API Key validation
-            RuleFor(c => c.ApiKey)
-                .NotEmpty()
-                .WithMessage("API Key is required.");
-
             // File Limit validation
             RuleFor(c => c.FileLimit)
                 .GreaterThanOrEqualTo(1)
