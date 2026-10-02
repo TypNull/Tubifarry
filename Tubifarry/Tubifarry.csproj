@@ -19,6 +19,10 @@
 	</PropertyGroup>
 	
 	<ItemGroup>
+		<EmbeddedResource Include="Core\Python\Scripts\*.py" LogicalName="Tubifarry.Python.%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="FuzzySharp" Version="2.0.2" />
 		<PackageReference Include="Sentry" Version="6.9.0" />
 		<PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="2.0.46">

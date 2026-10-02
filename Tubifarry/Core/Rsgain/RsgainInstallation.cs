@@ -230,27 +230,8 @@ namespace Tubifarry.Core.Rsgain
 
         private static async Task<RsgainResult> RunProcessAsync(ProcessStartInfo startInfo, TimeSpan timeout, CancellationToken token)
         {
-            using Process process = new() { StartInfo = startInfo };
-            process.Start();
-
-            Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(token);
-            Task<string> standardError = process.StandardError.ReadToEndAsync(token);
-
-            using CancellationTokenSource timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(token);
-            timeoutSource.CancelAfter(timeout);
-
-            try
-            {
-                await process.WaitForExitAsync(timeoutSource.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                process.Kill(true);
-                token.ThrowIfCancellationRequested();
-                throw new TimeoutException($"'{Path.GetFileName(startInfo.FileName)}' did not finish within {timeout.TotalMinutes:0.#} minutes.");
-            }
-
-            return new RsgainResult(process.ExitCode, await standardOutput, await standardError);
+            ProcessResult result = await ProcessRunner.RunAsync(startInfo, timeout, token);
+            return new RsgainResult(result.ExitCode, result.StandardOutput, result.StandardError);
         }
 
         private static string GetReleaseArchiveName()
