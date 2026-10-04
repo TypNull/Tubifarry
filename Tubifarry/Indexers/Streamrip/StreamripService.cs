@@ -8,10 +8,13 @@ namespace Tubifarry.Indexers.Streamrip
 {
     public sealed record StreamripAlbum(string Id, string Type, string Title, string Artist, int Tracks, string? Date, long Duration, bool Explicit, int BitDepth, double SampleRate, string Url, string Cover);
 
+    public sealed record StreamripDownloadResult(IReadOnlyList<string> Files, IReadOnlyList<string> Errors);
+
     public interface IStreamripService
     {
         Task CheckAsync(StreamripIndexerSettings settings, CancellationToken token = default);
         Task<IReadOnlyList<StreamripAlbum>> SearchAsync(StreamripIndexerSettings settings, string query, CancellationToken token = default);
+        Task<StreamripDownloadResult> DownloadAsync(StreamripIndexerSettings settings, string type, string id, int tracks, string folder, int slot, IProgress<PythonWorkerProgress> progress, CancellationToken token = default);
     }
 
     public sealed class StreamripService(IPythonEnvironments environments, IPythonWorkerPool workers) : IStreamripService
@@ -19,6 +22,7 @@ namespace Tubifarry.Indexers.Streamrip
         private const string HandlerScript = "streamrip_handler.py";
         private static readonly TimeSpan CheckTimeout = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan SearchTimeout = TimeSpan.FromMinutes(2);
+        private static readonly TimeSpan DownloadTimeout = TimeSpan.FromHours(2);
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
         public async Task CheckAsync(StreamripIndexerSettings settings, CancellationToken token = default)
@@ -46,6 +50,23 @@ namespace Tubifarry.Indexers.Streamrip
 
             JsonNode? result = await workers.InvokeAsync(spec, "search", parameters, SearchTimeout, token: token);
             return result?["albums"]?.Deserialize<List<StreamripAlbum>>(JsonOptions) ?? [];
+        }
+
+        public async Task<StreamripDownloadResult> DownloadAsync(StreamripIndexerSettings settings, string type, string id, int tracks, string folder, int slot, IProgress<PythonWorkerProgress> progress, CancellationToken token = default)
+        {
+            using PythonEnvironmentLease lease = await environments.AcquireAsync(CreateEnvironmentSpec(settings), token);
+            PythonWorkerSpec spec = CreateSpec(lease.Environment, settings, $"download-{slot}");
+
+            Dictionary<string, object?> parameters = CreateParameters(settings);
+            parameters["type"] = type;
+            parameters["id"] = id;
+            parameters["tracks"] = tracks;
+            parameters["folder"] = folder;
+
+            JsonNode? result = await workers.InvokeAsync(spec, "download", parameters, DownloadTimeout, progress, token);
+            return new StreamripDownloadResult(
+                result?["files"]?.Deserialize<List<string>>(JsonOptions) ?? [],
+                result?["errors"]?.Deserialize<List<string>>(JsonOptions) ?? []);
         }
 
         private static PythonEnvironmentSpec CreateEnvironmentSpec(StreamripIndexerSettings settings) => new(

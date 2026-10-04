@@ -1,16 +1,62 @@
 import asyncio
 import hashlib
 import json
+import logging
 import pathlib
+import time
 
 import truststore
 
 truststore.inject_into_ssl()
 
+_AUDIO_EXTENSIONS = {".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".alac"}
 _SOUNDCLOUD_ALBUM_TYPES = {"album", "ep", "single", "compilation"}
 
 _loop = asyncio.new_event_loop()
 _clients = {}
+
+
+class _ErrorCollector(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.ERROR)
+        self.messages = []
+
+    def emit(self, record):
+        message = record.getMessage()
+        if ", retrying:" not in message:
+            self.messages.append(message)
+
+
+class _Progress:
+    def __init__(self, context, expected_tracks):
+        self.context = context
+        self.expected_tracks = max(expected_tracks, 1)
+        self.tracks = []
+        self.last_report = 0.0
+
+    def callback(self, enabled, total, description):
+        from streamrip.progress import Handle
+
+        state = [0, max(total or 0, 1)]
+        self.tracks.append(state)
+
+        def update(amount):
+            state[0] += amount
+            self.report(False)
+
+        def done():
+            state[0] = state[1]
+            self.report(True)
+
+        return Handle(update, done)
+
+    def report(self, force):
+        now = time.monotonic()
+        if not force and now - self.last_report < 1:
+            return
+        self.last_report = now
+        finished = sum(min(done / total, 1) for done, total in self.tracks)
+        self.context.progress(min(finished / max(self.expected_tracks, len(self.tracks)), 1), None)
 
 
 def _config(params):
@@ -172,3 +218,52 @@ def search(params, context):
 def check(params, context):
     _loop.run_until_complete(_logged_in_client(params))
     return {"source": params["source"]}
+
+
+async def _download(params, context):
+    from streamrip import media
+    from streamrip.db import Database, Dummy
+
+    client = await _logged_in_client(params)
+    config = _config(params)
+    database = Database(Dummy(), Dummy())
+    pending_type = {"album": media.PendingAlbum, "playlist": media.PendingPlaylist, "track": media.PendingSingle}[params["type"]]
+
+    resolved = await pending_type(params["id"], client, config, database).resolve()
+    if resolved is None:
+        raise RuntimeError(f"{params['source']} {params['type']} {params['id']} is not available")
+
+    try:
+        await resolved.rip()
+    finally:
+        media.remove_artwork_tempdirs()
+
+
+def download(params, context):
+    import streamrip.media.track as track_module
+
+    folder = pathlib.Path(params["folder"])
+    folder.mkdir(parents=True, exist_ok=True)
+
+    collector = _ErrorCollector()
+    streamrip_logger = logging.getLogger("streamrip")
+    streamrip_logger.addHandler(collector)
+    progress = _Progress(context, int(params.get("tracks") or 0))
+    original_callback = track_module.get_progress_callback
+    track_module.get_progress_callback = progress.callback
+
+    try:
+        _loop.run_until_complete(_download(params, context))
+    finally:
+        track_module.get_progress_callback = original_callback
+        streamrip_logger.removeHandler(collector)
+
+    encrypted = [message for message in collector.messages if "'url'" in message]
+    errors = [message for message in collector.messages if "'url'" not in message]
+    if encrypted and params["source"] == "soundcloud":
+        errors.insert(0, f"SoundCloud only offers an encrypted stream for {len(encrypted)} track(s), which is common for label and distributor uploads")
+    else:
+        errors = collector.messages
+
+    files = sorted(str(path) for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in _AUDIO_EXTENSIONS)
+    return {"files": files, "errors": errors}

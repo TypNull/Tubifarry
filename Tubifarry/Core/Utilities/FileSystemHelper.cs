@@ -2,6 +2,14 @@ namespace Tubifarry.Core.Utilities
 {
     public static class FileSystemHelper
     {
+        private static readonly char[] InvalidFileNameChars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*', .. Path.GetInvalidFileNameChars()];
+
+        public static string SanitizeFileName(string name)
+        {
+            string sanitized = string.Concat(name.Select(c => char.IsControl(c) || InvalidFileNameChars.Contains(c) ? '_' : c)).Trim().TrimEnd('.');
+            return sanitized.Length == 0 ? "_" : sanitized[..Math.Min(sanitized.Length, 150)];
+        }
+
         public static void ReplaceDirectory(string source, string target)
         {
             string? parent = Path.GetDirectoryName(Path.GetFullPath(target));
