@@ -6,4 +6,5 @@ namespace NzbDrone.Core.Indexers
     public class QobuzDownloadProtocol : IDownloadProtocol { }
     public class SubSonicDownloadProtocol : IDownloadProtocol { }
     public class AmazonMusicDownloadProtocol : IDownloadProtocol { }
+    public class StreamripDownloadProtocol : IDownloadProtocol { }
 }
