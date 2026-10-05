@@ -27,6 +27,11 @@ namespace Tubifarry.Metadata.Beets
                 .Must(packages => ParsePackages(packages).All(package => !package.StartsWith('-')))
                 .WithMessage("Extra packages must be package names, not options.");
 
+            // Sync Interval validation
+            RuleFor(x => x.SyncInterval)
+                .InclusiveBetween(0, 24 * 30)
+                .WithMessage("Sync interval must be between 0 (off) and 720 hours.");
+
             // Install Directory validation
             RuleFor(x => x.InstallDirectory)
                 .Must(path => string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path))
@@ -50,7 +55,19 @@ namespace Tubifarry.Metadata.Beets
         [FieldDefinition(2, Label = "Extra Packages", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Additional Python packages for beets plugins, separated by commas (e.g. pyacoustid, pylast).")]
         public string ExtraPackages { get; set; } = string.Empty;
 
-        [FieldDefinition(3, Label = "Install Directory", Type = FieldType.Path, Section = MetadataSectionType.Metadata, Advanced = true, HelpText = "Folder for uv, the managed Python and the beets environment. Leave empty to use the plugin directory.")]
+        [FieldDefinition(3, Label = "Import On Album Import", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Add every album Lidarr imports to the beets library.")]
+        public bool ImportOnAlbumImport { get; set; } = true;
+
+        [FieldDefinition(4, Label = "Sync Interval", Type = FieldType.Number, Unit = "hours", Section = MetadataSectionType.Metadata, HelpText = "Run the beets sync as a scheduled task. 0 turns it off.")]
+        public int SyncInterval { get; set; }
+
+        [FieldDefinition(5, Label = "Catch Up Missing Albums", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "The sync adds albums Lidarr already has but beets does not know yet.")]
+        public bool CatchUpMissingAlbums { get; set; } = true;
+
+        [FieldDefinition(6, Label = "Allow Retagging", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "The sync refreshes MusicBrainz data in beets and writes changed tags into the files.", HelpTextWarning = "This rewrites the tags of your music files.")]
+        public bool AllowRetagging { get; set; }
+
+        [FieldDefinition(7, Label = "Install Directory", Type = FieldType.Path, Section = MetadataSectionType.Metadata, Advanced = true, HelpText = "Folder for uv, the managed Python and the beets environment. Leave empty to use the plugin directory.")]
         public string InstallDirectory { get; set; } = string.Empty;
 
         public PythonEnvironmentSpec ToEnvironmentSpec() => new(

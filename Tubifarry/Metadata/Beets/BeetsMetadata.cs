@@ -1,21 +1,38 @@
 using FluentValidation.Results;
 using NLog;
-using NzbDrone.Core.Extras.Metadata;
-using NzbDrone.Core.Extras.Metadata.Files;
 using NzbDrone.Core.MediaFiles;
+using NzbDrone.Core.Messaging.Commands;
 using NzbDrone.Core.Music;
 using Tubifarry.Core.Python;
+using Tubifarry.Metadata.ScheduledTasks;
 
 namespace Tubifarry.Metadata.Beets
 {
-    public class BeetsMetadata(IBeetsService beetsService, Logger logger) : MetadataBase<BeetsSettings>, IMetadata
+    public sealed class BeetsSyncCommand : Command
+    {
+        public override bool SendUpdatesToClient => true;
+
+        public override bool UpdateScheduledTask => true;
+
+        public override string CompletionMessage => "beets sync completed";
+    }
+
+    public class BeetsMetadata(IBeetsService beetsService, IArtistService artistService, IAlbumService albumService, IMediaFileService mediaFileService, Logger logger)
+        : ScheduledTaskBase<BeetsSettings>, IExecute<BeetsSyncCommand>
     {
         private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(10);
 
         public override string Name => "Beets";
 
-        public new ValidationResult Test()
+        public override Type CommandType => typeof(BeetsSyncCommand);
+
+        public override int IntervalMinutes => (Settings?.SyncInterval ?? 0) * 60;
+
+        public override ValidationResult Test()
         {
+            if (Settings == null)
+                return new ValidationResult();
+
             try
             {
                 using CancellationTokenSource timeout = new(TestTimeout);
@@ -35,18 +52,71 @@ namespace Tubifarry.Metadata.Beets
             }
         }
 
-        public override MetadataFile? FindMetadataFile(Artist artist, string path) => null;
+        public void Execute(BeetsSyncCommand message)
+        {
+            BeetsSettings? settings = Settings;
+            if (settings == null || Definition?.Enable != true)
+                return;
 
-        public override MetadataFileResult? ArtistMetadata(Artist artist) => null;
+            try
+            {
+                SyncAsync(settings).GetAwaiter().GetResult();
+            }
+            catch (PythonWorkerException ex)
+            {
+                logger.Error("beets sync failed: {0}\n{1}", ex.Message, ex.PythonTraceback);
+            }
+        }
 
-        public override MetadataFileResult? AlbumMetadata(Artist artist, Album album, string albumPath) => null;
+        private async Task SyncAsync(BeetsSettings settings)
+        {
+            if (settings.CatchUpMissingAlbums)
+                await CatchUpAsync(settings);
 
-        public override MetadataFileResult? TrackMetadata(Artist artist, TrackFile trackFile) => null;
+            if (!settings.AllowRetagging)
+                return;
 
-        public override List<ImageFileResult> ArtistImages(Artist artist) => [];
+            BeetsSyncResult result = await beetsService.SyncAsync(settings);
+            logger.Info("beets retag: {0} track(s) checked against MusicBrainz, {1} updated, {2} skipped because they are hardlinked", result.Items, result.Written, result.Hardlinked);
+        }
 
-        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => [];
+        private async Task CatchUpAsync(BeetsSettings settings)
+        {
+            IReadOnlySet<string> known = await beetsService.GetKnownFoldersAsync(settings);
+            Dictionary<BeetsImportOutcome, int> outcomes = [];
+            int present = 0;
+            int skipped = 0;
 
-        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => [];
+            foreach (Artist artist in artistService.GetAllArtists())
+            {
+                Dictionary<int, string> titles = albumService.GetAlbumsByArtist(artist.Id).ToDictionary(album => album.Id, album => album.Title);
+
+                foreach (IGrouping<int, TrackFile> files in mediaFileService.GetFilesByArtist(artist.Id).GroupBy(file => file.AlbumId))
+                {
+                    BeetsAlbumFolder album = BeetsAlbumFolder.Resolve(files.Select(file => file.Path), artist.Path);
+
+                    if (album.Problem != BeetsAlbumFolderProblem.None)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (known.Contains(Path.TrimEndingDirectorySeparator(album.Folder!)))
+                    {
+                        present++;
+                        continue;
+                    }
+
+                    BeetsImportOutcome outcome = await beetsService.ImportAlbumAsync(settings, album.Folder!, titles.GetValueOrDefault(files.Key, album.Folder!), settings.AllowRetagging);
+                    outcomes[outcome] = outcomes.GetValueOrDefault(outcome) + 1;
+                }
+            }
+
+            logger.Info("beets catch-up: {0} album(s) imported, {1} already known, {2} without a confident match, {3} skipped because they share a folder or lie outside the artist folder",
+                outcomes.GetValueOrDefault(BeetsImportOutcome.Imported),
+                present + outcomes.GetValueOrDefault(BeetsImportOutcome.AlreadyPresent),
+                outcomes.GetValueOrDefault(BeetsImportOutcome.NoMatch),
+                skipped + outcomes.GetValueOrDefault(BeetsImportOutcome.Missing));
+        }
     }
 }

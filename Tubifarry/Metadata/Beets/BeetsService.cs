@@ -1,6 +1,7 @@
 using NLog;
 using NzbDrone.Core.Lifecycle;
 using NzbDrone.Core.Messaging.Events;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Tubifarry.Core.Python;
@@ -9,6 +10,16 @@ namespace Tubifarry.Metadata.Beets
 {
     public sealed record BeetsReleaseCandidate(string Id, int Tracks);
 
+    public enum BeetsImportOutcome
+    {
+        Imported,
+        AlreadyPresent,
+        NoMatch,
+        Missing
+    }
+
+    public sealed record BeetsSyncResult(int Items, int Written, int Hardlinked);
+
     public sealed record BeetsRetagResult(int Retagged, int Files, int Fingerprinted, string? ReleaseId, bool Pinned, bool Hardlinked);
 
     public interface IBeetsService
@@ -16,6 +27,9 @@ namespace Tubifarry.Metadata.Beets
         void Enqueue(string albumPath, string albumTitle, BeetsSettings settings);
         Task<string> CheckAsync(BeetsSettings settings, CancellationToken token = default);
         Task<BeetsRetagResult> RetagAsync(BeetsSettings settings, string folder, IReadOnlyList<BeetsReleaseCandidate> releases, CancellationToken token = default);
+        Task<BeetsImportOutcome> ImportAlbumAsync(BeetsSettings settings, string albumPath, string albumTitle, bool writeTags = true, CancellationToken token = default);
+        Task<IReadOnlySet<string>> GetKnownFoldersAsync(BeetsSettings settings, CancellationToken token = default);
+        Task<BeetsSyncResult> SyncAsync(BeetsSettings settings, CancellationToken token = default);
     }
 
     public sealed class BeetsService(IPythonEnvironments environments, IPythonWorkerPool workers, IUvInstallation uvInstallation, IFpcalcInstallation fpcalcInstallation, Logger logger) : IBeetsService, IHandle<ApplicationShutdownRequested>
@@ -24,12 +38,15 @@ namespace Tubifarry.Metadata.Beets
         private static readonly TimeSpan CheckTimeout = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan ImportTimeout = TimeSpan.FromMinutes(30);
         private static readonly TimeSpan RetagTimeout = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan KnownFoldersTimeout = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan SyncTimeout = TimeSpan.FromHours(12);
 
         private sealed record BeetsRequest(string AlbumPath, string AlbumTitle, BeetsSettings Settings);
 
         private readonly Channel<BeetsRequest> _queue = Channel.CreateUnbounded<BeetsRequest>();
         private readonly CancellationTokenSource _shutdown = new();
         private readonly object _workerLock = new();
+        private readonly SemaphoreSlim _libraryGate = new(1, 1);
 
         private Task? _worker;
 
@@ -116,7 +133,7 @@ namespace Tubifarry.Metadata.Beets
                 {
                     try
                     {
-                        await ImportAsync(request);
+                        await ImportAlbumAsync(request.Settings, request.AlbumPath, request.AlbumTitle, token: _shutdown.Token);
                     }
                     catch (Exception) when (_shutdown.IsCancellationRequested)
                     {
@@ -145,38 +162,68 @@ namespace Tubifarry.Metadata.Beets
             }
         }
 
-        private async Task ImportAsync(BeetsRequest request)
+        public async Task<BeetsImportOutcome> ImportAlbumAsync(BeetsSettings settings, string albumPath, string albumTitle, bool writeTags = true, CancellationToken token = default)
         {
-            if (!Directory.Exists(request.AlbumPath) || !Directory.EnumerateFileSystemEntries(request.AlbumPath).Any())
+            if (!Directory.Exists(albumPath) || !Directory.EnumerateFileSystemEntries(albumPath).Any())
             {
-                logger.Debug("Album folder '{0}' is missing or empty, skipping beets", request.AlbumPath);
-                return;
+                logger.Debug("Album folder '{0}' is missing or empty, skipping beets", albumPath);
+                return BeetsImportOutcome.Missing;
             }
 
-            using PythonEnvironmentLease lease = await environments.AcquireAsync(request.Settings.ToEnvironmentSpec(), _shutdown.Token);
-            PythonWorkerSpec spec = CreateSpec(lease.Environment, request.Settings, "import");
-            object parameters = CreateParameters(request.Settings, request.AlbumPath);
+            JsonNode? result = await InvokeLibraryAsync(settings, "import", "import_album", new
+            {
+                path = albumPath,
+                library = settings.ResolveDatabasePath(),
+                config = string.IsNullOrWhiteSpace(settings.ConfigPath) ? null : settings.ConfigPath,
+                write = writeTags
+            }, ImportTimeout, token);
+            int items = ReadInt(result, "items");
+            int added = ReadInt(result, "added");
 
-            logger.Debug("Running beets import for '{0}' in {1}", request.AlbumTitle, request.AlbumPath);
+            if (added > 0 && ReadBool(result, "hardlinked"))
+                logger.Info("beets imported {0} track(s) of '{1}' without writing tags because the files are hardlinked", added, albumTitle);
+            else if (added > 0)
+                logger.Info("beets imported {0} track(s) of '{1}'", added, albumTitle);
+            else if (items > 0)
+                logger.Debug("'{0}' is already in the beets library", albumTitle);
+            else
+                logger.Info("beets skipped '{0}': no confident match", albumTitle);
+
+            return added > 0 ? BeetsImportOutcome.Imported : items > 0 ? BeetsImportOutcome.AlreadyPresent : BeetsImportOutcome.NoMatch;
+        }
+
+        public async Task<IReadOnlySet<string>> GetKnownFoldersAsync(BeetsSettings settings, CancellationToken token = default)
+        {
+            JsonNode? result = await InvokeLibraryAsync(settings, "query", "known_folders", CreateParameters(settings, null), KnownFoldersTimeout, token);
+            List<string> folders = result?["folders"]?.Deserialize<List<string>>() ?? [];
+            return new HashSet<string>(folders.Select(folder => Path.TrimEndingDirectorySeparator(folder)), OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        }
+
+        public async Task<BeetsSyncResult> SyncAsync(BeetsSettings settings, CancellationToken token = default)
+        {
+            JsonNode? result = await InvokeLibraryAsync(settings, "sync", "sync", CreateParameters(settings, null), SyncTimeout, token);
+            return new BeetsSyncResult(ReadInt(result, "items"), ReadInt(result, "written"), ReadInt(result, "hardlinked"));
+        }
+
+        private async Task<JsonNode?> InvokeLibraryAsync(BeetsSettings settings, string purpose, string method, object parameters, TimeSpan timeout, CancellationToken token)
+        {
+            await _libraryGate.WaitAsync(token);
             try
             {
-                JsonNode? result = await workers.InvokeAsync(spec, "import_album", parameters, ImportTimeout, token: _shutdown.Token);
-                int items = result?["items"] is JsonValue value && value.TryGetValue(out int count) ? count : 0;
-                int added = result?["added"] is JsonValue addedValue && addedValue.TryGetValue(out int addedCount) ? addedCount : 0;
-                bool hardlinked = result?["hardlinked"] is JsonValue linked && linked.TryGetValue(out bool flag) && flag;
-
-                if (added > 0 && hardlinked)
-                    logger.Info("beets imported {0} track(s) of '{1}' without writing tags because the files are hardlinked", added, request.AlbumTitle);
-                else if (added > 0)
-                    logger.Info("beets imported {0} track(s) of '{1}'", added, request.AlbumTitle);
-                else if (items > 0)
-                    logger.Debug("'{0}' is already in the beets library", request.AlbumTitle);
-                else
-                    logger.Info("beets skipped '{0}': no confident match", request.AlbumTitle);
+                using PythonEnvironmentLease lease = await environments.AcquireAsync(settings.ToEnvironmentSpec(), token);
+                PythonWorkerSpec spec = CreateSpec(lease.Environment, settings, purpose);
+                try
+                {
+                    return await workers.InvokeAsync(spec, method, parameters, timeout, token: token);
+                }
+                finally
+                {
+                    workers.Stop(spec.Key);
+                }
             }
             finally
             {
-                workers.Stop(spec.Key);
+                _libraryGate.Release();
             }
         }
 

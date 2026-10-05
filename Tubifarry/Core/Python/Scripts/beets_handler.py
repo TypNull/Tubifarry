@@ -78,7 +78,7 @@ def _has_hardlinks(path):
     return False
 
 
-def _keep_files_in_place(extra, match=None):
+def _keep_files_in_place(extra, match=None, plugins=None):
     import beets
     import beets.ui
 
@@ -102,6 +102,9 @@ def _keep_files_in_place(extra, match=None):
         })
         if match:
             beets.config["match"].set(match)
+        if plugins:
+            enabled = beets.config["plugins"].as_str_seq()
+            beets.config["plugins"].set(list(dict.fromkeys([*enabled, *plugins])))
         return error
 
     beets.ui._bootstrap_config = bootstrap
@@ -116,7 +119,7 @@ def import_album(params, context):
 
     started = time.time()
     hardlinked = _has_hardlinks(params["path"])
-    original = _keep_files_in_place({"write": False} if hardlinked else {})
+    original = _keep_files_in_place({"write": False} if hardlinked or not params.get("write", True) else {})
     try:
         _run(params, ["import", "-q", "-C", "-M", params["path"]])
     finally:
@@ -125,12 +128,39 @@ def import_album(params, context):
     library = Library(params["library"], beets.config["directory"].as_filename())
     try:
         items = library.items(PathQuery("path", params["path"]))
-        added = sum(1 for item in items if item.added >= started)
+        added = [item for item in items if item.added >= started]
+        if hardlinked or not params.get("write", True):
+            for item in added:
+                _remember_pending(item, _differences(item))
         count = len(items)
     finally:
         library._close()
 
-    return {"path": params["path"], "items": count, "added": added, "hardlinked": hardlinked}
+    return {"path": params["path"], "items": count, "added": len(added), "hardlinked": hardlinked}
+
+
+_PENDING = "tubifarry_pending"
+
+
+def _differences(item):
+    from beets.library import Item
+
+    try:
+        clean = Item.from_path(item.path)
+    except Exception:
+        return set()
+    return {field for field in Item._media_tag_fields if item.get(field) != clean.get(field)}
+
+
+def _pending(item):
+    return {field for field in str(item.get(_PENDING) or "").split(",") if field}
+
+
+def _remember_pending(item, fields):
+    value = ",".join(sorted(fields))
+    if value != (item.get(_PENDING) or ""):
+        item[_PENDING] = value
+        item.store()
 
 
 def _fingerprint(paths, release_tracks):
@@ -321,3 +351,106 @@ def retag(params, context):
         "mismatched": len(mismatched) + len(rejected),
         "hardlinked": False,
     }
+
+
+def _open_library(params):
+    import beets
+    from beets.library import Library
+
+    beets.config.read(user=True, defaults=True)
+    if params.get("config"):
+        beets.config.set_file(params["config"])
+    return Library(params["library"], beets.config["directory"].as_filename())
+
+
+def known_folders(params, context):
+    if not os.path.exists(params["library"]):
+        return {"folders": []}
+
+    library = _open_library(params)
+    try:
+        folders = set()
+        for item in library.items():
+            folder = os.path.dirname(os.fsdecode(item.path))
+            folders.update((folder, os.path.dirname(folder)))
+    finally:
+        library._close()
+
+    return {"folders": sorted(folders)}
+
+
+def _snapshot(params):
+    import json
+
+    from beets.library import Item
+
+    snapshot_path = params["library"] + ".tubifarry-sync.json"
+    if os.path.exists(snapshot_path):
+        try:
+            with open(snapshot_path, encoding="utf-8") as file:
+                return snapshot_path, {int(key): value for key, value in json.load(file).items()}
+        except (OSError, ValueError):
+            pass
+
+    library = _open_library(params)
+    try:
+        snapshot = {item.id: {field: item.get(field) for field in Item._media_tag_fields} for item in library.items()}
+    finally:
+        library._close()
+
+    with open(snapshot_path, "w", encoding="utf-8") as file:
+        json.dump(snapshot, file, default=str)
+    with open(snapshot_path, encoding="utf-8") as file:
+        return snapshot_path, {int(key): value for key, value in json.load(file).items()}
+
+
+def sync(params, context):
+    import beets
+    import beets.ui
+    from beets.library import Item
+    from mediafile import MediaFile
+
+    if not os.path.exists(params["library"]):
+        return {"items": 0, "written": 0, "hardlinked": 0}
+
+    snapshot_path, before = _snapshot(params)
+
+    original = _keep_files_in_place({}, plugins=["mbsync"])
+    try:
+        _run(params, ["mbsync", "-M", "-W"])
+    finally:
+        beets.ui._bootstrap_config = original
+
+    library = _open_library(params)
+    items = written = hardlinked = 0
+    try:
+        id3v23 = beets.config["id3v23"].get(bool)
+        for item in library.items():
+            path = os.fsdecode(item.path)
+            previous = before.get(item.id, {})
+            fields = {field for field in Item._media_tag_fields if field in previous and item.get(field) != previous[field]} | _pending(item)
+            if not os.path.exists(path):
+                if fields:
+                    _remember_pending(item, fields)
+                continue
+            items += 1
+            if not fields:
+                continue
+            if os.stat(path).st_nlink > 1:
+                hardlinked += 1
+                _remember_pending(item, fields)
+                continue
+            try:
+                media = MediaFile(path, id3v23=id3v23)
+                media.update({field: item.get(field) for field in fields})
+                media.save()
+                written += 1
+                _remember_pending(item, set())
+            except Exception as error:
+                _remember_pending(item, fields)
+                logging.getLogger("beets").warning("writing {} failed: {}", path, error)
+    finally:
+        library._close()
+
+    os.remove(snapshot_path)
+    return {"items": items, "written": written, "hardlinked": hardlinked}
