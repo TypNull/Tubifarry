@@ -56,8 +56,9 @@ namespace Tubifarry.Metadata.Beets
         public PythonEnvironmentSpec ToEnvironmentSpec() => new(
             "beets",
             PythonEnvironments.DefaultPythonVersion,
-            ["beets>=2.14,<3", .. BeetsSettingsValidator.ParsePackages(ExtraPackages)],
-            string.IsNullOrWhiteSpace(InstallDirectory) ? null : InstallDirectory);
+            ["beets>=2.14,<3", "pyacoustid>=1.3", .. BeetsSettingsValidator.ParsePackages(ExtraPackages)],
+            string.IsNullOrWhiteSpace(InstallDirectory) ? null : InstallDirectory,
+            ["beets", "acoustid"]);
 
         public string ResolveDatabasePath() =>
             LibraryPath.EndsWith(".db", StringComparison.OrdinalIgnoreCase) ? LibraryPath : Path.Combine(LibraryPath, "beets.db");

@@ -7,17 +7,23 @@ using Tubifarry.Core.Python;
 
 namespace Tubifarry.Metadata.Beets
 {
+    public sealed record BeetsReleaseCandidate(string Id, int Tracks);
+
+    public sealed record BeetsRetagResult(int Retagged, int Files, int Fingerprinted, string? ReleaseId, bool Pinned, bool Hardlinked);
+
     public interface IBeetsService
     {
         void Enqueue(string albumPath, string albumTitle, BeetsSettings settings);
         Task<string> CheckAsync(BeetsSettings settings, CancellationToken token = default);
+        Task<BeetsRetagResult> RetagAsync(BeetsSettings settings, string folder, IReadOnlyList<BeetsReleaseCandidate> releases, CancellationToken token = default);
     }
 
-    public sealed class BeetsService(IPythonEnvironments environments, IPythonWorkerPool workers, Logger logger) : IBeetsService, IHandle<ApplicationShutdownRequested>
+    public sealed class BeetsService(IPythonEnvironments environments, IPythonWorkerPool workers, IUvInstallation uvInstallation, IFpcalcInstallation fpcalcInstallation, Logger logger) : IBeetsService, IHandle<ApplicationShutdownRequested>
     {
         private const string HandlerScript = "beets_handler.py";
         private static readonly TimeSpan CheckTimeout = TimeSpan.FromMinutes(2);
         private static readonly TimeSpan ImportTimeout = TimeSpan.FromMinutes(30);
+        private static readonly TimeSpan RetagTimeout = TimeSpan.FromMinutes(10);
 
         private sealed record BeetsRequest(string AlbumPath, string AlbumTitle, BeetsSettings Settings);
 
@@ -55,6 +61,46 @@ namespace Tubifarry.Metadata.Beets
                 workers.Stop(spec.Key);
             }
         }
+
+        public async Task<BeetsRetagResult> RetagAsync(BeetsSettings settings, string folder, IReadOnlyList<BeetsReleaseCandidate> releases, CancellationToken token = default)
+        {
+            PythonEnvironmentSpec environmentSpec = settings.ToEnvironmentSpec();
+            string? fpcalc = await fpcalcInstallation.TryEnsureAsync(environmentSpec.RootDirectory ?? uvInstallation.DefaultRootDirectory, token);
+
+            using PythonEnvironmentLease lease = await environments.AcquireAsync(environmentSpec, token);
+            PythonWorkerSpec spec = CreateSpec(lease.Environment, settings, $"retag-{Guid.NewGuid():N}");
+            if (fpcalc != null)
+                spec = spec with { Variables = new Dictionary<string, string>(spec.Variables) { ["FPCALC"] = fpcalc } };
+
+            try
+            {
+                JsonNode? result = await workers.InvokeAsync(spec, "retag", new
+                {
+                    path = folder,
+                    releases = releases.Select(release => new { id = release.Id, tracks = release.Tracks }),
+                    library = settings.ResolveDatabasePath(),
+                    config = string.IsNullOrWhiteSpace(settings.ConfigPath) ? null : settings.ConfigPath
+                }, RetagTimeout, token: token);
+
+                return new BeetsRetagResult(
+                    ReadInt(result, "retagged"),
+                    ReadInt(result, "files"),
+                    ReadInt(result, "fingerprinted"),
+                    result?["release"] is JsonValue release && release.TryGetValue(out string? releaseId) ? releaseId : null,
+                    ReadBool(result, "pinned"),
+                    ReadBool(result, "hardlinked"));
+            }
+            finally
+            {
+                workers.Stop(spec.Key);
+            }
+        }
+
+        private static int ReadInt(JsonNode? node, string name) =>
+            node?[name] is JsonValue value && value.TryGetValue(out int number) ? number : 0;
+
+        private static bool ReadBool(JsonNode? node, string name) =>
+            node?[name] is JsonValue value && value.TryGetValue(out bool flag) && flag;
 
         public void Handle(ApplicationShutdownRequested message)
         {

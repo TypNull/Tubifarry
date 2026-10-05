@@ -26,10 +26,13 @@ namespace Tubifarry.Notifications.Queue
         [FieldDefinition(5, Label = "Fill Missing Tags", Type = FieldType.Checkbox, HelpText = "Fill empty tags before retrying the import, but only when the existing tags already corroborate the grabbed release. Nothing is ever overwritten and nothing is written for unclear matches.")]
         public bool FillMissingTags { get; set; } = false;
 
-        [FieldDefinition(6, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
+        [FieldDefinition(6, Label = "Retag With Beets", Type = FieldType.Checkbox, HelpText = "Let beets match the files against the exact release Lidarr grabbed and rewrite their tags before retrying the import. Needs the Beets metadata provider.")]
+        public bool RetagWithBeets { get; set; } = false;
+
+        [FieldDefinition(7, Label = "Retry Finding Release", Type = FieldType.Checkbox, HelpText = "Retry searching for the release if the import fails during queue cleaning.")]
         public bool RetryFindingRelease { get; set; } = true;
 
-        [FieldDefinition(7, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
+        [FieldDefinition(8, Label = "Indexers", Type = FieldType.Tag, HelpText = "Names of indexers to watch. Leave empty to use all available indexers.")]
         public IEnumerable<string> Indexers { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

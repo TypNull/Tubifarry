@@ -12,11 +12,7 @@ namespace Tubifarry.Metadata.Beets
 
         public void Handle(AlbumImportedEvent message)
         {
-            BeetsSettings? settings = metadataFactory.Enabled()
-                .Select(consumer => consumer.Definition)
-                .Where(definition => string.Equals(definition.Implementation, nameof(BeetsMetadata), StringComparison.Ordinal))
-                .Select(definition => definition.Settings as BeetsSettings)
-                .FirstOrDefault(s => s != null);
+            BeetsSettings? settings = metadataFactory.GetEnabledBeetsSettings();
 
             if (settings == null)
                 return;

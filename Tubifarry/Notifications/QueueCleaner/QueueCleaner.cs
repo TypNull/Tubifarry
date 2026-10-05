@@ -3,6 +3,7 @@ using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.Extras.Metadata;
 using NzbDrone.Core.History;
 using NzbDrone.Core.Indexers;
 using NzbDrone.Core.MediaFiles;
@@ -13,8 +14,10 @@ using NzbDrone.Core.Notifications;
 using NzbDrone.Core.Organizer;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.ThingiProvider;
+using System.Collections.Concurrent;
 using System.IO.Abstractions;
 using Tubifarry.Core.Utilities;
+using Tubifarry.Metadata.Beets;
 using Tubifarry.Notifications.Queue;
 
 namespace Tubifarry.Notifications.QueueCleaner
@@ -28,6 +31,12 @@ namespace Tubifarry.Notifications.QueueCleaner
         private readonly IEventAggregator _eventAggregator;
         private readonly INamingConfigService _namingConfig;
         private readonly IIndexerFactory _indexerFactory;
+        private readonly IMetadataFactory _metadataFactory;
+        private readonly IReleaseService _releaseService;
+        private readonly IBeetsService _beetsService;
+
+        private static readonly TimeSpan BeetsRetagTimeout = TimeSpan.FromMinutes(15);
+        private static readonly ConcurrentDictionary<string, byte> BeetsRetagged = new(StringComparer.Ordinal);
 
         public override string Name => "Queue Cleaner";
 
@@ -35,8 +44,11 @@ namespace Tubifarry.Notifications.QueueCleaner
 
         public override ProviderMessage Message => new("Queue Cleaner automatically processes items that failed to import. It can rename, blocklist, or remove items based on your settings.", ProviderMessageType.Info);
 
-        public QueueCleaner(IDiskProvider diskProvider, IHistoryService historyService, INamingConfigService namingConfig, IEventAggregator eventAggregator, IIndexerFactory indexerFactory, ICompletedDownloadService completedDownloadService, Logger logger)
+        public QueueCleaner(IDiskProvider diskProvider, IHistoryService historyService, INamingConfigService namingConfig, IEventAggregator eventAggregator, IIndexerFactory indexerFactory, ICompletedDownloadService completedDownloadService, IMetadataFactory metadataFactory, IReleaseService releaseService, IBeetsService beetsService, Logger logger)
         {
+            _metadataFactory = metadataFactory;
+            _releaseService = releaseService;
+            _beetsService = beetsService;
             _logger = logger;
             _indexerFactory = indexerFactory;
             _diskProvider = diskProvider;
@@ -120,7 +132,8 @@ namespace Tubifarry.Notifications.QueueCleaner
             if (importCleaningOption != (int)requiredOption && importCleaningOption != (int)ImportCleaningOptions.Always)
                 return;
 
-            bool changed = Settings.FillMissingTags && FillMissingTags(trackedDownload);
+            bool changed = Settings.RetagWithBeets && RetagWithBeets(trackedDownload);
+            changed |= Settings.FillMissingTags && FillMissingTags(trackedDownload);
 
             if (Settings.RenameOption != (int)RenameOptions.DoNotRename)
                 changed |= Rename(trackedDownload);
@@ -179,6 +192,64 @@ namespace Tubifarry.Notifications.QueueCleaner
 
             bool anyFileRenamed = filesOnDisk.Any(file => TryRenameFile(file, audioExtensions, releaseFormatter, filesOnDisk));
             return folderRenamed || anyFileRenamed;
+        }
+
+        private bool RetagWithBeets(TrackedDownload item)
+        {
+            Album? album = item.RemoteAlbum?.Albums?.Count == 1 ? item.RemoteAlbum.Albums[0] : null;
+            BeetsSettings? beets = _metadataFactory.GetEnabledBeetsSettings();
+
+            if (BeetsRetagged.ContainsKey(item.DownloadItem.DownloadId))
+            {
+                _logger.Debug("Skipping beets retag for '{0}': it was already retagged once", item.DownloadItem.Title);
+                return false;
+            }
+
+            if (album == null || beets == null)
+            {
+                _logger.Debug("Skipping beets retag for '{0}': {1}", item.DownloadItem.Title, beets == null ? "the Beets metadata provider is not enabled" : "the download does not belong to exactly one album");
+                return false;
+            }
+
+            List<AlbumRelease> releases = _releaseService.GetReleasesByAlbum(album.Id)
+                .Where(r => !string.IsNullOrWhiteSpace(r.ForeignReleaseId))
+                .OrderByDescending(r => r.Monitored)
+                .ToList();
+
+            if (releases.Count == 0)
+            {
+                _logger.Debug("Skipping beets retag for '{0}': the album has no releases", item.DownloadItem.Title);
+                return false;
+            }
+
+            try
+            {
+                using CancellationTokenSource timeout = new(BeetsRetagTimeout);
+                string path = (item.ImportItem ?? item.DownloadItem).OutputPath.FullPath;
+                BeetsRetagResult result = _beetsService.RetagAsync(beets, path, releases.Select(r => new BeetsReleaseCandidate(r.ForeignReleaseId, r.TrackCount)).ToList(), timeout.Token).GetAwaiter().GetResult();
+                AlbumRelease? matched = releases.Find(r => string.Equals(r.ForeignReleaseId, result.ReleaseId, StringComparison.OrdinalIgnoreCase));
+
+                if (result.Hardlinked)
+                {
+                    _logger.Info("beets did not retag '{0}': the files are hardlinked", item.DownloadItem.Title);
+                    return false;
+                }
+
+                if (result.Retagged == 0 || matched == null)
+                {
+                    _logger.Info("beets found no confident match of '{0}' among the {1} release(s) of '{2}' ({3} of {4} file(s) confirmed by fingerprint)", item.DownloadItem.Title, releases.Count, album.Title, result.Fingerprinted, result.Files);
+                    return false;
+                }
+
+                BeetsRetagged.TryAdd(item.DownloadItem.DownloadId, 0);
+                _logger.Info("beets retagged {0} of {1} track(s) of '{2}' as release '{3}' ({4}, {5} tracks){6}", result.Retagged, result.Files, item.DownloadItem.Title, matched.Title, matched.ForeignReleaseId, matched.TrackCount, result.Pinned ? ", every file confirmed by fingerprint" : string.Empty);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "beets retag of '{0}' failed", item.DownloadItem.Title);
+                return false;
+            }
         }
 
         private bool FillMissingTags(TrackedDownload item)
@@ -464,6 +535,10 @@ namespace Tubifarry.Notifications.QueueCleaner
         public override ValidationResult Test()
         {
             ValidationResult result = new();
+
+            if (Settings.RetagWithBeets && _metadataFactory.GetEnabledBeetsSettings() == null)
+                result.Errors.Add(new ValidationFailure(nameof(Settings.RetagWithBeets), "Retag With Beets needs an enabled Beets metadata provider (Settings → Metadata)."));
+
             IEnumerable<string> validProviders = _indexerFactory.GetAvailableProviders().Select(x => x.Name);
 
             if (Settings.Indexers?.Any() == true)
