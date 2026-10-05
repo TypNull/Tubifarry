@@ -14,7 +14,10 @@ namespace Tubifarry.Indexers.Streamrip
         Qobuz = 1,
 
         [FieldOption(Label = "Deezer")]
-        Deezer = 2
+        Deezer = 2,
+
+        [FieldOption(Label = "Tidal")]
+        Tidal = 3
     }
 
     public enum StreamripQuality
@@ -63,10 +66,10 @@ namespace Tubifarry.Indexers.Streamrip
     {
         private static readonly StreamripIndexerSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "Source", Type = FieldType.Select, SelectOptions = typeof(StreamripSource), HelpText = "Streaming service to search and download from. SoundCloud needs no account.")]
+        [FieldDefinition(0, Label = "Source", Type = FieldType.Select, SelectOptions = typeof(StreamripSource), HelpText = "Streaming service to search and download from. SoundCloud needs no account. For Tidal press Test and follow the login link.")]
         public int Source { get; set; } = (int)StreamripSource.SoundCloud;
 
-        [FieldDefinition(1, Label = "Username", Type = FieldType.Textbox, HelpText = "Qobuz e-mail address, or user ID when using a token. Not used for Deezer and SoundCloud.")]
+        [FieldDefinition(1, Label = "Username", Type = FieldType.Textbox, HelpText = "Qobuz e-mail address, or user ID when using a token. Not used for Deezer, Tidal and SoundCloud.")]
         public string Username { get; set; } = string.Empty;
 
         [FieldDefinition(2, Label = "Password / ARL", Type = FieldType.Password, Privacy = PrivacyLevel.Password, HelpText = "Qobuz password or token, or the Deezer ARL cookie.")]
@@ -103,6 +106,7 @@ namespace Tubifarry.Indexers.Streamrip
         {
             StreamripSource.Qobuz => Quality + 1,
             StreamripSource.Deezer => Quality == (int)StreamripQuality.Lossy ? 1 : 2,
+            StreamripSource.Tidal => Math.Min(Quality + 1, 3),
             _ => 0
         };
 

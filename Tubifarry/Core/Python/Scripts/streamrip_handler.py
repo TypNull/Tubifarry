@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import pathlib
 import time
 
@@ -107,8 +108,8 @@ def _config(params):
         if quality is not None:
             session.deezer.quality = int(quality)
     elif source == "tidal":
-        for key in ("user_id", "country_code", "access_token", "refresh_token", "token_expiry"):
-            setattr(session.tidal, key, str(params.get(key) or ""))
+        for key, value in _read_tidal_tokens(params).items():
+            setattr(session.tidal, key, str(value or ""))
         session.tidal.download_videos = False
         if quality is not None:
             session.tidal.quality = int(quality)
@@ -124,13 +125,60 @@ def _client_type(source):
     return {"qobuz": QobuzClient, "deezer": DeezerClient, "tidal": TidalClient, "soundcloud": SoundcloudClient}[source]
 
 
+_TIDAL_TOKEN_KEYS = ("user_id", "country_code", "access_token", "refresh_token", "token_expiry")
+_TIDAL_BLOCKED = "tidal blocked the login request (HTTP {}), its firewall refuses this network or client. Try again later or from another network."
+
+
+def _read_tidal_tokens(params):
+    path = params.get("token_file")
+    if not path or not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as file:
+        data = json.load(file)
+    return {key: data.get(key) for key in _TIDAL_TOKEN_KEYS}
+
+
+def _write_tidal_tokens(params, values):
+    path = params.get("token_file")
+    if not path:
+        return
+    tokens = {key: str(values.get(key) or "") for key in _TIDAL_TOKEN_KEYS}
+    if {key: str(value or "") for key, value in _read_tidal_tokens(params).items()} == tokens:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    temporary = f"{path}.{os.getpid()}.{time.monotonic_ns()}.tmp"
+    try:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as file:
+            json.dump(tokens, file)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
+
+def _tidal_expiring(params, client):
+    if params["source"] != "tidal":
+        return False
+    try:
+        return float(client.config.token_expiry) - time.time() < 86400
+    except (TypeError, ValueError):
+        return True
+
+
 async def _logged_in_client(params):
-    key = json.dumps({k: params.get(k) for k in ("source", "user", "secret", "use_token", "app_id", "app_secret", "quality")}, sort_keys=True)
+    identity = {k: params.get(k) for k in ("source", "user", "secret", "use_token", "app_id", "app_secret", "quality")}
+    if params["source"] == "tidal":
+        saved = _read_tidal_tokens(params)
+        identity["tidal"] = [saved.get("user_id"), saved.get("refresh_token"), saved.get("access_token")]
+    key = json.dumps(identity, sort_keys=True)
     client = _clients.get(key)
-    if client is not None and client.logged_in:
+    if client is not None and client.logged_in and not _tidal_expiring(params, client):
         return client
 
     from streamrip.exceptions import AuthenticationError, MissingCredentialsError
+
+    if params["source"] == "tidal" and not _read_tidal_tokens(params).get("access_token"):
+        raise RuntimeError("tidal needs a login")
 
     client = _client_type(params["source"])(_config(params))
     try:
@@ -139,8 +187,57 @@ async def _logged_in_client(params):
         raise RuntimeError(f"{params['source']} needs credentials") from None
     except AuthenticationError:
         raise RuntimeError(f"{params['source']} rejected the credentials") from None
+    except Exception as error:
+        import aiohttp
+
+        if params["source"] == "tidal" and isinstance(error, aiohttp.ContentTypeError):
+            raise RuntimeError(_TIDAL_BLOCKED.format(error.status)) from None
+        if params["source"] == "tidal" and str(error).startswith(("Refresh failed", "Login failed", "User id mismatch")):
+            raise RuntimeError("tidal rejected the saved login") from None
+        raise
+    if params["source"] == "tidal":
+        _write_tidal_tokens(params, {key: getattr(client.config, key, "") for key in _TIDAL_TOKEN_KEYS})
     _clients[key] = client
     return client
+
+
+async def _tidal_device_code(params):
+    from streamrip.client import TidalClient
+
+    client = TidalClient(_config(params))
+    try:
+        device_code, url = await client._get_device_code()
+    finally:
+        await client.session.close()
+    return {"device_code": device_code, "url": url if url.startswith("http") else f"https://{url}"}
+
+
+async def _tidal_poll(params):
+    from streamrip.client import TidalClient
+
+    import aiohttp
+
+    client = TidalClient(_config(params))
+    client.session = await client.get_session(verify_ssl=True)
+    try:
+        status, tokens = await client._get_auth_status(params["device_code"])
+    except aiohttp.ContentTypeError as error:
+        raise RuntimeError(_TIDAL_BLOCKED.format(error.status)) from None
+    finally:
+        await client.session.close()
+
+    if status == 0:
+        _write_tidal_tokens(params, tokens)
+        return {"status": "ready"}
+    return {"status": "pending" if status == 2 else "failed"}
+
+
+def tidal_login_start(params, context):
+    return _loop.run_until_complete(_tidal_device_code(params))
+
+
+def tidal_login_poll(params, context):
+    return _loop.run_until_complete(_tidal_poll(params))
 
 
 def _date(item):
@@ -168,6 +265,8 @@ def _album(source, item):
     if source == "soundcloud":
         duration = duration // 1000
     image = item.get("image") if isinstance(item.get("image"), dict) else {}
+    tidal_quality = str(item.get("audioQuality") or "")
+    tidal_cover = item.get("cover") if source == "tidal" and isinstance(item.get("cover"), str) else ""
     return {
         "id": str(item["id"]),
         "type": "playlist" if source == "soundcloud" else "album",
@@ -177,10 +276,10 @@ def _album(source, item):
         "date": _date(item),
         "duration": duration,
         "explicit": bool(item.get("parental_warning") or item.get("explicit_lyrics") or item.get("explicit")),
-        "bit_depth": item.get("maximum_bit_depth") or 0,
+        "bit_depth": item.get("maximum_bit_depth") or (24 if tidal_quality.startswith("HI_RES") else 16 if tidal_quality == "LOSSLESS" else 0),
         "sample_rate": item.get("maximum_sampling_rate") or 0,
         "url": item.get("url") or item.get("link") or item.get("permalink_url") or "",
-        "cover": image.get("large") or item.get("cover_xl") or item.get("artwork_url") or "",
+        "cover": image.get("large") or item.get("cover_xl") or item.get("artwork_url") or (f"https://resources.tidal.com/images/{tidal_cover.replace('-', '/')}/640x640.jpg" if tidal_cover else ""),
     }
 
 

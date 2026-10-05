@@ -1,4 +1,5 @@
 using FluentValidation.Results;
+using System.Collections.Concurrent;
 using NLog;
 using NzbDrone.Common.Http;
 using NzbDrone.Core.Configuration;
@@ -17,6 +18,8 @@ namespace Tubifarry.Indexers.Streamrip
         : IndexerBase<StreamripIndexerSettings>(indexerStatusService, configService, parsingService, logger)
     {
         private static readonly TimeSpan TestTimeout = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan TidalLoginLifetime = TimeSpan.FromMinutes(5);
+        private static readonly ConcurrentDictionary<string, (StreamripDeviceLogin Login, DateTime Started)> PendingTidalLogins = new(StringComparer.Ordinal);
 
         public override string Name => "Streamrip";
         public override string Protocol => nameof(StreamripDownloadProtocol);
@@ -39,7 +42,27 @@ namespace Tubifarry.Indexers.Streamrip
             try
             {
                 using CancellationTokenSource timeout = new(TestTimeout);
-                await streamrip.CheckAsync(Settings, timeout.Token);
+
+                if (Settings.SourceType == StreamripSource.Tidal && !streamrip.HasTidalLogin(Settings))
+                {
+                    string? instruction = await ContinueTidalLoginAsync(timeout.Token);
+                    if (instruction != null)
+                    {
+                        failures.Add(new ValidationFailure(nameof(Settings.Source), instruction));
+                        return;
+                    }
+                }
+
+                try
+                {
+                    await streamrip.CheckAsync(Settings, timeout.Token);
+                }
+                catch (PythonWorkerException ex) when (Settings.SourceType == StreamripSource.Tidal && ex.Message.Contains("rejected the saved login", StringComparison.Ordinal))
+                {
+                    _logger.Warn("Tidal rejected the saved login, starting a new login");
+                    streamrip.ForgetTidalLogin(Settings);
+                    failures.Add(new ValidationFailure(nameof(Settings.Source), await ContinueTidalLoginAsync(timeout.Token) ?? "Tidal login completed, press Test again."));
+                }
             }
             catch (PythonWorkerException ex)
             {
@@ -52,6 +75,32 @@ namespace Tubifarry.Indexers.Streamrip
                 failures.Add(new ValidationFailure(nameof(Settings.InstallDirectory), ex.Message));
             }
         }
+
+        private async Task<string?> ContinueTidalLoginAsync(CancellationToken token)
+        {
+            string key = Settings.InstallDirectory ?? string.Empty;
+
+            if (PendingTidalLogins.TryGetValue(key, out (StreamripDeviceLogin Login, DateTime Started) pending) && DateTime.UtcNow - pending.Started < TidalLoginLifetime)
+            {
+                bool? ready = await streamrip.PollTidalLoginAsync(Settings, pending.Login.DeviceCode, token);
+                if (ready == true)
+                {
+                    PendingTidalLogins.TryRemove(key, out _);
+                    _logger.Info("Tidal login completed");
+                    return null;
+                }
+
+                if (ready == null)
+                    return TidalInstruction(pending.Login.Url);
+            }
+
+            StreamripDeviceLogin login = await streamrip.StartTidalLoginAsync(Settings, token);
+            PendingTidalLogins[key] = (login, DateTime.UtcNow);
+            return TidalInstruction(login.Url);
+        }
+
+        private static string TidalInstruction(string url) =>
+            $"Log in to Tidal: open {url} in your browser, approve the login, then press Test again within 5 minutes.";
 
         private async Task<IList<ReleaseInfo>> SearchAsync(string query)
         {
@@ -109,6 +158,7 @@ namespace Tubifarry.Indexers.Streamrip
             return Settings.SourceType switch
             {
                 StreamripSource.SoundCloud => (AudioFormat.MP3, 128, 0, 0),
+                StreamripSource.Tidal when quality == StreamripQuality.Lossy => (AudioFormat.AAC, 320, 0, 0),
                 _ when quality == StreamripQuality.Lossy => (AudioFormat.MP3, 320, 0, 0),
                 StreamripSource.Deezer => (AudioFormat.FLAC, 1411, 16, 44100),
                 _ when quality == StreamripQuality.Lossless || album.BitDepth <= 16 => (AudioFormat.FLAC, 1411, 16, 44100),
