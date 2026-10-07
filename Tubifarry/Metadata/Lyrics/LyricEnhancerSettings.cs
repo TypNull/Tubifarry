@@ -69,10 +69,10 @@ namespace Tubifarry.Metadata.Lyrics
         [FieldDefinition(7, Label = "Enable Genius", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Genius as a lyrics provider (text only, no synced lyrics)")]
         public bool GeniusEnabled { get; set; }
 
-        [FieldDefinition(8, Label = "Genius API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Your Genius API key", Privacy = PrivacyLevel.ApiKey)]
+        [FieldDefinition(8, Label = "Genius API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Client Access Token from genius.com/api-clients (not the client ID or secret)", Privacy = PrivacyLevel.ApiKey)]
         public string GeniusApiKey { get; set; } = "";
 
-        // Binimum Provider settings (ISRC-keyed Apple Music TTML cache)
+        // Binimum Provider settings
         [FieldDefinition(9, Label = "Enable Binimum", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Binimum as a lyrics provider")]
         public bool BinimumEnabled { get; set; }
 

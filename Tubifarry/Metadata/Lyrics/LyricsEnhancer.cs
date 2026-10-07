@@ -25,7 +25,7 @@ namespace Tubifarry.Metadata.Lyrics
         public void Execute(LyricsUpdateCommand message) => _service.Execute(message, ActiveSettings);
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile) =>
-            _service.TrackMetadata(artist, trackFile, ActiveSettings);
+            _service.TrackMetadata(artist, trackFile, ActiveSettings)!;
 
         public override string GetFilenameAfterMove(Artist artist, TrackFile trackFile, MetadataFile metadataFile) =>
             _service.GetFilenameAfterMove(artist, trackFile, metadataFile);

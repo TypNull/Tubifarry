@@ -44,30 +44,14 @@ namespace Tubifarry.Metadata.Lyrics
             _logger = logger;
         }
 
-        public int GetTracksWithoutLrcFilesCount()
-        {
-            try
-            {
-                SqlBuilder builder = TracksWithoutLrcQuery().SelectCount();
-                SqlBuilder.Template template = builder.AddPageCountTemplate(typeof(TrackFile));
-
-                using System.Data.IDbConnection conn = _database.OpenConnection();
-                return conn.ExecuteScalar<int>(template.RawSql, template.Parameters);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error counting tracks without LRC files");
-                return 0;
-            }
-        }
-
-        public List<TrackFile> GetTracksWithoutLrcFilesBatch(int offset, int limit)
+        public List<TrackFile> GetTracksWithoutLrcFilesBatch(int afterId, int limit)
         {
             try
             {
                 SqlBuilder builder = TracksWithoutLrcQuery()
+                    .Where($@"""TrackFiles"".""Id"" > {afterId}")
                     .GroupBy<TrackFile>(tf => tf.Id)
-                    .OrderBy($@"""TrackFiles"".""Id"" ASC LIMIT {limit} OFFSET {offset}");
+                    .OrderBy($@"""TrackFiles"".""Id"" ASC LIMIT {limit}");
 
                 List<TrackFile> trackFiles = Query(builder);
 
@@ -84,7 +68,7 @@ namespace Tubifarry.Metadata.Lyrics
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Error querying tracks without LRC files (offset: {offset}, limit: {limit})");
+                _logger.Error(ex, $"Error querying tracks without LRC files (after id: {afterId}, limit: {limit})");
                 return [];
             }
         }

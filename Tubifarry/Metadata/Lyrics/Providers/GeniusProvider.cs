@@ -1,18 +1,19 @@
 using Newtonsoft.Json.Linq;
 using NLog;
 using System.Text.RegularExpressions;
+using LidarrHttp = NzbDrone.Common.Http;
 using Tubifarry.Core.Records;
 using Tubifarry.Metadata.Lyrics.Converters;
 
 namespace Tubifarry.Metadata.Lyrics.Providers
 {
-    public partial class GeniusProvider(HttpClient httpClient, Logger logger, LyricsEnhancerSettings settings)
+    public partial class GeniusProvider(HttpClient httpClient, LidarrHttp.IHttpClient pageClient, Logger logger, LyricsEnhancerSettings settings)
     {
-        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle)
+        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle, CancellationToken token = default)
         {
             try
             {
-                JToken? bestMatch = await SearchSongOnGeniusAsync(artistName, trackTitle);
+                JToken? bestMatch = await SearchSongOnGeniusAsync(artistName, trackTitle, token);
                 if (bestMatch == null)
                     return null;
 
@@ -23,20 +24,22 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                     return null;
                 }
 
-                string? plainLyrics = await ExtractLyricsFromGeniusPageAsync(songPath);
+                string? plainLyrics = await ExtractLyricsFromGeniusPageAsync(songPath, token);
                 if (string.IsNullOrWhiteSpace(plainLyrics))
                     return null;
 
-                return new PlainTextConverter().Read(plainLyrics);
+                return new PlainTextConverter().Read(plainLyrics) is Lyric lyric
+                    ? lyric with { Title = bestMatch["result"]?["title"]?.ToString(), Artist = bestMatch["result"]?["primary_artist"]?["name"]?.ToString() }
+                    : null;
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.Error(ex, $"Error fetching lyrics from Genius for track: {trackTitle} by {artistName}");
                 return null;
             }
         }
 
-        private async Task<JToken?> SearchSongOnGeniusAsync(string artistName, string trackTitle)
+        private async Task<JToken?> SearchSongOnGeniusAsync(string artistName, string trackTitle, CancellationToken token)
         {
             string searchUrl = $"https://api.genius.com/search?q={Uri.EscapeDataString($"{artistName} {trackTitle}")}";
             logger.Debug($"Searching for track on Genius: {searchUrl}");
@@ -44,14 +47,14 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             using HttpRequestMessage request = new(HttpMethod.Get, searchUrl);
             request.Headers.Add("Authorization", $"Bearer {settings.GeniusApiKey}");
 
-            HttpResponseMessage response = await httpClient.SendAsync(request);
+            using HttpResponseMessage response = await httpClient.SendAsync(request, token);
             if (!response.IsSuccessStatusCode)
             {
                 logger.Warn($"Failed to search Genius. Status: {response.StatusCode}");
                 return null;
             }
 
-            string responseContent = await response.Content.ReadAsStringAsync();
+            string responseContent = await response.Content.ReadAsStringAsync(token);
             JObject? searchJson = JObject.Parse(responseContent);
 
             if (searchJson?["response"] == null)
@@ -74,29 +77,24 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 return null;
             }
 
-            List<JToken> artistMatches = songHits.Where(h => string.Equals(h["result"]?["primary_artist"]?["name"]?.ToString() ?? string.Empty,
-                    artistName, StringComparison.OrdinalIgnoreCase)).ToList();
-
-            logger.Trace($"Found {artistMatches.Count} tracks by exact artist name '{artistName}'");
-
-            return LyricsHelper.ScoreAndSelectBestMatch(artistMatches, songHits, artistName, trackTitle, logger);
+            return LyricsHelper.SelectBestGeniusHit(songHits, artistName, trackTitle, logger);
         }
 
-        private async Task<string?> ExtractLyricsFromGeniusPageAsync(string songPath)
+        private async Task<string?> ExtractLyricsFromGeniusPageAsync(string songPath, CancellationToken token)
         {
             string songUrl = $"https://genius.com{songPath}";
             logger.Trace($"Fetching lyrics from Genius page: {songUrl}");
 
-            HttpResponseMessage? pageResponse = await httpClient.GetAsync(songUrl);
+            LidarrHttp.HttpRequest request = new(songUrl) { SuppressHttpError = true, LogHttpError = false };
+            LidarrHttp.HttpResponse pageResponse = await pageClient.GetAsync(request).WaitAsync(token);
 
-            if (pageResponse?.IsSuccessStatusCode != true)
+            if (pageResponse.HasHttpError)
             {
-                logger.Warn($"Failed to fetch Genius lyrics page. Status: {pageResponse?.StatusCode}");
+                logger.Warn($"Failed to fetch Genius lyrics page. Status: {pageResponse.StatusCode}");
                 return null;
             }
 
-            string html = await pageResponse.Content.ReadAsStringAsync();
-            logger.Trace("Attempting to extract lyrics using multiple regex patterns");
+            string html = pageResponse.Content;
 
             string? plainLyrics = ExtractLyricsFromHtml(html);
 
@@ -109,26 +107,9 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             return plainLyrics;
         }
 
-        private string? ExtractLyricsFromHtml(string html)
+        internal string? ExtractLyricsFromHtml(string html)
         {
-            List<string> lyricsContainers = DataLyricsContainerRegex().Matches(html)
-                .Select(m => m.Groups[1].Value)
-                .Where(v => !string.IsNullOrWhiteSpace(v))
-                .ToList();
-
-            if (lyricsContainers.Count == 0)
-            {
-                Match classicMatch = ClassicLyricsClassRegex().Match(html);
-                if (classicMatch.Success)
-                    lyricsContainers.Add(classicMatch.Groups[1].Value);
-            }
-
-            if (lyricsContainers.Count == 0)
-            {
-                Match rootMatch = LyricsRootIdRegex().Match(html);
-                if (rootMatch.Success)
-                    lyricsContainers.Add(rootMatch.Groups[1].Value);
-            }
+            List<string> lyricsContainers = ExtractDivs(html, DataLyricsContainerRegex());
 
             if (lyricsContainers.Count == 0)
             {
@@ -142,7 +123,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
 
             foreach (string lyricsHtml in lyricsContainers)
             {
-                string plainLyrics = BrTagRegex().Replace(lyricsHtml, "\n");
+                string plainLyrics = BrTagRegex().Replace(RemoveDivs(lyricsHtml, ExcludedBlockRegex()), "\n");
                 plainLyrics = ItalicTagRegex().Replace(plainLyrics, "");
                 plainLyrics = BoldTagRegex().Replace(plainLyrics, "");
                 plainLyrics = AnchorTagRegex().Replace(plainLyrics, "");
@@ -170,14 +151,62 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             return string.Join("\n", validLyricsBlocks).Trim();
         }
 
-        [GeneratedRegex(@"<div[^>]*data-lyrics-container[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
+        private static List<string> ExtractDivs(string html, Regex opening)
+        {
+            List<string> blocks = [];
+            int position = 0;
+
+            while (position < html.Length && opening.Match(html, position) is { Success: true } match)
+            {
+                int start = match.Index + match.Length;
+                if (FindClosingDiv(html, start) is not Match close)
+                    break;
+
+                string inner = html[start..close.Index];
+                if (!string.IsNullOrWhiteSpace(inner))
+                    blocks.Add(inner);
+                position = close.Index + close.Length;
+            }
+
+            return blocks;
+        }
+
+        private static string RemoveDivs(string html, Regex opening)
+        {
+            Match match = opening.Match(html);
+            while (match.Success)
+            {
+                if (FindClosingDiv(html, match.Index + match.Length) is not Match close)
+                    break;
+
+                html = html.Remove(match.Index, close.Index + close.Length - match.Index);
+                match = opening.Match(html, match.Index);
+            }
+
+            return html;
+        }
+
+        private static Match? FindClosingDiv(string html, int start)
+        {
+            int depth = 1;
+            foreach (Match tag in DivTagRegex().Matches(html, start))
+            {
+                depth += tag.Value.StartsWith("</", StringComparison.Ordinal) ? -1 : 1;
+                if (depth == 0)
+                    return tag;
+            }
+
+            return null;
+        }
+
+        [GeneratedRegex(@"<div[^>]*data-lyrics-container[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
         private static partial Regex DataLyricsContainerRegex();
 
-        [GeneratedRegex(@"<div[^>]*class=""[^""]*lyrics[^""]*""[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
-        private static partial Regex ClassicLyricsClassRegex();
+        [GeneratedRegex(@"<div[^>]*data-exclude-from-selection[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex ExcludedBlockRegex();
 
-        [GeneratedRegex(@"<div[^>]*id=""lyrics-root[^""]*""[^>]*>(.*?)<\/div>", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.Singleline, "de-DE")]
-        private static partial Regex LyricsRootIdRegex();
+        [GeneratedRegex(@"<div\b[^>]*>|</div\s*>", RegexOptions.IgnoreCase | RegexOptions.Compiled, "de-DE")]
+        private static partial Regex DivTagRegex();
 
         [GeneratedRegex(@"<br[^>]*>", RegexOptions.Compiled)]
         private static partial Regex BrTagRegex();

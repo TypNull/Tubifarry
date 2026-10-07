@@ -1,4 +1,5 @@
 using FuzzySharp;
+using FuzzySharp.PreProcess;
 using Newtonsoft.Json.Linq;
 using NLog;
 using NzbDrone.Common.Disk;
@@ -6,6 +7,9 @@ using NzbDrone.Core.Extras.Files;
 using NzbDrone.Core.Extras.Lyrics;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.Music;
+using System.Globalization;
+using System.Text;
+using Tubifarry.Core.Records;
 using Tubifarry.Metadata.Lyrics.Converters;
 
 namespace Tubifarry.Metadata.Lyrics
@@ -21,7 +25,10 @@ namespace Tubifarry.Metadata.Lyrics
 
         public static readonly string[] AdditionalCoreExtensions = [ElrcExtension, TtmlExtension, LyricsfileExtension];
 
-        private const int MinimumMatchScore = 70;
+        private const int MinimumTitleScore = 80;
+        private const int MinimumArtistScore = 75;
+        private const int MaximumDurationDifference = 5;
+        private const int CloseDurationDifference = 2;
 
         public static (LyricConverterBase Converter, string Extension) ResolveWordSynced(LyricsEnhancerSettings settings) =>
             (WordSyncedFileType)settings.WordSyncedFileTypeOption switch
@@ -42,41 +49,75 @@ namespace Tubifarry.Metadata.Lyrics
             return !string.IsNullOrEmpty(extension) && LyricFileExtensions.Extensions.Contains(extension);
         }
 
-        public static JToken? ScoreAndSelectBestMatch(List<JToken> artistMatches, List<JToken> songHits, string artistName, string trackTitle, Logger logger)
+        public static JToken? SelectBestGeniusHit(List<JToken> hits, string artistName, string trackTitle, Logger logger)
         {
-            bool artistConfirmed = artistMatches.Count > 0;
-            List<JToken> candidates = artistConfirmed ? artistMatches : songHits;
-
             JToken? bestMatch = null;
             int bestScore = 0;
 
-            foreach (JToken hit in candidates)
+            foreach (JToken hit in hits)
             {
                 string title = hit["result"]?["title"]?.ToString() ?? string.Empty;
                 string artist = hit["result"]?["primary_artist"]?["name"]?.ToString() ?? string.Empty;
+                int titleScore = TitleScore(title, trackTitle);
+                int artistScore = ArtistScore(artist, artistName);
 
-                int titleScore = Math.Max(
-                    Math.Max(Fuzz.TokenSetRatio(title, trackTitle), Fuzz.TokenSortRatio(title, trackTitle)),
-                    Math.Max(Fuzz.PartialRatio(title, trackTitle), Fuzz.WeightedRatio(title, trackTitle)));
-                int artistScore = artistConfirmed ? 100 : Fuzz.WeightedRatio(artist, artistName);
-                int combinedScore = ((titleScore * 3) + (artistScore * 7)) / 10;
+                logger.Debug($"Match candidate: '{title}' by '{artist}' - Title: {titleScore}, Artist: {artistScore}");
 
-                logger.Debug($"Match candidate: '{title}' by '{artist}' - Title: {titleScore}, Artist: {artistScore}, Combined: {combinedScore}");
+                int score = titleScore + artistScore + ExactTitleScore(title, trackTitle);
+                if (titleScore < MinimumTitleScore || artistScore < MinimumArtistScore || score <= bestScore)
+                    continue;
 
-                if (combinedScore > bestScore)
-                {
-                    bestScore = combinedScore;
-                    bestMatch = hit;
-                }
+                bestScore = score;
+                bestMatch = hit;
             }
 
-            if (bestScore < MinimumMatchScore)
-            {
-                logger.Warn($"Best match score {bestScore} is below threshold {MinimumMatchScore}, no lyrics selected for: '{trackTitle}' by '{artistName}'");
-                return null;
-            }
+            if (bestMatch == null)
+                logger.Debug($"No Genius result matches '{trackTitle}' by '{artistName}' closely enough");
 
             return bestMatch;
+        }
+
+        public static bool IsMatch(Lyric lyric, string artistName, string trackTitle, int duration)
+        {
+            int difference = lyric.Duration > 0 && duration > 0 ? Math.Abs(lyric.Duration - duration) : -1;
+            if (difference > MaximumDurationDifference)
+                return false;
+
+            bool titleMatches = string.IsNullOrWhiteSpace(lyric.Title) || TitleScore(lyric.Title, trackTitle) >= MinimumTitleScore;
+            bool artistMatches = string.IsNullOrWhiteSpace(lyric.Artist) || ArtistScore(lyric.Artist, artistName) >= MinimumArtistScore;
+            return titleMatches && (artistMatches || (difference >= 0 && difference <= CloseDurationDifference));
+        }
+
+        public static int TitleScore(string candidate, string title) => Similarity(candidate, title);
+
+        public static int ExactTitleScore(string candidate, string title) => Fuzz.Ratio(Normalize(candidate), Normalize(title), PreprocessMode.None);
+
+        public static int ArtistScore(string candidate, string artist) => Similarity(candidate, artist);
+
+        private static int Similarity(string left, string right)
+        {
+            string a = Normalize(left);
+            string b = Normalize(right);
+            if (a.Length == 0 || b.Length == 0)
+                return 0;
+            return Math.Max(Fuzz.TokenSetRatio(a, b, PreprocessMode.None), Fuzz.Ratio(a, b, PreprocessMode.None));
+        }
+
+        public static string Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            StringBuilder builder = new(value.Length);
+            foreach (char c in value.Normalize(NormalizationForm.FormD).ToLowerInvariant())
+            {
+                UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(c);
+                if (category == UnicodeCategory.NonSpacingMark)
+                    continue;
+                builder.Append(char.IsLetterOrDigit(c) ? c : ' ');
+            }
+
+            return string.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries)).Normalize(NormalizationForm.FormC);
         }
 
         public static bool EmbedLyricsInAudioFile(string filePath, string lyrics, Logger logger, IRootFolderWatchingService rootFolderWatchingService)

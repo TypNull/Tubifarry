@@ -1,4 +1,5 @@
 using NLog;
+using LidarrHttp = NzbDrone.Common.Http;
 using Tubifarry.Core.Records;
 using Tubifarry.Metadata.Lyrics.Providers;
 
@@ -11,6 +12,7 @@ namespace Tubifarry.Metadata.Lyrics
     public class LyricsProviderManager
     {
         private readonly HttpClient _httpClient;
+        private readonly LidarrHttp.IHttpClient _pageClient;
         private readonly Logger _logger;
         private readonly LyricsEnhancerSettings _settings;
 
@@ -20,32 +22,33 @@ namespace Tubifarry.Metadata.Lyrics
         private readonly Lazy<LyricsPlusProvider> _lyricsPlusProvider;
         private readonly Lazy<UnisonProvider> _unisonProvider;
 
-        public LyricsProviderManager(HttpClient httpClient, Logger logger, LyricsEnhancerSettings settings)
+        public LyricsProviderManager(HttpClient httpClient, LidarrHttp.IHttpClient pageClient, Logger logger, LyricsEnhancerSettings settings)
         {
             _httpClient = httpClient;
+            _pageClient = pageClient;
             _logger = logger;
             _settings = settings;
 
             _lrcLibProvider = new Lazy<LrcLibProvider>(() => new LrcLibProvider(_httpClient, _logger, _settings));
-            _geniusProvider = new Lazy<GeniusProvider>(() => new GeniusProvider(_httpClient, _logger, _settings));
+            _geniusProvider = new Lazy<GeniusProvider>(() => new GeniusProvider(_httpClient, _pageClient, _logger, _settings));
             _binimumProvider = new Lazy<BinimumProvider>(() => new BinimumProvider(_httpClient, _logger, _settings));
             _lyricsPlusProvider = new Lazy<LyricsPlusProvider>(() => new LyricsPlusProvider(_httpClient, _logger, _settings));
             _unisonProvider = new Lazy<UnisonProvider>(() => new UnisonProvider(_httpClient, _logger, _settings));
         }
 
-        public Task<Lyric?> FetchFromLrcLibAsync(string artistName, string trackTitle, string albumName, int duration)
-            => _lrcLibProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration);
+        public Task<Lyric?> FetchFromLrcLibAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token)
+            => _lrcLibProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration, token);
 
-        public Task<Lyric?> FetchFromGeniusAsync(string artistName, string trackTitle)
-            => _geniusProvider.Value.FetchLyricsAsync(artistName, trackTitle);
+        public Task<Lyric?> FetchFromGeniusAsync(string artistName, string trackTitle, CancellationToken token)
+            => _geniusProvider.Value.FetchLyricsAsync(artistName, trackTitle, token);
 
-        public Task<Lyric?> FetchFromBinimumAsync(string artistName, string trackTitle, string albumName, int duration)
-            => _binimumProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration);
+        public Task<Lyric?> FetchFromBinimumAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token)
+            => _binimumProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration, token);
 
-        public Task<Lyric?> FetchFromLyricsPlusAsync(string artistName, string trackTitle, string albumName, int duration, string? isrc = null)
-            => _lyricsPlusProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration, isrc);
+        public Task<Lyric?> FetchFromLyricsPlusAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token)
+            => _lyricsPlusProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration, token);
 
-        public Task<Lyric?> FetchFromUnisonAsync(string artistName, string trackTitle, string albumName, int duration)
-            => _unisonProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration);
+        public Task<Lyric?> FetchFromUnisonAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token)
+            => _unisonProvider.Value.FetchLyricsAsync(artistName, trackTitle, albumName, duration, token);
     }
 }

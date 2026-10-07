@@ -45,7 +45,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 string requestUri = $"{_settings.UnisonUrl.TrimEnd('/')}/lyrics{query}";
                 _logger.Trace($"Requesting lyrics from Unison: {requestUri}");
 
-                HttpResponseMessage response = await _httpClient.GetAsync(requestUri, token);
+                using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, token);
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Debug($"No lyrics from Unison for {trackTitle} by {artistName}. Status: {response.StatusCode}");
@@ -55,7 +55,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 string content = await response.Content.ReadAsStringAsync(token);
                 return ParseResponse(content);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.Error(ex, $"Error fetching lyrics from Unison for track: {trackTitle} by {artistName}");
                 return null;
@@ -91,7 +91,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             return result with
             {
                 Title = string.IsNullOrEmpty(data.Song) ? result.Title : data.Song,
-                Artist = string.IsNullOrEmpty(data.Artist) ? result.Artist : data.Artist,
+                Artist = string.IsNullOrEmpty(data.Artist) ? null : data.Artist,
                 Album = string.IsNullOrEmpty(data.Album) ? result.Album : data.Album,
                 Duration = duration > 0 ? duration : result.Duration
             };

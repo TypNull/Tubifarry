@@ -33,7 +33,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 string lookupUri = $"{_settings.BinimumApiUrl.TrimEnd('/')}/?q={Uri.EscapeDataString(q)}{(duration > 0 ? $"&duration={duration}" : string.Empty)}";
                 _logger.Trace($"Searching Binimum: {lookupUri}");
 
-                HttpResponseMessage response = await _httpClient.GetAsync(lookupUri, token);
+                using HttpResponseMessage response = await _httpClient.GetAsync(lookupUri, token);
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Debug($"No Binimum results for '{q}'. Status: {response.StatusCode}");
@@ -48,8 +48,15 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                     return null;
                 }
 
+                if (!Uri.TryCreate(lyricsUrl, UriKind.Absolute, out Uri? ttmlUri) || ttmlUri.Scheme != Uri.UriSchemeHttps ||
+                    !string.Equals(ttmlUri.Host, response.RequestMessage?.RequestUri?.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.Debug($"Ignoring Binimum lyrics URL outside the API host: {lyricsUrl}");
+                    return null;
+                }
+
                 _logger.Trace($"Fetching Binimum TTML: {lyricsUrl}");
-                HttpResponseMessage ttmlResponse = await _httpClient.GetAsync(lyricsUrl, token);
+                using HttpResponseMessage ttmlResponse = await _httpClient.GetAsync(ttmlUri, token);
                 if (!ttmlResponse.IsSuccessStatusCode)
                 {
                     _logger.Debug($"Failed to fetch Binimum TTML. Status: {ttmlResponse.StatusCode}");
@@ -59,13 +66,12 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 string ttmlContent = await ttmlResponse.Content.ReadAsStringAsync(token);
                 return BuildLyric(match, ttmlContent);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.Error(ex, $"Error fetching lyrics from Binimum for track: {trackTitle} by {artistName}");
                 return null;
             }
         }
-
 
         internal static BinimumResult? SelectBestMatch(string content, string artistName, string trackTitle, int duration)
         {
@@ -77,8 +83,8 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             if (lookup?.Results is not { Count: > 0 } results)
                 return null;
 
-            string qTitle = Normalize(trackTitle);
-            string qArtist = Normalize(artistName);
+            string qTitle = LyricsHelper.Normalize(trackTitle);
+            string qArtist = LyricsHelper.Normalize(artistName);
 
             BinimumResult? best = null;
             int bestScore = int.MinValue;
@@ -88,7 +94,11 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 if (string.IsNullOrEmpty(r.LyricsUrl))
                     continue;
 
-                string rTitle = Normalize(r.TrackName);
+                int rDuration = (int)Math.Round(r.Duration);
+                if (!LyricsHelper.IsMatch(new Lyric { Title = r.TrackName, Artist = r.ArtistName, Duration = rDuration }, artistName, trackTitle, duration))
+                    continue;
+
+                string rTitle = LyricsHelper.Normalize(r.TrackName);
                 int score;
                 if (rTitle == qTitle)
                     score = 100;
@@ -97,13 +107,14 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 else
                     continue;
 
-                string rArtist = Normalize(r.ArtistName);
+                string rArtist = LyricsHelper.Normalize(r.ArtistName);
                 if (rArtist == qArtist)
                     score += 50;
                 else if (rArtist.Length > 0 && qArtist.Length > 0 && (rArtist.Contains(qArtist) || qArtist.Contains(rArtist)))
                     score += 20;
+                else
+                    continue;
 
-                int rDuration = (int)Math.Round(r.Duration);
                 if (duration > 0 && rDuration > 0)
                     score += Math.Max(0, 20 - Math.Abs(rDuration - duration));
 
@@ -117,13 +128,6 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             return best;
         }
 
-        private static string Normalize(string? value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-            return string.Join(' ', value.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        }
-
         private static Lyric? BuildLyric(BinimumResult meta, string ttmlContent)
         {
             Lyric? result = _ttmlConverter.Read(ttmlContent);
@@ -133,7 +137,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             int duration = (int)Math.Round(meta.Duration);
             return result with
             {
-                Artist = string.IsNullOrEmpty(meta.ArtistName) ? result.Artist : meta.ArtistName,
+                Artist = string.IsNullOrEmpty(meta.ArtistName) ? null : meta.ArtistName,
                 Title = string.IsNullOrEmpty(meta.TrackName) ? result.Title : meta.TrackName,
                 Album = string.IsNullOrEmpty(meta.AlbumName) ? result.Album : meta.AlbumName,
                 Duration = duration > 0 ? duration : result.Duration

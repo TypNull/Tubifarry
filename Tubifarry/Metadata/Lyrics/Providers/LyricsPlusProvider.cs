@@ -20,7 +20,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             _settings = settings;
         }
 
-        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle, string albumName, int duration, string? isrc = null, CancellationToken token = default)
+        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token = default)
         {
             if (string.IsNullOrWhiteSpace(artistName) || string.IsNullOrWhiteSpace(trackTitle))
                 return null;
@@ -30,8 +30,6 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 StringBuilder query = new();
                 query.Append("?title=").Append(Uri.EscapeDataString(trackTitle));
                 query.Append("&artist=").Append(Uri.EscapeDataString(artistName));
-                if (!string.IsNullOrEmpty(isrc))
-                    query.Append("&isrc=").Append(Uri.EscapeDataString(isrc));
                 if (!string.IsNullOrEmpty(albumName))
                     query.Append("&album=").Append(Uri.EscapeDataString(albumName));
                 if (duration > 0)
@@ -43,7 +41,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 using HttpRequestMessage request = new(HttpMethod.Get, requestUri);
                 request.Headers.TryAddWithoutValidation("User-Agent", "Tubifarry Lyrics Enhancer");
 
-                HttpResponseMessage response = await _httpClient.SendAsync(request, token);
+                using HttpResponseMessage response = await _httpClient.SendAsync(request, token);
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.Debug($"No lyrics from LyricsPlus for {trackTitle} by {artistName}. Status: {response.StatusCode}");
@@ -53,7 +51,7 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 string content = await response.Content.ReadAsStringAsync(token);
                 return ParseResponse(content);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.Error(ex, $"Error fetching lyrics from LyricsPlus for track: {trackTitle} by {artistName}");
                 return null;
@@ -100,10 +98,9 @@ namespace Tubifarry.Metadata.Lyrics.Providers
                 return null;
 
             string? title = string.IsNullOrEmpty(response.Metadata?.Title) ? null : response.Metadata!.Title;
-            string? artist = response.Metadata?.SongWriters?.FirstOrDefault();
             int duration = ParseDurationSeconds(response.Metadata?.TotalDuration);
 
-            return new Lyric { Lines = lines, Title = title, Artist = artist, Duration = duration };
+            return new Lyric { Lines = lines, Title = title, Duration = duration };
         }
 
         private static List<LyricLine>? BuildWords(List<LyricsPlusSyllable>? syllabus)
@@ -180,7 +177,6 @@ namespace Tubifarry.Metadata.Lyrics.Providers
 
         private sealed record LyricsPlusMetadata(
             [property: JsonPropertyName("title")] string? Title,
-            [property: JsonPropertyName("songWriters")] List<string>? SongWriters,
             [property: JsonPropertyName("totalDuration")] string? TotalDuration);
     }
 }

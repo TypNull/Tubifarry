@@ -1,7 +1,5 @@
-using DownloadAssistant.Base;
 using Newtonsoft.Json.Linq;
 using NLog;
-using NzbDrone.Core.Parser.Model;
 using Tubifarry.Core.Records;
 using Tubifarry.Metadata.Lyrics.Converters;
 
@@ -24,41 +22,62 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             _settings = settings;
         }
 
-        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle, string albumName, int duration)
+        public async Task<Lyric?> FetchLyricsAsync(string artistName, string trackTitle, string albumName, int duration, CancellationToken token = default)
         {
             try
             {
-                string requestUri = $"{_settings.LrcLibInstanceUrl}/api/get?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}{(string.IsNullOrEmpty(albumName) ? "" : $"&album_name={Uri.EscapeDataString(albumName)}")}{(duration != 0 ? $"&duration={duration}" : "")}";
+                string baseUrl = _settings.LrcLibInstanceUrl.TrimEnd('/');
+                string requestUri = $"{baseUrl}/api/get?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}{(string.IsNullOrEmpty(albumName) ? "" : $"&album_name={Uri.EscapeDataString(albumName)}")}{(duration != 0 ? $"&duration={duration}" : "")}";
 
                 _logger.Trace($"Requesting lyrics from LRCLIB: {requestUri}");
 
-                HttpResponseMessage response = await _httpClient.GetAsync(requestUri);
-                if (!response.IsSuccessStatusCode)
+                using (HttpResponseMessage response = await _httpClient.GetAsync(requestUri, token))
                 {
-                    if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                        _logger.Debug($"No lyrics found on LRCLIB for track: {trackTitle} by {artistName}");
-                    else
-                        _logger.Debug($"Failed to fetch lyrics from LRCLIB. Status: {response.StatusCode}");
-                    return null;
+                    if (response.IsSuccessStatusCode)
+                        return ParseResponse(await response.Content.ReadAsStringAsync(token));
+
+                    _logger.Debug($"LRCLIB lookup for {trackTitle} by {artistName} returned {response.StatusCode}, searching instead");
                 }
 
-                string content = await response.Content.ReadAsStringAsync();
-                return ParseResponse(content);
+                return await SearchAsync(baseUrl, artistName, trackTitle, duration, token);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.Error(ex, $"Error fetching lyrics from LRCLIB for track: {trackTitle} by {artistName}");
                 return null;
             }
         }
 
-        public static async Task<Lyric?> FetchFromLRCLIBAsync(string instance, ReleaseInfo releaseInfo, string trackName, int duration = 0, CancellationToken token = default)
+        private async Task<Lyric?> SearchAsync(string baseUrl, string artistName, string trackTitle, int duration, CancellationToken token)
         {
-            string requestUri = $"{instance}/api/get?artist_name={Uri.EscapeDataString(releaseInfo.Artist)}&track_name={Uri.EscapeDataString(trackName)}&album_name={Uri.EscapeDataString(releaseInfo.Album)}{(duration != 0 ? $"&duration={duration}" : "")}";
-            HttpResponseMessage response = await HttpGet.HttpClient.GetAsync(requestUri, token);
-            if (!response.IsSuccessStatusCode) return null;
-            string content = await response.Content.ReadAsStringAsync(token);
-            return ParseResponse(content);
+            string requestUri = $"{baseUrl}/api/search?artist_name={Uri.EscapeDataString(artistName)}&track_name={Uri.EscapeDataString(trackTitle)}";
+            _logger.Trace($"Searching lyrics on LRCLIB: {requestUri}");
+
+            using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, token);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.Debug($"LRCLIB search for {trackTitle} by {artistName} returned {response.StatusCode}");
+                return null;
+            }
+
+            JArray results;
+            try
+            {
+                results = JArray.Parse(await response.Content.ReadAsStringAsync(token));
+            }
+            catch
+            {
+                return null;
+            }
+
+            return results.OfType<JObject>()
+                .Select(ParseEntry)
+                .OfType<Lyric>()
+                .Where(lyric => LyricsHelper.IsMatch(lyric, artistName, trackTitle, duration))
+                .OrderByDescending(lyric => lyric.HasLineSync)
+                .ThenBy(lyric => duration > 0 && lyric.Duration > 0 ? Math.Abs(lyric.Duration - duration) : 0)
+                .ThenByDescending(lyric => LyricsHelper.ExactTitleScore(lyric.Title ?? string.Empty, trackTitle))
+                .FirstOrDefault();
         }
 
         private static Lyric? ParseResponse(string content)
@@ -66,16 +85,18 @@ namespace Tubifarry.Metadata.Lyrics.Providers
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
-            JObject json;
             try
             {
-                json = JObject.Parse(content);
+                return ParseEntry(JObject.Parse(content));
             }
             catch
             {
                 return null;
             }
+        }
 
+        private static Lyric? ParseEntry(JObject json)
+        {
             string lyricsfile = json["lyricsfile"]?.ToString() ?? string.Empty;
             string synced = json["syncedLyrics"]?.ToString() ?? string.Empty;
             string plain = json["plainLyrics"]?.ToString() ?? string.Empty;
