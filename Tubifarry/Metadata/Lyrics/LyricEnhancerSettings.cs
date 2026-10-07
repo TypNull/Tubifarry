@@ -28,7 +28,7 @@ namespace Tubifarry.Metadata.Lyrics
 
             // Validate at least one provider is enabled
             RuleFor(x => x)
-                .Must(x => x.LrcLibEnabled || x.GeniusEnabled || x.BinimumEnabled || x.LyricsPlusEnabled || x.UnisonEnabled)
+                .Must(x => x.LrcLibEnabled || x.GeniusEnabled || x.BinimumEnabled || x.LyricsPlusEnabled || x.UnisonEnabled || x.NetEaseEnabled)
                 .WithMessage("At least one lyrics provider must be enabled");
 
             // Validate UpdateInterval when scheduled updates are enabled
@@ -93,11 +93,17 @@ namespace Tubifarry.Metadata.Lyrics
         [FieldDefinition(14, Label = "Unison URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Unison API instance", Placeholder = "https://unison.boidu.dev", Hidden = HiddenType.Hidden)]
         public string UnisonUrl { get; set; } = "https://unison.boidu.dev";
 
+        [FieldDefinition(15, Label = "Enable NetEase", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use NetEase Cloud Music as a lyrics provider (line-synced, strong on Asian and European music)")]
+        public bool NetEaseEnabled { get; set; }
+
+        [FieldDefinition(16, Label = "NetEase URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the NetEase Cloud Music API", Placeholder = "https://music.163.com", Hidden = HiddenType.Hidden)]
+        public string NetEaseUrl { get; set; } = "https://music.163.com";
+
         // Scheduled Update Settings
-        [FieldDefinition(15, Label = "Enable Scheduled Updates", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable automatic scheduled updates to refresh lyrics for existing files")]
+        [FieldDefinition(17, Label = "Enable Scheduled Updates", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable automatic scheduled updates to refresh lyrics for existing files")]
         public bool EnableScheduledUpdates { get; set; }
 
-        [FieldDefinition(16, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
+        [FieldDefinition(18, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
         public int UpdateInterval { get; set; } = 7;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

@@ -297,6 +297,8 @@ namespace Tubifarry.Metadata.Lyrics
                 token => providers.FetchFromLyricsPlusAsync(track.Artist, track.Title, track.Album, track.DurationSeconds, token), "LyricsPlus", ProviderTimeout);
             yield return (settings.UnisonEnabled,
                 token => providers.FetchFromUnisonAsync(track.Artist, track.Title, track.Album, track.DurationSeconds, token), "Unison", ProviderTimeout);
+            yield return (settings.NetEaseEnabled,
+                token => providers.FetchFromNetEaseAsync(track.Artist, track.Title, track.DurationSeconds, token), "NetEase", ProviderTimeout);
             yield return (settings.GeniusEnabled && !string.IsNullOrWhiteSpace(settings.GeniusApiKey),
                 token => providers.FetchFromGeniusAsync(track.Artist, track.Title, token), "Genius", GeniusTimeout);
         }
