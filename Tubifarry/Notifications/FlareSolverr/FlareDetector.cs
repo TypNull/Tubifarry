@@ -64,6 +64,13 @@ public static class FlareDetector
             return false;
         }
 
+        if (response.Headers.TryGetValues("cf-mitigated", out IEnumerable<string>? mitigated) &&
+            mitigated.Any(value => value.Equals("challenge", StringComparison.OrdinalIgnoreCase)))
+        {
+            Logger.Trace("Cloudflare cf-mitigated challenge header found for {0}", url);
+            return true;
+        }
+
         // Check if Server header indicates Cloudflare/DDoS-GUARD
         bool isCloudflareServer = response.Headers.Server.Any(server =>
             server.Product != null &&

@@ -8,6 +8,8 @@ namespace Tubifarry.Notifications.FlareSolverr
         Lazy<IFlareSolverrService> flareService,
         Lazy<IHttpClient> httpClient) : IHttpRequestInterceptor
     {
+        private static readonly char[] InvalidCookieValueChars = [',', ';'];
+
         private readonly Logger _logger = logger;
         private readonly Lazy<IFlareSolverrService> _flareService = flareService;
         private readonly Lazy<IHttpClient> _httpClient = httpClient;
@@ -94,6 +96,12 @@ namespace Tubifarry.Notifications.FlareSolverr
 
             foreach (FlareCookie cookie in solution.Cookies)
             {
+                if (cookie.Value.IndexOfAny(InvalidCookieValueChars) >= 0)
+                {
+                    _logger.Trace("Skipping cookie {0}, its value is not allowed in a request cookie", cookie.Name);
+                    continue;
+                }
+
                 _logger.Trace("Applying cookie: {0} = {1}... (domain: {2}, protection: {3})",
                     cookie.Name,
                     cookie.Value[..Math.Min(20, cookie.Value.Length)],
@@ -146,7 +154,8 @@ namespace Tubifarry.Notifications.FlareSolverr
                     {
                         try
                         {
-                            if (header.Key.Equals("Server", StringComparison.OrdinalIgnoreCase))
+                            if (header.Key.Equals("Server", StringComparison.OrdinalIgnoreCase) ||
+                                header.Key.Equals("cf-mitigated", StringComparison.OrdinalIgnoreCase))
                             {
                                 httpResponse.Headers.TryAddWithoutValidation(header.Key, header.Value);
                             }
