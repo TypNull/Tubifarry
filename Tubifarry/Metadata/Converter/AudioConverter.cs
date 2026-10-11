@@ -25,14 +25,18 @@ namespace Tubifarry.Metadata.Converter
 
         public override MetadataFileResult AlbumMetadata(Artist artist, Album album, string albumPath) => default!;
 
-        public override List<ImageFileResult> ArtistImages(Artist artist) => default!;
+        public override List<ImageFileResult> ArtistImages(Artist artist) => [];
 
-        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => default!;
+        public override List<ImageFileResult> AlbumImages(Artist artist, Album album, string albumFolder) => [];
 
-        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => default!;
+        public override List<ImageFileResult> TrackImages(Artist artist, TrackFile trackFile) => [];
 
         public override MetadataFileResult TrackMetadata(Artist artist, TrackFile trackFile)
         {
+            // Lidarr also calls this for every file already in the library on each artist scan; convert only on import, before the file is saved
+            if (trackFile.Id != 0)
+                return null!;
+
             if (ShouldConvertTrack(trackFile).GetAwaiter().GetResult())
                 ConvertTrack(trackFile).GetAwaiter().GetResult();
             else
