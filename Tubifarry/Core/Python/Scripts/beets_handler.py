@@ -119,6 +119,11 @@ def import_album(params, context):
 
     started = time.time()
     hardlinked = _has_hardlinks(params["path"])
+    known = _unchanged_files(params)
+    audio = {_normalize(path) for path in _audio_files(params["path"])}
+    if audio and audio <= known:
+        return {"path": params["path"], "items": len(known), "added": 0, "hardlinked": hardlinked}
+
     original = _keep_files_in_place({"write": False} if hardlinked or not params.get("write", True) else {})
     try:
         _run(params, ["import", "-q", "-C", "-M", params["path"]])
@@ -137,6 +142,46 @@ def import_album(params, context):
         library._close()
 
     return {"path": params["path"], "items": count, "added": len(added), "hardlinked": hardlinked}
+
+
+def _normalize(path):
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _same_audio(item, path):
+    from mediafile import MediaFile, UnreadableFileError
+
+    try:
+        media = MediaFile(path)
+    except (OSError, UnreadableFileError):
+        return False
+    return (
+        media.format == item.format
+        and media.bitrate == item.bitrate
+        and media.samplerate == item.samplerate
+        and media.bitdepth == item.bitdepth
+        and media.channels == item.channels
+    )
+
+
+def _unchanged_files(params):
+    if not os.path.exists(params["library"]):
+        return set()
+
+    from beets.dbcore.query import PathQuery
+
+    library = _open_library(params)
+    try:
+        known = set()
+        for item in library.items(PathQuery("path", params["path"])):
+            item_path = os.fsdecode(item.path)
+            if not os.path.exists(item_path):
+                item.remove(with_album=True)
+            elif _same_audio(item, item_path):
+                known.add(_normalize(item_path))
+    finally:
+        library._close()
+    return known
 
 
 _PENDING = "tubifarry_pending"
