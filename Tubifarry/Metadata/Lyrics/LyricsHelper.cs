@@ -19,6 +19,7 @@ namespace Tubifarry.Metadata.Lyrics
     public static class LyricsHelper
     {
         public const string LrcExtension = ".lrc";
+        public const string TxtExtension = ".txt";
         public const string ElrcExtension = ".elrc";
         public const string TtmlExtension = ".ttml";
         public const string LyricsfileExtension = ".lyricsfile";
@@ -42,6 +43,11 @@ namespace Tubifarry.Metadata.Lyrics
             (LineSyncedFileType)settings.LineSyncedFileTypeOption == LineSyncedFileType.UseSameAsWordSynced
                 ? ResolveWordSynced(settings)
                 : (new LrcConverter(), LrcExtension);
+
+        public static (LyricConverterBase Converter, string Extension) ResolvePlainText(LyricsEnhancerSettings settings) =>
+            (new PlainTextConverter(), (PlainTextFileType)settings.PlainTextFileTypeOption == PlainTextFileType.UseSameAsLineSynced
+                ? ResolveLineSynced(settings).Extension
+                : TxtExtension);
 
         public static bool IsLyricFile(ExtraFile file)
         {

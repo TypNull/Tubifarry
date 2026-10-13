@@ -43,67 +43,70 @@ namespace Tubifarry.Metadata.Lyrics
     {
         private static readonly LyricsEnhancerSettingsValidator Validator = new();
 
-        [FieldDefinition(0, Label = "Create LRC Files", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose what kind of LRC files to create")]
+        [FieldDefinition(0, Label = "Create Lyric Files", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose what kind of lyrics to save as files")]
         public int LrcFileOptions { get; set; } = (int)LyricOptions.OnlyLineSynced;
 
-        [FieldDefinition(1, Label = "Line Synced File Type", Type = FieldType.Select, SelectOptions = typeof(LineSyncedFileType), Section = MetadataSectionType.Metadata, HelpText = "File format for plain text and line-synced lyrics")]
+        [FieldDefinition(1, Label = "Plain Text File Type", Type = FieldType.Select, SelectOptions = typeof(PlainTextFileType), Section = MetadataSectionType.Metadata, HelpText = "File format for plain lyrics")]
+        public int PlainTextFileTypeOption { get; set; } = (int)PlainTextFileType.UseSameAsLineSynced;
+
+        [FieldDefinition(2, Label = "Line Synced File Type", Type = FieldType.Select, SelectOptions = typeof(LineSyncedFileType), Section = MetadataSectionType.Metadata, HelpText = "File format for line-synced lyrics")]
         public int LineSyncedFileTypeOption { get; set; } = (int)LineSyncedFileType.Lrc;
 
-        [FieldDefinition(2, Label = "Word Synced File Type", Type = FieldType.Select, SelectOptions = typeof(WordSyncedFileType), Section = MetadataSectionType.Metadata, HelpText = "File format for word-synced lyrics")]
+        [FieldDefinition(3, Label = "Word Synced File Type", Type = FieldType.Select, SelectOptions = typeof(WordSyncedFileType), Section = MetadataSectionType.Metadata, HelpText = "File format for word-synced lyrics")]
         public int WordSyncedFileTypeOption { get; set; } = (int)WordSyncedFileType.Elrc;
 
-        [FieldDefinition(3, Label = "Lyrics Embedding", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose how to embed lyrics in audio files metadata")]
+        [FieldDefinition(4, Label = "Lyrics Embedding", Type = FieldType.Select, SelectOptions = typeof(LyricOptions), Section = MetadataSectionType.Metadata, HelpText = "Choose how to embed lyrics in audio files metadata")]
         public int LyricEmbeddingOption { get; set; } = (int)LyricOptions.Disabled;
 
-        [FieldDefinition(4, Label = "Overwrite Existing LRC Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Overwrite existing LRC files")]
+        [FieldDefinition(5, Label = "Overwrite Existing LRC Files", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Overwrite existing LRC files")]
         public bool OverwriteExistingLrcFiles { get; set; }
 
         // LRCLIB Provider settings
-        [FieldDefinition(5, Label = "Enable LRCLIB", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LRCLIB as a lyrics provider (provides synced lyrics)")]
+        [FieldDefinition(6, Label = "Enable LRCLIB", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LRCLIB as a lyrics provider (provides synced lyrics)")]
         public bool LrcLibEnabled { get; set; }
 
-        [FieldDefinition(6, Label = "LRCLIB Instance URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LRCLIB instance to use", Placeholder = "https://lrclib.net")]
+        [FieldDefinition(7, Label = "LRCLIB Instance URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LRCLIB instance to use", Placeholder = "https://lrclib.net")]
         public string LrcLibInstanceUrl { get; set; } = "https://lrclib.net";
 
         // Genius Provider settings
-        [FieldDefinition(7, Label = "Enable Genius", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Genius as a lyrics provider (text only, no synced lyrics)")]
+        [FieldDefinition(8, Label = "Enable Genius", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Genius as a lyrics provider (text only, no synced lyrics)")]
         public bool GeniusEnabled { get; set; }
 
-        [FieldDefinition(8, Label = "Genius API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Client Access Token from genius.com/api-clients (not the client ID or secret)", Privacy = PrivacyLevel.ApiKey)]
+        [FieldDefinition(9, Label = "Genius API Key", Type = FieldType.Textbox, Section = MetadataSectionType.Metadata, HelpText = "Client Access Token from genius.com/api-clients (not the client ID or secret)", Privacy = PrivacyLevel.ApiKey)]
         public string GeniusApiKey { get; set; } = "";
 
         // Binimum Provider settings
-        [FieldDefinition(9, Label = "Enable Binimum", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Binimum as a lyrics provider")]
+        [FieldDefinition(10, Label = "Enable Binimum", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Binimum as a lyrics provider")]
         public bool BinimumEnabled { get; set; }
 
-        [FieldDefinition(10, Label = "Binimum API URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Binimum lyrics API", Placeholder = "https://lyrics-api.binimum.org", Hidden = HiddenType.Hidden)]
+        [FieldDefinition(11, Label = "Binimum API URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Binimum lyrics API", Placeholder = "https://lyrics-api.binimum.org", Hidden = HiddenType.Hidden)]
         public string BinimumApiUrl { get; set; } = "https://lyrics-api.binimum.org";
 
         // LyricsPlus Provider settings (Apple Music + QQ, word-synced)
-        [FieldDefinition(11, Label = "Enable LyricsPlus", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LyricsPlus as a lyrics provider")]
+        [FieldDefinition(12, Label = "Enable LyricsPlus", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use LyricsPlus as a lyrics provider")]
         public bool LyricsPlusEnabled { get; set; }
 
-        [FieldDefinition(12, Label = "LyricsPlus URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LyricsPlus instance", Placeholder = "https://lyrics.geeked.wtf", Hidden = HiddenType.Hidden)]
+        [FieldDefinition(13, Label = "LyricsPlus URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the LyricsPlus instance", Placeholder = "https://lyrics.geeked.wtf", Hidden = HiddenType.Hidden)]
         public string LyricsPlusUrl { get; set; } = "https://lyrics.geeked.wtf";
 
         // Unison Provider settings (crowdsourced TTML/LRC)
-        [FieldDefinition(13, Label = "Enable Unison", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Unison as a lyrics provider (crowdsourced synced lyrics; small catalog)")]
+        [FieldDefinition(14, Label = "Enable Unison", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use Unison as a lyrics provider (crowdsourced synced lyrics; small catalog)")]
         public bool UnisonEnabled { get; set; }
 
-        [FieldDefinition(14, Label = "Unison URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Unison API instance", Placeholder = "https://unison.boidu.dev", Hidden = HiddenType.Hidden)]
+        [FieldDefinition(15, Label = "Unison URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the Unison API instance", Placeholder = "https://unison.boidu.dev", Hidden = HiddenType.Hidden)]
         public string UnisonUrl { get; set; } = "https://unison.boidu.dev";
 
-        [FieldDefinition(15, Label = "Enable NetEase", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use NetEase Cloud Music as a lyrics provider (line-synced, strong on Asian and European music)")]
+        [FieldDefinition(16, Label = "Enable NetEase", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Use NetEase Cloud Music as a lyrics provider (line-synced, strong on Asian and European music)")]
         public bool NetEaseEnabled { get; set; }
 
-        [FieldDefinition(16, Label = "NetEase URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the NetEase Cloud Music API", Placeholder = "https://music.163.com", Hidden = HiddenType.Hidden)]
+        [FieldDefinition(17, Label = "NetEase URL", Type = FieldType.Url, Section = MetadataSectionType.Metadata, HelpText = "URL of the NetEase Cloud Music API", Placeholder = "https://music.163.com", Hidden = HiddenType.Hidden)]
         public string NetEaseUrl { get; set; } = "https://music.163.com";
 
         // Scheduled Update Settings
-        [FieldDefinition(17, Label = "Enable Scheduled Updates", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable automatic scheduled updates to refresh lyrics for existing files")]
+        [FieldDefinition(18, Label = "Enable Scheduled Updates", Type = FieldType.Checkbox, Section = MetadataSectionType.Metadata, HelpText = "Enable automatic scheduled updates to refresh lyrics for existing files")]
         public bool EnableScheduledUpdates { get; set; }
 
-        [FieldDefinition(18, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
+        [FieldDefinition(19, Label = "Update Interval", Type = FieldType.Number, Unit = "days", Section = MetadataSectionType.Metadata, HelpText = "How often to run scheduled lyrics updates.")]
         public int UpdateInterval { get; set; } = 7;
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));
@@ -164,5 +167,14 @@ namespace Tubifarry.Metadata.Lyrics
 
         [FieldOption(Label = "Use Same as Word Synced", Hint = "Use the same file type as configured for word-synced lyrics.")]
         UseSameAsWordSynced
+    }
+
+    public enum PlainTextFileType
+    {
+        [FieldOption(Label = "TXT", Hint = "Plain text file format.")]
+        Txt = 0,
+
+        [FieldOption(Label = "Use Same as Line Synced", Hint = "Use the same file type as configured for line-synced lyrics.")]
+        UseSameAsLineSynced = 1
     }
 }

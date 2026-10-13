@@ -342,7 +342,7 @@ namespace Tubifarry.Metadata.Lyrics
             {
                 SyncLevel.WordSynced => LyricsHelper.ResolveWordSynced(settings),
                 SyncLevel.LineSynced => LyricsHelper.ResolveLineSynced(settings),
-                SyncLevel.Plain => (new PlainTextConverter(), LyricsHelper.ResolveLineSynced(settings).Extension),
+                SyncLevel.Plain => LyricsHelper.ResolvePlainText(settings),
                 _ => null
             };
 
