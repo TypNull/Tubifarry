@@ -83,8 +83,17 @@ public class SlskdGrabMatcher(Logger logger)
             .Select(group => group.ToList())
             .Concat(files.Where(f => f.BatchId == null).Select(f => new List<SlskdDownloadFile> { f }));
 
-        List<(SlskdGrab? Grab, List<SlskdDownloadFile> Files)> matches = units
+        List<(SlskdGrab? Grab, List<SlskdDownloadFile> Files)> found = units
             .Select(unit => (Grab: FindGrab(grabs, unit), Files: unit))
+            .ToList();
+
+        if (found.Any(m => m.Grab == null))
+        {
+            List<SlskdGrab> older = history.OlderForUser(username);
+            found = found.Select(m => (m.Grab ?? FindOlderGrab(history, older, m.Files), m.Files)).ToList();
+        }
+
+        List<(SlskdGrab? Grab, List<SlskdDownloadFile> Files)> matches = found
             .GroupBy(m => m.Grab)
             .Select(group => (group.Key, group.SelectMany(m => m.Files).ToList()))
             .ToList();
@@ -104,6 +113,9 @@ public class SlskdGrabMatcher(Logger logger)
         List<string> names = unit.Select(f => f.Filename).ToList();
         return PickNewest(grabs.Where(g => !_removedGrabs.ContainsKey(g.History.DownloadId) && ContainsAll(g.Files, names)), g => g.History.Date, GetEarliestRequest(unit));
     }
+
+    private SlskdGrab? FindOlderGrab(SlskdGrabHistory history, List<SlskdGrab> older, List<SlskdDownloadFile> unit) =>
+        FindGrab(older, unit) is SlskdGrab grab ? history.Resolve(grab) : null;
 
     private bool BelongsToRemovedGrab(SlskdDownloadFile file)
     {

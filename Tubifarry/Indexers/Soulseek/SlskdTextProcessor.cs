@@ -51,7 +51,8 @@ namespace Tubifarry.Indexers.Soulseek
             "look outside your window",
             "housezzz",
             "from zero",
-            "bryan"
+            "bryan",
+            "deftones"
         };
 
         private static readonly string[][] BlockedTermWords = [.. BlockedSearchTerms

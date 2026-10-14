@@ -1,9 +1,11 @@
 using NLog;
 using NzbDrone.Common.Disk;
 using NzbDrone.Common.Instrumentation;
+using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Download;
 using NzbDrone.Core.Download.Clients;
 using NzbDrone.Core.Download.History;
+using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
 using NzbDrone.Core.RemotePathMappings;
 using System.Collections.Concurrent;
@@ -34,9 +36,12 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     // Latest settings snapshot per definition ID: used by event-triggered retry callbacks
     private readonly ConcurrentDictionary<int, SlskdProviderSettings> _settingsCache = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private static readonly TimeSpan _grabHistoryLifetime = TimeSpan.FromMinutes(1);
+    private readonly ConcurrentDictionary<int, (SlskdGrabHistory History, DateTime CreatedAt)> _grabHistories = new();
 
     private readonly ISlskdApiClient _apiClient;
     private readonly IDownloadHistoryRepository _downloadHistoryRepository;
+    private readonly SlskdGrabRepository _grabRepository;
     private readonly ISlskdItemsParser _slskdItemsParser;
     private readonly ISentryHelper _sentry;
     private readonly Logger _logger;
@@ -49,6 +54,8 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     public SlskdDownloadManager(
         ISlskdApiClient apiClient,
         IDownloadHistoryRepository downloadHistoryRepository,
+        IMainDatabase database,
+        IEventAggregator eventAggregator,
         ISlskdItemsParser slskdItemsParser,
         IRemotePathMappingService remotePathMappingService,
         IDiskProvider diskProvider,
@@ -57,6 +64,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     {
         _apiClient = apiClient;
         _downloadHistoryRepository = downloadHistoryRepository;
+        _grabRepository = new SlskdGrabRepository(database, eventAggregator);
         _slskdItemsParser = slskdItemsParser;
         _sentry = sentry;
         _logger = logger;
@@ -485,8 +493,16 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         return release;
     }
 
-    private SlskdGrabHistory CreateGrabHistory(int definitionId) =>
-        new(_downloadHistoryRepository, definitionId, NzbDroneLogger.GetLogger(typeof(SlskdGrabHistory)));
+    private SlskdGrabHistory CreateGrabHistory(int definitionId)
+    {
+        DateTime now = DateTime.UtcNow;
+        if (_grabHistories.TryGetValue(definitionId, out (SlskdGrabHistory History, DateTime CreatedAt) cached) && now - cached.CreatedAt < _grabHistoryLifetime)
+            return cached.History;
+
+        SlskdGrabHistory history = new(_grabRepository, definitionId, NzbDroneLogger.GetLogger(typeof(SlskdGrabHistory)));
+        _grabHistories[definitionId] = (history, now);
+        return history;
+    }
 
     private SlskdDownloadItem? GetItem(int definitionId, string id) =>
         _downloadMappings.TryGetValue(new DownloadKey<int, string>(definitionId, id), out SlskdDownloadItem? item)
