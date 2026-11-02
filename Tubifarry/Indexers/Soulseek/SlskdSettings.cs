@@ -209,7 +209,7 @@ namespace Tubifarry.Indexers.Soulseek
         [FieldOption(Label = "Disabled", Hint = "No track count filtering.")]
         Disabled = 0,
 
-        [FieldOption(Label = "Exact", Hint = "Only allow releases whose track count matches one edition of the album.")]
+        [FieldOption(Label = "Exact", Hint = "Only allow releases whose track count matches the pinned edition, or any edition when no release is pinned.")]
         Exact = 1,
 
         [FieldOption(Label = "Lower", Hint = "Filter out releases with fewer tracks than the shortest edition of the album.")]

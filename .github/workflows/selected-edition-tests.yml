@@ -1,0 +1,27 @@
+name: Selected edition regression tests
+
+on:
+  pull_request:
+    paths:
+      - 'Tubifarry/**'
+      - 'Tubifarry.Tests/**'
+      - '.github/workflows/selected-edition-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: >-
+          dotnet test Tubifarry.Tests/Tubifarry.Tests.csproj
+          --configuration Release
+          -p:CI=true -p:Branch=develop -p:TreatWarningsAsErrors=false

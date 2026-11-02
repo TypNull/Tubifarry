@@ -58,6 +58,12 @@ namespace Tubifarry.Indexers.Soulseek
             List<string> tracks = trackList?.Select(x => x.Title).ToList() ?? [];
             List<int> trackDurations = trackList?.Where(t => t.Duration > 0).Select(t => t.Duration).ToList() ?? [];
             List<int> trackCounts = albumReleases?.Select(r => r.TrackCount).Where(c => c > 0).Distinct().Order().ToList() ?? [];
+            if ((TrackCountFilterType)Settings.TrackCountFilter == TrackCountFilterType.Exact
+                && album?.AnyReleaseOk == false && monitoredRelease?.TrackCount > 0)
+            {
+                trackCounts = [monitoredRelease.TrackCount];
+            }
+
             if (trackCounts.Count == 0 && trackCount > 0)
                 trackCounts = [trackCount];
 
