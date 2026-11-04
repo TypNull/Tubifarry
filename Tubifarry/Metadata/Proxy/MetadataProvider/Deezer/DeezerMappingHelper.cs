@@ -31,8 +31,8 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
 
             List<string> overviewParts = [];
             if (!string.IsNullOrWhiteSpace(dAlbum.Label)) overviewParts.Add($"Label: {dAlbum.Label}");
-            if (dAlbum.ReleaseDate != DateTime.MinValue)
-                overviewParts.Add($"Released: {dAlbum.ReleaseDate:yyyy-MM-dd}");
+            if (dAlbum.ReleaseDate.HasValue)
+                overviewParts.Add($"Released: {dAlbum.ReleaseDate.Value:yyyy-MM-dd}");
             if (dAlbum.NumberOfTracks > 0) overviewParts.Add($"{dAlbum.NumberOfTracks} tracks");
             if (!string.IsNullOrWhiteSpace(dAlbum.UPC)) overviewParts.Add($"UPC: {dAlbum.UPC}");
             album.Overview = overviewParts.Count != 0 ? string.Join(" • ", overviewParts) : "Found on Deezer";

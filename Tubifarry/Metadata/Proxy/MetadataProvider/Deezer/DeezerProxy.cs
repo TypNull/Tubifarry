@@ -100,9 +100,17 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
             UpdateCache(settings);
             return CachedSearchAsync<Artist, DeezerArtist>(settings, "", artistD =>
             {
-                Artist artist = DeezerMappingHelper.MapArtistFromDeezerArtist(artistD);
-                artist.Albums = GetArtistAlbumsAsync(settings, artist).GetAwaiter().GetResult();
-                return artist;
+                try
+                {
+                    Artist artist = DeezerMappingHelper.MapArtistFromDeezerArtist(artistD);
+                    artist.Albums = GetArtistAlbumsAsync(settings, artist).GetAwaiter().GetResult();
+                    return artist;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, $"Skipping Deezer artist '{artistD.Name}' ({artistD.Id}): failed to load albums.");
+                    return null;
+                }
             }, title).GetAwaiter().GetResult();
         }
 

@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Tubifarry.Core.Utilities
@@ -61,6 +62,35 @@ namespace Tubifarry.Core.Utilities
         }
 
         public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options) => writer.WriteBooleanValue(value);
+    }
+
+    /// <summary>
+    /// Lenient date converter
+    /// </summary>
+    public class LenientDateTimeConverter : JsonConverter<DateTime?>
+    {
+        public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType != JsonTokenType.String)
+            {
+                reader.Skip();
+                return null;
+            }
+
+            string? value = reader.GetString();
+            if (string.IsNullOrWhiteSpace(value) || value.StartsWith("0000"))
+                return null;
+
+            return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime result) && result != DateTime.MinValue ? result : null;
+        }
+
+        public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue)
+                writer.WriteStringValue(value.Value);
+            else
+                writer.WriteNullValue();
+        }
     }
 
     /// <summary>

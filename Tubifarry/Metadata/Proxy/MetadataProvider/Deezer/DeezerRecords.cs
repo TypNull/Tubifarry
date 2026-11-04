@@ -1,5 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 using Tubifarry.Core.Records;
+using Tubifarry.Core.Utilities;
 
 namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
 {
@@ -33,7 +34,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         [property: JsonPropertyName("nb_tracks")] int NumberOfTracks,
         [property: JsonPropertyName("duration")] int Duration,
         [property: JsonPropertyName("fans")] int Fans,
-        [property: JsonPropertyName("release_date")] DateTime ReleaseDate,
+        [property: JsonPropertyName("release_date"), JsonConverter(typeof(LenientDateTimeConverter))] DateTime? ReleaseDate,
         [property: JsonPropertyName("record_type")] string RecordType,
         [property: JsonPropertyName("available")] bool Available,
         [property: JsonPropertyName("alternative")] DeezerAlbum? Alternative,
@@ -94,7 +95,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("description")] string Description,
         [property: JsonPropertyName("available")] bool Available,
-        [property: JsonPropertyName("release_date")] DateTime ReleaseDate,
+        [property: JsonPropertyName("release_date"), JsonConverter(typeof(LenientDateTimeConverter))] DateTime? ReleaseDate,
         [property: JsonPropertyName("duration")] int Duration,
         [property: JsonPropertyName("link")] string Link,
         [property: JsonPropertyName("share")] string Share,
@@ -203,7 +204,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
         [property: JsonPropertyName("track_position")] int TrackPosition,
         [property: JsonPropertyName("disk_number")] int DiskNumber,
         [property: JsonPropertyName("rank")] int Rank,
-        [property: JsonPropertyName("release_date")] DateTime ReleaseDate,
+        [property: JsonPropertyName("release_date"), JsonConverter(typeof(LenientDateTimeConverter))] DateTime? ReleaseDate,
         [property: JsonPropertyName("explicit_lyrics")] bool ExplicitLyrics,
         [property: JsonPropertyName("explicit_content_lyrics")] int ExplicitContentLyrics,
         [property: JsonPropertyName("explicit_content_cover")] int ExplicitContentCover,
