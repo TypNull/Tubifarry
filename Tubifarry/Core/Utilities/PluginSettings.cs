@@ -35,7 +35,7 @@ namespace Tubifarry.Core.Utilities
     {
         private readonly string _settingsPath;
         private readonly ConcurrentDictionary<string, string> _settings;
-        private readonly object _syncLock = new();
+        private readonly Lock _syncLock = new();
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly bool _autoSave;
         private readonly Logger _logger;

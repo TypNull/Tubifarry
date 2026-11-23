@@ -20,7 +20,7 @@ namespace Tubifarry.Core.Model
         private DateTime _lastFailure = DateTime.MinValue;
         private readonly int _failureThreshold = failureThreshold;
         private readonly TimeSpan _resetTimeout = TimeSpan.FromMinutes(resetTimeoutMinutes);
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public bool IsOpen
         {
@@ -67,7 +67,7 @@ namespace Tubifarry.Core.Model
         private static readonly ConditionalWeakTable<Type, ICircuitBreaker> _typeBreakers = [];
         private static readonly ConcurrentDictionary<string, WeakReference<ICircuitBreaker>> _namedBreakers = new();
 
-        private static readonly object _cleanupLock = new();
+        private static readonly Lock _cleanupLock = new();
         private static DateTime _lastCleanup = DateTime.UtcNow;
         private static readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(15);
 

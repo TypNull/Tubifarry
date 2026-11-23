@@ -98,7 +98,7 @@ namespace Tubifarry.Core.Utilities
                 token.ThrowIfCancellationRequested();
 
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                ExtractExecutable(archivePath, assetName, staging);
+                await ExtractExecutableAsync(archivePath, assetName, staging, token);
 
                 if (!OperatingSystem.IsWindows())
                     File.SetUnixFileMode(staging, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
@@ -113,26 +113,34 @@ namespace Tubifarry.Core.Utilities
             }
         }
 
-        private void ExtractExecutable(string archivePath, string assetName, string destination)
+        private async Task ExtractExecutableAsync(string archivePath, string assetName, string destination, CancellationToken token)
         {
             if (assetName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
+#if NET10_0_OR_GREATER
+                await using ZipArchive zip = await ZipFile.OpenReadAsync(archivePath, token);
+#else
                 using ZipArchive zip = ZipFile.OpenRead(archivePath);
+#endif
                 ZipArchiveEntry entry = zip.Entries.FirstOrDefault(e => e.Name.Equals(ExecutableName, StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidOperationException($"'{assetName}' does not contain {ExecutableName}.");
+#if NET10_0_OR_GREATER
+                await entry.ExtractToFileAsync(destination, true, token);
+#else
                 entry.ExtractToFile(destination, true);
+#endif
                 return;
             }
 
-            using FileStream file = File.OpenRead(archivePath);
-            using GZipStream gzip = new(file, CompressionMode.Decompress);
-            using TarReader reader = new(gzip);
+            await using FileStream file = File.OpenRead(archivePath);
+            await using GZipStream gzip = new(file, CompressionMode.Decompress);
+            await using TarReader reader = new(gzip);
 
-            while (reader.GetNextEntry() is TarEntry entry)
+            while (await reader.GetNextEntryAsync(cancellationToken: token) is TarEntry entry)
             {
                 if (entry.EntryType is TarEntryType.RegularFile or TarEntryType.V7RegularFile && Path.GetFileName(entry.Name) == ExecutableName)
                 {
-                    entry.ExtractToFile(destination, true);
+                    await entry.ExtractToFileAsync(destination, true, token);
                     return;
                 }
             }

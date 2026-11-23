@@ -26,7 +26,7 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Mixed
         private System.Timers.Timer? _saveTimer;
         private bool _isDirty;
         private bool _processExitRegistered;
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         public AdaptiveThresholdConfig Config { get; private set; } = new();
 

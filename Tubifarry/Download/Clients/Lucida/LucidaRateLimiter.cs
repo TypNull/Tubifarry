@@ -10,7 +10,7 @@ public sealed class LucidaRateLimiter : ILucidaRateLimiter
     private readonly Logger _logger;
 
     private readonly ConcurrentDictionary<string, WorkerSlot> _slots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly object _globalTimingLock = new();
+    private readonly Lock _globalTimingLock = new();
     private DateTime _lastRequestTime = DateTime.MinValue;
 
     public IReadOnlyCollection<string> Workers => [.. _slots.Keys];

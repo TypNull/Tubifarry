@@ -31,7 +31,7 @@ namespace Tubifarry.Core.Rsgain
         private static readonly TimeSpan ApkTimeout = TimeSpan.FromMinutes(10);
 
         private readonly SemaphoreSlim _installGate = new(1, 1);
-        private readonly object _cacheLock = new();
+        private readonly Lock _cacheLock = new();
 
         private RsgainExecutable? _cached;
         private string? _cachedFor;

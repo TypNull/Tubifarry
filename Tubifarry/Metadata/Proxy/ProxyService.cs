@@ -29,7 +29,7 @@ namespace Tubifarry.Metadata.Proxy
         private readonly IMetadataFactory _metadataFactory;
         private readonly IEventAggregator _eventAggregator;
         private readonly Logger _logger;
-        private readonly object _lock = new();
+        private readonly Lock _lock = new();
 
         private readonly Dictionary<Type, List<IProxy>> _interfaceToProxyMap = [];
         private readonly Dictionary<Type, IProxy> _activeProxyForInterface = [];

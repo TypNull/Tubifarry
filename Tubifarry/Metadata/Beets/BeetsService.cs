@@ -45,7 +45,7 @@ namespace Tubifarry.Metadata.Beets
 
         private readonly Channel<BeetsRequest> _queue = Channel.CreateUnbounded<BeetsRequest>();
         private readonly CancellationTokenSource _shutdown = new();
-        private readonly object _workerLock = new();
+        private readonly Lock _workerLock = new();
         private readonly SemaphoreSlim _libraryGate = new(1, 1);
 
         private Task? _worker;

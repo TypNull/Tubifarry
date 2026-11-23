@@ -31,10 +31,10 @@ namespace Tubifarry.Indexers.Soulseek
 
         private static readonly Dictionary<int, string> _interactiveResults = [];
         private static readonly Dictionary<string, (HashSet<string> IgnoredUsers, long LastFileSize)> _ignoreListCache = new();
-        private readonly object _rateLimitLock = new();
+        private readonly Lock _rateLimitLock = new();
         private DateTime _rateLimitCacheTimestamp = DateTime.MinValue;
         private HashSet<string> _rateLimitedUsersCache = new(StringComparer.OrdinalIgnoreCase);
-        private readonly object _failureLock = new();
+        private readonly Lock _failureLock = new();
         private DateTime _failureCacheTimestamp = DateTime.MinValue;
         private Dictionary<string, int> _failureCountCache = new(StringComparer.OrdinalIgnoreCase);
 

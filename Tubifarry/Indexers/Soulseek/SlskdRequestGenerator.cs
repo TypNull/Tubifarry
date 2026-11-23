@@ -28,7 +28,7 @@ namespace Tubifarry.Indexers.Soulseek
         private readonly HashSet<string> _processedSearches = new(StringComparer.OrdinalIgnoreCase);
 
         private static SemaphoreSlim? _searchLimiter;
-        private static readonly object _limiterLock = new();
+        private static readonly Lock _limiterLock = new();
         private static int _currentLimit;
 
         private SlskdSettings Settings => _indexer.Settings;

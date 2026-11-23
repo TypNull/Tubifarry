@@ -11,7 +11,7 @@ namespace Tubifarry.Core.Telemetry
         private static IDisposable? _sdk;
         private static bool _initialized;
         private static bool _disabled;
-        private static readonly object _lock = new();
+        private static readonly Lock _lock = new();
 
         public static bool IsEnabled => _initialized && _sdk != null && !_disabled;
 

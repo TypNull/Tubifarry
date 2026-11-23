@@ -126,7 +126,7 @@ namespace Tubifarry.Download.Clients.Streamrip
 
         private sealed class StreamripJob(string id, int clientId, DownloadClientItem item)
         {
-            private readonly object _lock = new();
+            private readonly Lock _lock = new();
 
             public string Id { get; } = id;
             public int ClientId { get; } = clientId;

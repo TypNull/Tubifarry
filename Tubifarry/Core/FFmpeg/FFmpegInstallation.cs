@@ -23,7 +23,7 @@ namespace Tubifarry.Core.FFmpeg
         private static readonly string[] FFmpegFileNames = ["ffmpeg", "ffmpeg.exe", "ffmpeg.bin"];
         private static readonly TimeSpan FailedInstallRetryCooldown = TimeSpan.FromMinutes(15);
 
-        private readonly object _detectionLock = new();
+        private readonly Lock _detectionLock = new();
         private readonly SemaphoreSlim _installGate = new(1, 1);
 
         private bool? _isInstalled;

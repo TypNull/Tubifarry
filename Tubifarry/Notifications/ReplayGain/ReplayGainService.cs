@@ -20,7 +20,7 @@ public sealed class ReplayGainService(IRsgainInstallation rsgainInstallation, IM
 
     private readonly Channel<ReplayGainRequest> _queue = Channel.CreateUnbounded<ReplayGainRequest>();
     private readonly CancellationTokenSource _shutdown = new();
-    private readonly object _workerLock = new();
+    private readonly Lock _workerLock = new();
 
     private Task? _worker;
 
