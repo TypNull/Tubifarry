@@ -11,14 +11,16 @@
 			<InputAssemblies Include="$(OutputPath)Instances.dll" />
 			<InputAssemblies Include="$(OutputPath)SharpCompress.dll" />
 			<InputAssemblies Include="$(OutputPath)FuzzySharp.dll" />
-			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
 			<InputAssemblies Include="$(OutputPath)Microsoft.Bcl.AsyncInterfaces.dll" />
 			<InputAssemblies Include="$(OutputPath)Acornima.dll" />
-			<InputAssemblies Include="$(OutputPath)System.Text.Json.dll" />
 			<InputAssemblies Include="$(OutputPath)Jint.dll" />
 			<InputAssemblies Include="$(OutputPath)Sentry.dll" />
-			<InputAssemblies Include="$(OutputPath)System.Diagnostics.DiagnosticSource.dll" />
 			<InputAssemblies Include="$(OutputPath)YamlDotNet.dll" />
+		</ItemGroup>
+		<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+			<InputAssemblies Include="$(OutputPath)Microsoft.Extensions.Logging.Abstractions.dll" />
+			<InputAssemblies Include="$(OutputPath)System.Text.Json.dll" />
+			<InputAssemblies Include="$(OutputPath)System.Diagnostics.DiagnosticSource.dll" />
 		</ItemGroup>
 
 		<ILRepack
@@ -27,7 +29,7 @@
             InputAssemblies="@(InputAssemblies)"
             TargetKind="Dll"
             DebugInfo="true"
-            LibraryPath="..\Submodules\Lidarr\_output\net8.0\;$(OutputPath)"
+            LibraryPath="..\Submodules\Lidarr\_output\$(TargetFramework)\;$(OutputPath)"
             OutputFile="$(OutputPath)$(AssemblyName).dll"
         />
 	</Target>

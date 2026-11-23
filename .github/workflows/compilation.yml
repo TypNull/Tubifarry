@@ -49,6 +49,21 @@ on:
         type: string
         description: "Minimum Lidarr version required"
         default: ""
+      lidarr_ref:
+        required: false
+        type: string
+        description: "Set to 'stable' to build against the latest Lidarr release"
+        default: ""
+      artifact_name:
+        required: false
+        type: string
+        description: "Name of the uploaded plugin artifact"
+        default: "plugin-output"
+      optional:
+        required: false
+        type: boolean
+        description: "Do not fail the workflow when the build fails"
+        default: false
     secrets:
       SPOTIFY_CLIENT_ID:
         required: false
@@ -84,6 +99,20 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
 
+      - name: Checkout stable Lidarr
+        id: lidarr
+        if: inputs.lidarr_ref == 'stable'
+        continue-on-error: ${{ inputs.optional }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh api repos/Lidarr/Lidarr/releases/latest --jq .tag_name)
+          echo "Using Lidarr $TAG"
+          git -C Submodules/Lidarr fetch --depth 1 origin tag "$TAG"
+          git -C Submodules/Lidarr checkout -q "$TAG"
+          MAJOR_VERSION=$(grep -m1 "majorVersion:" Submodules/Lidarr/azure-pipelines.yml | sed "s/.*majorVersion: *'\([^']*\)'.*/\1/")
+          echo "minimum_lidarr_version=${MAJOR_VERSION}.0" >> $GITHUB_OUTPUT
+
       - name: Setup .NET Core
         uses: actions/setup-dotnet@v4
         with:
@@ -91,7 +120,7 @@ jobs:
 
       # Add NuGet package caching
       - name: Cache NuGet packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
@@ -113,7 +142,7 @@ jobs:
           Commit: ${{ inputs.git_commit }}
           Framework: ${{ inputs.framework }}
           Repository: ${{ inputs.branch_repo_url }}
-          Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}
+          Minimum Lidarr Version: ${{ steps.lidarr.outputs.minimum_lidarr_version || inputs.minimum_lidarr_version }}
           Built at: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           
           Plugin Info:
@@ -134,7 +163,7 @@ jobs:
           echo "Branch Repo URL: ${{ inputs.branch_repo_url }}"
           echo "Repo Owner: ${{ inputs.repo_owner }}"
           echo "Release Notes Path: ${{ steps.release_notes.outputs.release_notes }}"
-          echo "Minimum Lidarr Version: ${{ inputs.minimum_lidarr_version }}"
+          echo "Minimum Lidarr Version: ${{ steps.lidarr.outputs.minimum_lidarr_version || inputs.minimum_lidarr_version }}"
           echo "Spotify Client ID is configured: ${{ secrets.SPOTIFY_CLIENT_ID != '' }}"
           echo "Spotify Client Secret is configured: ${{ secrets.SPOTIFY_CLIENT_SECRET != '' }}"
           echo "YouTube Secret is configured: ${{ secrets.YOUTUBE_SECRET != '' }}"
@@ -142,17 +171,22 @@ jobs:
 
       - name: Build with package version and metadata
         id: build_step
+        if: steps.lidarr.outcome != 'failure'
+        continue-on-error: ${{ inputs.optional }}
         env:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           YOUTUBE_SECRET: ${{ secrets.YOUTUBE_SECRET }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          NUGET_AUDIT: ${{ inputs.lidarr_ref == 'stable' && 'false' || 'true' }}
         run: |
           # Restore NuGet packages first
-          dotnet restore *.sln
-          
+          dotnet restore *.sln -p:LidarrFramework=${{ inputs.framework }} -p:NuGetAudit=$NUGET_AUDIT
+
           # Then build with all parameters
           dotnet build *.sln -c Release -f ${{ inputs.framework }} \
+            -p:LidarrFramework=${{ inputs.framework }} \
+            -p:NuGetAudit=$NUGET_AUDIT \
             -p:Version=${{ inputs.package_version }} \
             -p:AssemblyVersion=${{ inputs.package_version }} \
             -p:FileVersion=${{ inputs.package_version }} \
@@ -162,7 +196,7 @@ jobs:
             -p:RepoUrl="${{ inputs.branch_repo_url }}" \
             -p:Author="${{ inputs.repo_owner }}" \
             -p:ReleaseNotesFile="${{ steps.release_notes.outputs.release_notes }}" \
-            -p:MinimumLidarrVersion="${{ inputs.minimum_lidarr_version }}" \
+            -p:MinimumLidarrVersion="${{ steps.lidarr.outputs.minimum_lidarr_version || inputs.minimum_lidarr_version }}" \
             -p:SpotifyClientId=$SPOTIFY_CLIENT_ID \
             -p:SpotifyClientSecret=$SPOTIFY_CLIENT_SECRET \
             -p:YouTubeSecret=$YOUTUBE_SECRET \
@@ -172,6 +206,7 @@ jobs:
 
       - name: Find Plugin Output Directory
         id: find_output
+        if: steps.build_step.outcome == 'success'
         run: |
           # More thorough search for the plugin output directory
           echo "Searching for plugin output directories..."
@@ -214,14 +249,16 @@ jobs:
 
       - name: Record Build Result
         id: build_result
+        if: steps.find_output.outcome == 'success'
         run: |
           echo "status=success" >> $GITHUB_OUTPUT
 
       # Upload the actual plugin files
       - name: Upload Plugin Artifact
+        if: steps.build_result.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-output
+          name: ${{ inputs.artifact_name }}
           path: ${{ steps.find_output.outputs.plugin_path }}
           retention-days: 1
 
@@ -229,7 +266,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: build-logs-${{ inputs.framework }}
           path: |
             ./**/*.binlog
             ./**/*.log

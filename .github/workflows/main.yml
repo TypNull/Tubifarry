@@ -43,7 +43,7 @@ jobs:
   dotnet-setup:     
     uses: ./.github/workflows/dotnet-setup.yml     
     with:       
-      dotnet_version: '8.0.404'       
+      dotnet_version: '10.0.404'
       framework: ${{ needs.metadata.outputs.framework }}     
     needs: [metadata]      
 
@@ -51,7 +51,7 @@ jobs:
   compilation:     
     uses: ./.github/workflows/compilation.yml     
     with:       
-      dotnet_version: '8.0.404'       
+      dotnet_version: '10.0.404'
       plugin_name: ${{ needs.metadata.outputs.plugin_name }}       
       package_version: ${{ needs.metadata.outputs.package_version }}       
       framework: ${{ needs.metadata.outputs.framework }}       
@@ -78,6 +78,43 @@ jobs:
       build_suffix: ${{ needs.metadata.outputs.build_suffix }}       
       build_status: ${{ needs.compilation.outputs.build_status }}     
     needs: [metadata, compilation]      
+
+  # Compile against the latest stable Lidarr (optional)
+  compilation-net8:
+    uses: ./.github/workflows/compilation.yml
+    with:
+      dotnet_version: '8.0.421'
+      plugin_name: ${{ needs.metadata.outputs.plugin_name }}
+      package_version: ${{ needs.metadata.outputs.package_version }}
+      framework: net8.0
+      git_commit: ${{ needs.git-info.outputs.git_commit }}
+      git_branch: ${{ needs.git-info.outputs.git_branch }}
+      git_tag: ${{ needs.git-info.outputs.git_tag }}
+      repo_url: ${{ needs.git-info.outputs.repo_url }}
+      branch_repo_url: ${{ needs.git-info.outputs.branch_repo_url }}
+      repo_owner: ${{ needs.git-info.outputs.repo_owner }}
+      lidarr_ref: stable
+      artifact_name: plugin-output-net8.0
+      optional: true
+    secrets:
+      SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+      SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+      YOUTUBE_SECRET: ${{ secrets.YOUTUBE_SECRET }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+    needs: [metadata, git-info]
+
+  # Package the stable Lidarr build if it compiled
+  packaging-net8:
+    uses: ./.github/workflows/packaging.yml
+    with:
+      plugin_name: ${{ needs.metadata.outputs.plugin_name }}
+      package_version: ${{ needs.metadata.outputs.package_version }}
+      build_suffix: net8.0
+      build_status: ${{ needs.compilation-net8.outputs.build_status }}
+      artifact_name: plugin-output-net8.0
+      package_artifact_name: plugin-package-net8.0
+    needs: [metadata, compilation-net8]
+    if: needs.compilation-net8.outputs.build_status == 'success'
 
   # Generate release notes   
   release-notes:     
@@ -107,5 +144,5 @@ jobs:
       git_commit: ${{ needs.git-info.outputs.git_commit }}       
       branch_repo_url: ${{ needs.git-info.outputs.branch_repo_url }}
       git_branch: ${{ needs.git-info.outputs.git_branch }}     
-    needs: [metadata, git-info, compilation, packaging, release-notes]     
-    if: needs.compilation.outputs.build_status == 'success'
+    needs: [metadata, git-info, compilation, packaging, release-notes, packaging-net8]
+    if: ${{ !cancelled() && needs.compilation.outputs.build_status == 'success' && needs.packaging.result == 'success' && needs.release-notes.result == 'success' }}

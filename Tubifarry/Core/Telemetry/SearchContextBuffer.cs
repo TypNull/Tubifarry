@@ -147,7 +147,7 @@ namespace Tubifarry.Core.Telemetry
 
                     // Add summary breadcrumb
                     ParseCandidate best = context.AllCandidates.OrderByDescending(c => c.Priority).First();
-                    int rank = context.AllCandidates.OrderByDescending(c => c.Priority).ToList().IndexOf(grabbed) + 1;
+                    int rank = grabbed == null ? 0 : context.AllCandidates.OrderByDescending(c => c.Priority).ToList().IndexOf(grabbed) + 1;
                     context.Breadcrumbs.Add($"Parsed {context.AllCandidates.Count} candidates (best: priority={best.Priority}, regex={best.RegexMatchType})");
                     context.Breadcrumbs.Add($"Grabbed: '{grabbed?.FolderName}' (priority={grabbed?.Priority}, rank=#{rank}, {(isInteractive ? "interactive" : "auto")})");
                 }

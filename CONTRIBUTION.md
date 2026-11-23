@@ -278,7 +278,7 @@ Now that Lidarr is fully built, you can build the Tubifarry plugin.
 
 If the automatic deployment doesn't work, manually copy the plugin:
 
-1. Find the built plugin at: `Tubifarry/bin/Debug/net8.0/Lidarr.Plugin.Tubifarry.dll`
+1. Find the built plugin at: `Tubifarry/bin/Debug/net10.0/Lidarr.Plugin.Tubifarry.dll`
 2. Copy to: `C:\ProgramData\Lidarr\plugins\AUTHOR\Tubifarry\`
 3. Also copy the `.pdb` and `.deps.json` files if they exist
 
@@ -457,7 +457,7 @@ git submodule update --init --recursive
 
 **Solution**:
 1. Check if you're building in **Debug** configuration (automatic copy only works in Debug)
-2. Check your build output directory: `Tubifarry/bin/Debug/net8.0/`
+2. Check your build output directory: `Tubifarry/bin/Debug/net10.0/`
 3. Manually copy plugin files to: `C:\ProgramData\Lidarr\plugins\AUTHOR\Tubifarry\`
 4. Restart Lidarr
 5. Check Lidarr logs for plugin loading errors

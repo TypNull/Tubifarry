@@ -87,14 +87,13 @@ jobs:
             FRAMEWORK=$(grep -o '<TargetFramework>.*</TargetFramework>' "$PROJECT_FILE" | sed 's/<TargetFramework>\(.*\)<\/TargetFramework>/\1/')
             echo "Extracted framework: $FRAMEWORK"
           else
-            echo "No .csproj files found, defaulting to net6.0"
-            FRAMEWORK="net6.0"
+            echo "::error::No .csproj file found"
+            exit 1
           fi
           
-          # If framework is still empty, default to net6.0
           if [ -z "$FRAMEWORK" ]; then
-            echo "Framework not found in project file, defaulting to net6.0"
-            FRAMEWORK="net6.0"
+            echo "::error::No TargetFramework found in $PROJECT_FILE"
+            exit 1
           fi
           
           echo "Using framework: $FRAMEWORK"

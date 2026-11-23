@@ -17,8 +17,11 @@ public sealed class ExtendedDownloadDecisionComparer(
 {
     private const int HealthBucketSize = 250;
 
-    public new int Compare(DownloadDecision x, DownloadDecision y)
+    public new int Compare(DownloadDecision? x, DownloadDecision? y)
     {
+        if (x is null || y is null)
+            return base.Compare(x, y);
+
         int health = CompareShareHealth(x, y);
         if (health == 0)
             return base.Compare(x, y);

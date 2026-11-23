@@ -55,8 +55,11 @@ public class SlskdClient : DownloadClientBase<SlskdProviderSettings>
         OutputRootFolders = [_remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath))]
     };
 
-    protected override void Test(List<ValidationFailure> failures) =>
-        failures.AddIfNotNull(_apiClient.TestConnectionAsync(Settings).GetAwaiter().GetResult());
+    protected override void Test(List<ValidationFailure> failures)
+    {
+        if (_apiClient.TestConnectionAsync(Settings).GetAwaiter().GetResult() is ValidationFailure failure)
+            failures.Add(failure);
+    }
 
     private OsPath GetRemoteToLocal() =>
         _remotePathMappingService.RemapRemoteToLocal(Settings.Host, new OsPath(Settings.DownloadPath));

@@ -57,7 +57,8 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: plugin-package
+          pattern: plugin-package*
+          merge-multiple: true
           path: ./artifacts
 
       - name: Download release notes
@@ -102,7 +103,7 @@ jobs:
           make_latest: ${{ inputs.is_latestrelease == 'true' }}
           target_commitish: ${{ inputs.git_branch }}
           files: |
-            ${{ steps.verify_artifacts.outputs.artifact_path }}
+            ./artifacts/*.zip
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ github.token }}

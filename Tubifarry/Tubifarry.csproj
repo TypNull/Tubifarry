@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net8.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
+		<TargetFramework Condition="'$(LidarrFramework)' != ''">$(LidarrFramework)</TargetFramework>
 		<DebugType Condition="'$(Configuration)'=='Debug'">embedded</DebugType>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
@@ -30,14 +31,17 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Shard.DownloadAssistant" Version="1.1.2" />
-		<PackageReference Include="System.Text.Json" Version="8.0.6" GeneratePathProperty="true" />
 		<PackageReference Include="FFMpegCore" Version="5.0.2" />
 		<PackageReference Include="SharpCompress" Version="0.50.4" />
 		<PackageReference Include="YamlDotNet" Version="18.1.0" />
 		<PackageReference Include="YouTubeMusicAPI" Version="3.0.11" />
 		<PackageReference Include="YouTubeSessionGenerator" Version="1.0.3" />
 	</ItemGroup>
-	
+
+	<ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+		<PackageReference Include="System.Text.Json" Version="8.0.6" GeneratePathProperty="true" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<AdditionalFiles Remove="..\stylecop.json" />
 	</ItemGroup>
@@ -65,7 +69,8 @@
 	<Import Project="$(MSBuildProjectDirectory)\PluginKeys.targets" />
 
 	<!-- Force copy System.Text.Json.dll to output directory for ILRepack -->
-	<Target Name="CopySystemTextJson" AfterTargets="Build">
+	<Target Name="CopySystemTextJson" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net8.0'">
 		<Copy SourceFiles="$(PkgSystem_Text_Json)\lib\net8.0\System.Text.Json.dll" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
 	</Target>
+
 </Project>

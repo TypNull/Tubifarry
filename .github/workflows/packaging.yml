@@ -19,6 +19,16 @@ on:
         required: true
         type: string
         description: "Status of the build step"
+      artifact_name:
+        required: false
+        type: string
+        description: "Name of the plugin artifact to package"
+        default: "plugin-output"
+      package_artifact_name:
+        required: false
+        type: string
+        description: "Name of the uploaded package artifact"
+        default: "plugin-package"
     outputs:
       package_path:
         description: "Path to the final package"
@@ -37,7 +47,7 @@ jobs:
       - name: Download built plugin
         uses: actions/download-artifact@v4
         with:
-          name: plugin-output
+          name: ${{ inputs.artifact_name }}
           path: ./plugin-output
           # Don't continue on error - must have plugin to package
 
@@ -88,6 +98,6 @@ jobs:
       - name: Upload Package Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-package
+          name: ${{ inputs.package_artifact_name }}
           path: ${{ steps.zip_plugin.outputs.package_path }}
           retention-days: 7
