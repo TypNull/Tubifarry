@@ -12,8 +12,9 @@ namespace Tubifarry.Core.FFmpeg
         Task<AudioFormat> DetectAudioFormatAsync(string filePath);
         Task<int?> GetAudioBitrateAsync(string filePath);
         Task<int?> GetAudioBitDepthAsync(string filePath);
+        Task<int?> GetAudioSampleRateAsync(string filePath);
         Task<bool> IsVideoContainerAsync(AudioFileContext file);
-        Task<bool> ConvertToFormatAsync(AudioFileContext file, AudioFormat audioFormat, int? targetBitrate = null, int? targetBitDepth = null, bool useCBR = false);
+        Task<bool> ConvertToFormatAsync(AudioFileContext file, AudioFormat audioFormat, int? targetBitrate = null, int? targetBitDepth = null, bool useCBR = false, int? targetSampleRate = null);
         Task<bool> ExtractAudioFromVideoAsync(AudioFileContext file);
         Task<bool> DecryptAsync(AudioFileContext file, string decryptionKey, string? codec, CancellationToken token = default);
         Task<bool> EnsureCorrectFileExtensionAsync(AudioFileContext file);
@@ -213,6 +214,25 @@ namespace Tubifarry.Core.FFmpeg
             }
         }
 
+        public async Task<int?> GetAudioSampleRateAsync(string filePath)
+        {
+            try
+            {
+                IMediaAnalysis analysis = await FFProbe.AnalyseAsync(filePath);
+                AudioStream? audioStream = analysis.PrimaryAudioStream;
+
+                if (audioStream == null)
+                    return null;
+
+                return audioStream.SampleRateHz > 0 ? audioStream.SampleRateHz : null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Failed to get sample rate: {0}", filePath);
+                return null;
+            }
+        }
+
         public async Task<bool> IsVideoContainerAsync(AudioFileContext file)
         {
             try
@@ -236,10 +256,11 @@ namespace Tubifarry.Core.FFmpeg
             }
         }
 
-        public async Task<bool> ConvertToFormatAsync(AudioFileContext file, AudioFormat audioFormat, int? targetBitrate = null, int? targetBitDepth = null, bool useCBR = false)
+        public async Task<bool> ConvertToFormatAsync(AudioFileContext file, AudioFormat audioFormat, int? targetBitrate = null, int? targetBitDepth = null, bool useCBR = false, int? targetSampleRate = null)
         {
-            logger.Trace("Converting {0} to {1}{2}", Path.GetFileName(file.FilePath), audioFormat,
-                targetBitrate.HasValue ? $" at {targetBitrate}kbps" : targetBitDepth.HasValue ? $" at {targetBitDepth}-bit" : "");
+            logger.Trace("Converting {0} to {1}{2}{3}", Path.GetFileName(file.FilePath), audioFormat,
+                targetBitrate.HasValue ? $" at {targetBitrate}kbps" : targetBitDepth.HasValue ? $" at {targetBitDepth}-bit" : "",
+                targetSampleRate.HasValue ? $" {targetSampleRate} Hz" : "");
 
             if (!await ffmpegInstallation.EnsureReadyAsync())
                 return false;
@@ -278,6 +299,8 @@ namespace Tubifarry.Core.FFmpeg
 
                 outputArguments.AddRange(baseParameters);
                 outputArguments.AddRange(BuildQualityArguments(audioFormat, targetBitrate, targetBitDepth, useCBR));
+                if (targetSampleRate.HasValue)
+                    outputArguments.Add($"-ar {targetSampleRate.Value}");
 
                 logger.Trace("Starting FFmpeg conversion");
                 await RunConversionAsync(file.FilePath, tempOutputPath, outputArguments);

@@ -14,7 +14,7 @@ namespace Tubifarry.Metadata.Converter
             // Validate custom conversion rules
             RuleFor(x => x.CustomConversion)
                 .Must(customConversions => customConversions?.All(IsValidConversionRule) != false)
-                .WithMessage("Custom conversion rules must be in the format 'source -> target' (e.g., mp3 to flac).");
+                .WithMessage("Custom conversion rules must be in the format 'source -> target' (e.g., mp3 to flac, flac:24:>48000 to flac:16:44100). Target sample rates must be 44100, 48000, 88200, 96000, 176400 or 192000 and only apply to lossless formats.");
 
             RuleFor(x => x.CustomConversion)
                 .Must(customConversions => customConversions?.All(IsValidLossyConversion) != false)
@@ -95,7 +95,7 @@ namespace Tubifarry.Metadata.Converter
         [FieldDefinition(8, Label = "Target Format", Type = FieldType.Select, SelectOptions = typeof(TargetAudioFormat), Section = MetadataSectionType.Metadata, HelpText = "Select the target format to convert audio files into.")]
         public int TargetFormat { get; set; } = (int)TargetAudioFormat.Opus;
 
-        [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Custom conversion rules. Examples: 'flac -> mp3:320:cbr' (FLAC to CBR MP3), 'mp3:320 -> mp3:128' (downsample), 'flac:24 -> flac:16' (reduce bit depth). Add ':cbr' for constant bitrate encoding. Upsampling is blocked automatically.")]
+        [FieldDefinition(9, Label = "Custom Conversion Rules", Type = FieldType.KeyValueList, Section = MetadataSectionType.Metadata, HelpText = "Custom conversion rules. Examples: 'flac -> mp3:320:cbr' (FLAC to CBR MP3), 'mp3:320 -> mp3:128' (downsample), 'flac:24 -> flac:16' (reduce bit depth), 'flac:24:>48000 -> flac:16:44100' (24-bit or above 48 kHz to 16-bit 44.1 kHz). Source conditions separated by ':' match if any of them matches; values of 8000 and above are sample rates. Add ':cbr' for constant bitrate encoding. Upsampling is blocked automatically. A rule can also be set per artist as a tag, e.g. 'flac:24:>48000->flac:16:44100'.")]
         public IEnumerable<KeyValuePair<string, string>> CustomConversion { get; set; } = [];
 
         public NzbDroneValidationResult Validate() => new(Validator.Validate(this));

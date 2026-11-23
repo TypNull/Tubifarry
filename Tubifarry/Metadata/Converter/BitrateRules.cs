@@ -11,6 +11,7 @@ namespace Tubifarry.Metadata.Converter
         public AudioFormat TargetFormat { get; set; }
         public int? TargetBitrate { get; set; }
         public int? TargetBitDepth { get; set; }
+        public int? TargetSampleRate { get; set; }
         public bool UseCBR { get; set; }
         public bool IsBlocked { get; set; }
 
@@ -30,19 +31,42 @@ namespace Tubifarry.Metadata.Converter
             TargetFormat = rule.TargetFormat,
             TargetBitrate = rule.TargetBitrate,
             TargetBitDepth = rule.TargetBitDepth,
+            TargetSampleRate = rule.TargetSampleRate,
             UseCBR = rule.UseCBR,
             IsBlocked = false
         };
     }
 
+    public enum SourceConditionKind
+    {
+        Quality,
+        SampleRate
+    }
+
+    public record SourceCondition(SourceConditionKind Kind, ComparisonOperator Operator, int Value)
+    {
+        public bool Matches(int? currentValue) => currentValue.HasValue && Operator switch
+        {
+            ComparisonOperator.Equal => currentValue.Value == Value,
+            ComparisonOperator.NotEqual => currentValue.Value != Value,
+            ComparisonOperator.LessThan => currentValue.Value < Value,
+            ComparisonOperator.LessThanOrEqual => currentValue.Value <= Value,
+            ComparisonOperator.GreaterThan => currentValue.Value > Value,
+            ComparisonOperator.GreaterThanOrEqual => currentValue.Value >= Value,
+            _ => false
+        };
+
+        public override string ToString() => OperatorSymbols.GetSymbol(Operator) + Value;
+    }
+
     public class ConversionRule
     {
         public AudioFormat SourceFormat { get; set; }
-        public ComparisonOperator? SourceOperator { get; set; }
-        public int? SourceValue { get; set; }
+        public List<SourceCondition> SourceConditions { get; } = [];
         public AudioFormat TargetFormat { get; set; }
         public int? TargetBitrate { get; set; }
         public int? TargetBitDepth { get; set; }
+        public int? TargetSampleRate { get; set; }
         public bool UseCBR { get; set; }
         public bool IsArtistRule { get; set; }
 
@@ -54,27 +78,10 @@ namespace Tubifarry.Metadata.Converter
 
         public bool IsCategoryRule => IsGlobalRule || IsLossyRule || IsLosslessRule;
 
-        public bool HasSourceConstraint => SourceOperator.HasValue && SourceValue.HasValue;
+        public bool HasSourceConstraint => SourceConditions.Count > 0;
 
-        public bool MatchesSourceConstraint(int? currentValue)
-        {
-            if (!HasSourceConstraint)
-                return true;
-
-            if (!currentValue.HasValue)
-                return false;
-
-            return SourceOperator!.Value switch
-            {
-                ComparisonOperator.Equal => currentValue.Value == SourceValue!.Value,
-                ComparisonOperator.NotEqual => currentValue.Value != SourceValue!.Value,
-                ComparisonOperator.LessThan => currentValue.Value < SourceValue!.Value,
-                ComparisonOperator.LessThanOrEqual => currentValue.Value <= SourceValue!.Value,
-                ComparisonOperator.GreaterThan => currentValue.Value > SourceValue!.Value,
-                ComparisonOperator.GreaterThanOrEqual => currentValue.Value >= SourceValue!.Value,
-                _ => false
-            };
-        }
+        public bool MatchesSource(int? currentQuality, int? currentSampleRate) =>
+            !HasSourceConstraint || SourceConditions.Any(condition => condition.Matches(condition.Kind == SourceConditionKind.SampleRate ? currentSampleRate : currentQuality));
 
         public bool MatchesFormat(AudioFormat trackFormat)
         {
@@ -104,9 +111,7 @@ namespace Tubifarry.Metadata.Converter
             else
                 source = SourceFormat.ToString();
 
-            if (HasSourceConstraint)
-                source += OperatorSymbols.GetSymbol(SourceOperator!.Value) + SourceValue!.Value;
-            return source;
+            return source + string.Join(":", SourceConditions);
         }
 
         private string FormatTargetPart()
@@ -120,6 +125,8 @@ namespace Tubifarry.Metadata.Converter
             }
             else if (TargetBitDepth.HasValue)
                 target += ":" + TargetBitDepth.Value.ToString();
+            if (TargetSampleRate.HasValue)
+                target += ":" + TargetSampleRate.Value.ToString();
             return target;
         }
     }
@@ -176,6 +183,9 @@ namespace Tubifarry.Metadata.Converter
         public const string LossyRuleIdentifier = "lossy";
         public const string LosslessRuleIdentifier = "lossless";
         public const string NoConversionTag = "no-conversion";
+        public const string RuleTagSeparator = "->";
+        private const int MinimumSampleRate = 8000;
+        private static readonly int[] StandardSampleRates = [44100, 48000, 88200, 96000, 176400, 192000];
         private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(RuleParser));
 
         public static bool TryParseRule(string sourceKey, string targetValue, out ConversionRule rule)
@@ -200,10 +210,21 @@ namespace Tubifarry.Metadata.Converter
             if (string.IsNullOrWhiteSpace(tagLabel))
                 return false;
 
+            int separator = tagLabel.IndexOf(RuleTagSeparator, StringComparison.Ordinal);
+            if (separator > 0)
+            {
+                if (!TryParseRule(tagLabel[..separator], tagLabel[(separator + RuleTagSeparator.Length)..], out rule))
+                    return false;
+
+                rule.IsArtistRule = true;
+                return true;
+            }
+
             // Handle no-conversion tag
             if (string.Equals(tagLabel, NoConversionTag, StringComparison.OrdinalIgnoreCase))
             {
                 rule.TargetFormat = AudioFormat.Unknown;
+                rule.IsGlobalRule = true;
                 return true;
             }
 
@@ -223,6 +244,7 @@ namespace Tubifarry.Metadata.Converter
             }
 
             rule.TargetFormat = targetFormat;
+            rule.IsGlobalRule = true;
 
             // Parse bitrate if present
             if (match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out int bitrate))
@@ -246,7 +268,7 @@ namespace Tubifarry.Metadata.Converter
             if (!ParseSourceFormat(sourceMatch.Groups[1].Value, rule))
                 return false;
 
-            if (sourceMatch.Groups[2].Success && sourceMatch.Groups[3].Success)
+            if (sourceMatch.Groups[2].Length > 0)
             {
                 // Category rules (all, lossy, lossless) cannot have constraints
                 if (rule.IsCategoryRule)
@@ -255,8 +277,11 @@ namespace Tubifarry.Metadata.Converter
                     return false;
                 }
 
-                if (!ParseSourceConstraints(sourceMatch.Groups[2].Value, sourceMatch.Groups[3].Value, rule))
-                    return false;
+                foreach (Match condition in SourceConditionRegex().Matches(sourceMatch.Groups[2].Value))
+                {
+                    if (!ParseSourceConstraints(condition.Groups[1].Value, condition.Groups[2].Value, rule))
+                        return false;
+                }
             }
 
             return true;
@@ -303,15 +328,16 @@ namespace Tubifarry.Metadata.Converter
                 return false;
             }
 
-            ComparisonOperator? comparisonOp = OperatorSymbols.FromSymbol(operatorStr);
+            string symbol = operatorStr.Length > 1 && operatorStr[0] == ':' ? operatorStr[1..] : operatorStr;
+            ComparisonOperator? comparisonOp = OperatorSymbols.FromSymbol(symbol);
             if (!comparisonOp.HasValue)
             {
                 _logger.Debug("Invalid comparison operator: {0}", operatorStr);
                 return false;
             }
 
-            rule.SourceOperator = comparisonOp.Value;
-            rule.SourceValue = value;
+            SourceConditionKind kind = value >= MinimumSampleRate ? SourceConditionKind.SampleRate : SourceConditionKind.Quality;
+            rule.SourceConditions.Add(new SourceCondition(kind, comparisonOp.Value, value));
             return true;
         }
 
@@ -330,8 +356,11 @@ namespace Tubifarry.Metadata.Converter
             if (targetMatch.Groups[2].Success && !ParseTargetBitrate(targetMatch.Groups[2].Value, rule))
                 return false;
 
-            // Check for CBR flag (Group 3)
-            if (targetMatch.Groups[3].Success && targetMatch.Groups[3].Value == "cbr")
+            if (targetMatch.Groups[3].Success && !ParseTargetSampleRate(targetMatch.Groups[3].Value, rule))
+                return false;
+
+            // Check for CBR flag (Group 4)
+            if (targetMatch.Groups[4].Success && targetMatch.Groups[4].Value == "cbr")
             {
                 // CBR only makes sense for lossy formats
                 if (!AudioFormatHelper.IsLossyFormat(rule.TargetFormat))
@@ -374,6 +403,9 @@ namespace Tubifarry.Metadata.Converter
 
             if (!AudioFormatHelper.IsLossyFormat(rule.TargetFormat))
             {
+                if (targetValue >= MinimumSampleRate)
+                    return ParseTargetSampleRate(bitrateStr, rule);
+
                 if (targetValue != 16 && targetValue != 24 && targetValue != 32)
                 {
                     _logger.Warn("Invalid bit depth {0} for lossless format {1}. Must be 16, 24, or 32",
@@ -396,10 +428,37 @@ namespace Tubifarry.Metadata.Converter
             return true;
         }
 
-        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?:([:!<>=]{1,2})(\d+))?$", RegexOptions.Compiled)]
+        private static bool ParseTargetSampleRate(string sampleRateStr, ConversionRule rule)
+        {
+            if (!int.TryParse(sampleRateStr, out int sampleRate) || !StandardSampleRates.Contains(sampleRate))
+            {
+                _logger.Warn("Invalid sample rate {0}. Must be one of {1}", sampleRateStr, string.Join(", ", StandardSampleRates));
+                return false;
+            }
+
+            if (AudioFormatHelper.IsLossyFormat(rule.TargetFormat))
+            {
+                _logger.Warn("Sample rate is only supported for lossless target formats, not {0}", rule.TargetFormat);
+                return false;
+            }
+
+            if (rule.TargetSampleRate.HasValue)
+            {
+                _logger.Warn("Sample rate is set twice in target");
+                return false;
+            }
+
+            rule.TargetSampleRate = sampleRate;
+            return true;
+        }
+
+        [GeneratedRegex(@"^([a-zA-Z0-9]+)((?:(?::?(?:!=|<=|>=|<|>|=)|:)\d+)*)$", RegexOptions.Compiled)]
         private static partial Regex SourceFormatRegex();
 
-        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?(?::(cbr))?$", RegexOptions.Compiled)]
+        [GeneratedRegex(@"(:?(?:!=|<=|>=|<|>|=)|:)(\d+)", RegexOptions.Compiled)]
+        private static partial Regex SourceConditionRegex();
+
+        [GeneratedRegex(@"^([a-zA-Z0-9]+)(?::(\d+)k?)?(?::(\d+))?(?::(cbr))?$", RegexOptions.Compiled)]
         private static partial Regex TargetFormatRegex();
 
         [GeneratedRegex(@"^([a-zA-Z]+)(?:-(\d+)k?)?$", RegexOptions.Compiled)]
