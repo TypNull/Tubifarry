@@ -137,7 +137,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Deezer
                         if (artist != null)
                             return [artist];
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.Trace(ex, $"Deezer artist lookup for {deezerId} failed");
+                    }
 
                     DeezerAlbum? albumResult = apiService.GetAlbumAsync(deezerId).GetAwaiter().GetResult();
                     if (albumResult != null)

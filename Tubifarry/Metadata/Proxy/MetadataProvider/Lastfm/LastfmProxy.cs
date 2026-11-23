@@ -132,7 +132,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                                 results.Add(albumResult.Item2);
                                 return results;
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                _logger.Trace(ex, $"Last.fm album lookup for {id} failed");
+                            }
                         }
                     }
                     else if (id.Contains("::"))
@@ -143,7 +146,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                             results.Add(albumResult.Item2);
                             return results;
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            _logger.Trace(ex, $"Last.fm album lookup for {id} failed");
+                        }
                     }
                     else
                     {
@@ -152,7 +158,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                             results.Add(GetArtistInfoAsync(settings, id + _identifier, default).GetAwaiter().GetResult());
                             return results;
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            _logger.Trace(ex, $"Last.fm artist lookup for {id} failed");
+                        }
                     }
                 }
 
@@ -169,7 +178,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                         artist.Albums = new LazyLoaded<List<Album>>([]);
                         results.Add(artist);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.Trace(ex, $"Could not map Last.fm artist {lastfmArtist.Name}");
+                    }
                 }
 
                 List<LastfmAlbum>? lastfmAlbums = _cache.FetchAndCacheAsync($"search:album:{query}:{settings.PageSize}:{settings.PageNumber}",
@@ -182,7 +194,10 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                         Tuple<string, Album, List<ArtistMetadata>> albumResult = GetAlbumInfoAsync(settings, $"{lastfmAlbum.ArtistName}::{lastfmAlbum.Name}{_identifier}").GetAwaiter().GetResult();
                         results.Add(albumResult.Item2);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.Trace(ex, $"Could not load Last.fm album {lastfmAlbum.Name}");
+                    }
                 }
 
                 return results;
@@ -334,7 +349,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
                 Artist? existingArtist = _artistService.FindById(foreignArtistId);
                 if (existingArtist != null)
                 {
-                    // TODO: Merge any existing data
                     artist.Id = existingArtist.Id;
                     artist.Path = existingArtist.Path;
                     artist.Monitored = existingArtist.Monitored;

@@ -1,6 +1,8 @@
 #if !MASTER_BRANCH
+using NLog;
 using NzbDrone.Common;
 using NzbDrone.Common.EnvironmentInfo;
+using NzbDrone.Common.Instrumentation;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -12,6 +14,7 @@ namespace Tubifarry.Core.Telemetry
         private static bool _initialized;
         private static bool _disabled;
         private static readonly Lock _lock = new();
+        private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(TubifarrySentry));
 
         public static bool IsEnabled => _initialized && _sdk != null && !_disabled;
 
@@ -96,7 +99,10 @@ namespace Tubifarry.Core.Telemetry
                     scope.SetTag("ci_build", PluginInfo.CI.ToString());
                 });
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Trace(ex, "Could not set Sentry scope tags");
+            }
         }
 
         public static void Shutdown()
@@ -107,7 +113,10 @@ namespace Tubifarry.Core.Telemetry
                 {
                     _sdk?.Dispose();
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.Trace(ex, "Could not dispose Sentry");
+                }
 
                 _sdk = null;
                 _initialized = false;
@@ -124,7 +133,10 @@ namespace Tubifarry.Core.Telemetry
             {
                 SentrySdk.ConfigureScope(configure);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Trace(ex, "Could not configure Sentry scope");
+            }
         }
     }
 }

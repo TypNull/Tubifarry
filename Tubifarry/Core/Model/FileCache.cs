@@ -1,4 +1,6 @@
-﻿using System.Runtime.InteropServices;
+﻿using NLog;
+using NzbDrone.Common.Instrumentation;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -7,6 +9,7 @@ namespace Tubifarry.Core.Model
 {
     public class FileCache
     {
+        private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(FileCache));
         private readonly string _cacheDirectory;
         private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
@@ -30,8 +33,10 @@ namespace Tubifarry.Core.Model
                 foreach (string file in Directory.GetFiles(_cacheDirectory, "*.json", SearchOption.TopDirectoryOnly))
                     File.Delete(file);
             }
-            catch
-            { }
+            catch (Exception ex)
+            {
+                _logger.Trace(ex, $"Could not clear old cache files in {_cacheDirectory}");
+            }
         }
 
         /// <summary>
@@ -53,7 +58,10 @@ namespace Tubifarry.Core.Model
                 {
                     File.Delete(cacheFilePath);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.Trace(ex, $"Could not delete expired cache file {cacheFilePath}");
+                }
                 return default;
             }
 

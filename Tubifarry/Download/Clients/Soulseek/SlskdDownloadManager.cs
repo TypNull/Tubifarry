@@ -38,6 +38,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private static readonly TimeSpan _grabHistoryLifetime = TimeSpan.FromMinutes(1);
     private readonly ConcurrentDictionary<int, (SlskdGrabHistory History, DateTime CreatedAt)> _grabHistories = new();
+    private readonly ConcurrentDictionary<int, (List<SlskdGrab> Grabs, DateTime BuiltAt)> _olderGrabIndexes = new();
 
     private readonly ISlskdApiClient _apiClient;
     private readonly IDownloadHistoryRepository _downloadHistoryRepository;
@@ -499,7 +500,7 @@ public class SlskdDownloadManager : ISlskdDownloadManager
         if (_grabHistories.TryGetValue(definitionId, out (SlskdGrabHistory History, DateTime CreatedAt) cached) && now - cached.CreatedAt < _grabHistoryLifetime)
             return cached.History;
 
-        SlskdGrabHistory history = new(_grabRepository, definitionId, NzbDroneLogger.GetLogger(typeof(SlskdGrabHistory)));
+        SlskdGrabHistory history = new(_grabRepository, definitionId, _olderGrabIndexes, NzbDroneLogger.GetLogger(typeof(SlskdGrabHistory)));
         _grabHistories[definitionId] = (history, now);
         return history;
     }

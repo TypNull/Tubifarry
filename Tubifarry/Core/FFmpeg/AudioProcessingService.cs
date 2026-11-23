@@ -582,7 +582,10 @@ namespace Tubifarry.Core.FFmpeg
                 if (embeddedCover?.Length > 0)
                     return embeddedCover;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                logger.Trace(ex, $"Could not read embedded cover from {filePath}");
+            }
 
             try
             {
@@ -609,7 +612,10 @@ namespace Tubifarry.Core.FFmpeg
                         File.Delete(tempCoverPath);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                logger.Trace(ex, $"Could not extract cover stream from {filePath}");
+            }
 
             return null;
         }

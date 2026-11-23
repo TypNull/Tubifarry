@@ -223,7 +223,6 @@ namespace Tubifarry.Metadata.Proxy.MetadataProvider.Lastfm
         /// <summary>
         /// Generic method for fetching paginated results from Last.fm API.
         /// </summary>
-        /// ///TODO: Needs cleaning
         private async Task<List<T>?> FetchPaginatedResultsAsync<T>(HttpRequestBuilder requestBuilder, int maxPages, int itemsPerPage)
         {
             List<T> results = [];

@@ -1,9 +1,13 @@
-﻿using System.Net;
+﻿using NLog;
+using NzbDrone.Common.Instrumentation;
+using System.Net;
 
 namespace Tubifarry.Core.Utilities
 {
     internal static class CookieManager
     {
+        private static readonly Logger _logger = NzbDroneLogger.GetLogger(typeof(CookieManager));
+
         internal static Cookie[] ParseCookieFile(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
@@ -49,7 +53,10 @@ namespace Tubifarry.Core.Utilities
                     cookies.Add(cookie);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.Trace(ex, $"Could not parse cookie file {filePath}");
+            }
             return [.. cookies];
         }
     }

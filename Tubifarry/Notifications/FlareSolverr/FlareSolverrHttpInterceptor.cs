@@ -138,7 +138,7 @@ namespace Tubifarry.Notifications.FlareSolverr
             return clone;
         }
 
-        private static bool IsProtectionChallengeDetected(HttpResponse response)
+        private bool IsProtectionChallengeDetected(HttpResponse response)
         {
             try
             {
@@ -160,7 +160,10 @@ namespace Tubifarry.Notifications.FlareSolverr
                                 httpResponse.Headers.TryAddWithoutValidation(header.Key, header.Value);
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            _logger.Trace(ex, $"Could not copy response header {header.Key}");
+                        }
                     }
                 }
 

@@ -1,5 +1,6 @@
 using NLog;
 using NzbDrone.Core.Download.History;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Tubifarry.Download.Clients.Soulseek.Models;
 using Tubifarry.Indexers.Soulseek;
@@ -8,15 +9,17 @@ namespace Tubifarry.Download.Clients.Soulseek;
 
 public record SlskdGrab(DownloadHistory History, string? Username, HashSet<string> Files);
 
-public class SlskdGrabHistory(SlskdGrabRepository repository, int definitionId, Logger logger)
+public class SlskdGrabHistory(SlskdGrabRepository repository, int definitionId, ConcurrentDictionary<int, (List<SlskdGrab> Grabs, DateTime BuiltAt)> olderIndexes, Logger logger)
 {
     private static readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly TimeSpan _window = TimeSpan.FromDays(30);
     private const int MaxGrabs = 1000;
     private const int OlderPageSize = 1000;
+    private static readonly TimeSpan _olderIndexLifetime = TimeSpan.FromMinutes(10);
 
     private readonly SlskdGrabRepository _repository = repository;
     private readonly int _definitionId = definitionId;
+    private readonly ConcurrentDictionary<int, (List<SlskdGrab> Grabs, DateTime BuiltAt)> _olderIndexes = olderIndexes;
     private readonly Logger _logger = logger;
     private List<SlskdGrab>? _grabs;
     private List<SlskdGrab>? _olderGrabs;
@@ -45,10 +48,12 @@ public class SlskdGrabHistory(SlskdGrabRepository repository, int definitionId, 
         if (_olderGrabs != null)
             return _olderGrabs;
 
+        if (_olderIndexes.TryGetValue(_definitionId, out (List<SlskdGrab> Grabs, DateTime BuiltAt) cached) && DateTime.UtcNow - cached.BuiltAt < _olderIndexLifetime)
+            return _olderGrabs = cached.Grabs;
+
         _olderGrabs = [];
         try
         {
-            HashSet<int> loaded = Load().Select(g => g.History.Id).ToHashSet();
             int beforeId = int.MaxValue;
             while (true)
             {
@@ -57,10 +62,10 @@ public class SlskdGrabHistory(SlskdGrabRepository repository, int definitionId, 
                     break;
 
                 beforeId = page[^1].Id;
-                _olderGrabs.AddRange(ToGrabs(page.Where(h => !loaded.Contains(h.Id)))
-                    .Select(g => g with { History = Stub(g.History) }));
+                _olderGrabs.AddRange(ToGrabs(page).Select(g => g with { History = Stub(g.History) }));
             }
 
+            _olderIndexes[_definitionId] = (_olderGrabs, DateTime.UtcNow);
             _logger.Trace($"[def={_definitionId}] Indexed {_olderGrabs.Count} older slskd grabs from download history");
         }
         catch (Exception ex)

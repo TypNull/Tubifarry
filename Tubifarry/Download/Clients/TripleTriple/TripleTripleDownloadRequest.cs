@@ -298,7 +298,10 @@ namespace Tubifarry.Download.Clients.TripleTriple
                         if (File.Exists(downloadRequest.Destination))
                             File.Delete(downloadRequest.Destination);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.Trace(ex, $"Could not delete {downloadRequest.Destination}");
+                    }
                 }
             });
 

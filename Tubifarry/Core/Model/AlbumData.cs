@@ -132,12 +132,12 @@ namespace Tubifarry.Core.Model
         /// <returns>The normalized album name.</returns>
         private static string NormalizeAlbumName(string albumName)
         {
-            if (FeatRegex().IsMatch(albumName)) // TODO ISMatch vs Match
+            Match feat = FeatRegex().Match(albumName);
+            if (feat.Success)
             {
-                Match match = FeatRegex().Match(albumName);
-                string featuringArtist = albumName[(match.Index + match.Length)..].Trim();
+                string featuringArtist = albumName[(feat.Index + feat.Length)..].Trim();
 
-                albumName = $"{albumName[..match.Index].Trim()} (feat. {featuringArtist})";
+                albumName = $"{albumName[..feat.Index].Trim()} (feat. {featuringArtist})";
             }
             return FeatReplaceRegex().Replace(albumName, match => $"{{{match.Value.Trim('(', ')')}}}");
         }
