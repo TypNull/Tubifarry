@@ -1,3 +1,4 @@
+using DownloadAssistant.Base;
 using FFMpegCore;
 using NLog;
 using System.Globalization;
@@ -67,8 +68,7 @@ namespace Tubifarry.Download.Clients.YouTube
 
             try
             {
-                using HttpClient client = new();
-                HttpResponseMessage response = await client.GetAsync(url, cancellationToken);
+                using HttpResponseMessage response = await HttpGet.HttpClient.GetAsync(url, cancellationToken);
 
                 if (response.StatusCode == HttpStatusCode.NotFound)
                     return [];
